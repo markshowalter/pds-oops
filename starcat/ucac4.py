@@ -2,7 +2,7 @@
 # starcat/ucac4.py
 ################################################################################
 
-from starcatalog import StarCatalog
+from starcatalog import *
 import numpy as np
 import os.path
 import struct
@@ -28,9 +28,33 @@ CATMATCH_LICK_ASTROGRAPH = 6
 CATMATCH_NPM_LICK = 7
 CATMATCH_SPM_YSJ1 = 8
 
-class Star(object):
-    """A holder for star attributes"""
-    pass
+class UCAC4Star(Star):
+    """A holder for star attributes.
+    
+    This class includes attributes unique to the UCAC4 catalog."""
+    
+    def __init__(self):
+        # Initialize the standard fields
+        Star.__init__(self)
+        
+        # Initialize the UCAC4-specific fields
+        self.vmag_model = None
+        self.obj_type = None
+        self.double_star_flag = None
+        self.double_star_type = None
+        self.galaxy_match = None
+        self.extended_source = None
+        self.pm_rac = None
+        self.pm_rac_sigma = None
+        self.rac_sigma = None
+        self.num_img_total = None
+        self.num_img_used = None
+        self.num_cat_pm = None
+        self.ra_mean_epoch = None
+        self.dec_mean_epoch = None
+        self.cat_match = None
+        self.id_str = None
+        
 
 #col byte item   fmt unit       explanation                            notes
 #---------------------------------------------------------------------------
@@ -102,12 +126,7 @@ UCAC4_FMT_RA = '=i'
 UCAC4_RECORD_SIZE_RA = 4
 assert struct.calcsize(UCAC4_FMT_RA) == UCAC4_RECORD_SIZE_RA
 
-DPR = 180/np.pi
-RPD = np.pi/180
-AS_TO_DEG = 1/3600.
-MAS_TO_DEG = AS_TO_DEG / 1000.
-
-class UCAC4Catalog(StarCatalog):
+class UCAC4StarCatalog(StarCatalog):
     def __init__(self, dir=None):
         if dir is None:
             self.dirname = os.environ["UCAC4_DIR"]
@@ -115,81 +134,28 @@ class UCAC4Catalog(StarCatalog):
             self.dirname = dir
         self.debug = False
         
-    def count_stars(self, **kwargs):
-        """Count the stars that match the given search criteria."""
-        count = 0
-        for result in self.find_stars(full_result=False, **kwargs):
-            count += 1
-        return count
-    
-    def find_stars(self, **kwargs):
-        """Find the stars that match the given search criteria.
-        
-        Optional arguments:   DEFAULT
-            ra_min, ra_max    0, 2PI    RA range in radians
-            dec_min, dec_max  -PI, PI   DEC range in radians
-            mag_min, mag_max  ALL       Magnitude range
-            require_clean     True      Only return stars that are clean
-                                        detections
-            allow_double      False     Allow double stars
-            allow_galaxy      False     Allow galaxies and extended objects
-            require_pm        True      Only return stars with known proper
-                                        motion
-            full_result       True      Populate all fields
-                                        False: Stop after fields required
-                                        for matching criteria
-            optimize_ra       True      Use a binary search to find the
-                                        starting RA
-        """
-            
-        kwargs = kwargs.copy() # Private copy so pop doesn't mutate
-        ra_min = np.clip(kwargs.pop('ra_min', 0) * DPR, 0., 360.)
-        ra_max = np.clip(kwargs.pop('ra_max', 2*np.pi) * DPR, 0., 360.)
-        dec_min = np.clip(kwargs.pop('dec_min', -np.pi/2) * DPR, -90., 90.)
-        dec_max = np.clip(kwargs.pop('dec_max', np.pi/2) * DPR, -90., 90.)
-        
-        if ra_min > ra_max:
-            if dec_min > dec_max:
-                # Split into four searches
-                for star in self._find_stars(0., ra_max, -90., dec_max, 
-                                             **kwargs):
-                    yield star
-                for star in self._find_stars(ra_min, 360., -90., dec_max, 
-                                             **kwargs):
-                    yield star
-                for star in self._find_stars(0., ra_max, dec_min, 90., 
-                                             **kwargs):
-                    yield star
-                for star in self._find_stars(ra_min, 360., dec_min, 90., 
-                                             **kwargs):
-                    yield star
-            else:
-                # Split into two searches - RA
-                for star in self._find_stars(0., ra_max, dec_min, dec_max, 
-                                             **kwargs):
-                    yield star
-                for star in self._find_stars(ra_min, 360., dec_min, dec_max, 
-                                             **kwargs):
-                    yield star
-        else:
-            if dec_min > dec_max:
-                # Split into two searches - DEC
-                for star in self._find_stars(ra_min, ra_max, -90., dec_max, 
-                                             **kwargs):
-                    yield star
-                for star in self._find_stars(ra_min, ra_max, dec_min, 90., 
-                                             **kwargs):
-                    yield star
-            else:
-                # No need to split at all
-                for star in self._find_stars(ra_min, ra_max,
-                                             dec_min, dec_max, **kwargs):
-                    yield star
-                
     def _find_stars(self, ra_min, ra_max, dec_min, dec_max, **kwargs):
-        """Yield the results for all zones in the DEC range."""
-        start_znum = int(max(np.floor((dec_min+90)*5)+1, 1))
-        end_znum = int(min(np.floor((dec_max+90-1e-15)*5)+1, 900))
+        """Yield the results for all zones in the DEC range.
+        
+        Optional arguments:      DEFAULT
+            ra_min, ra_max       0, 2PI    RA range in radians
+            dec_min, dec_max     -PI, PI   DEC range in radians
+            vmag_min, vmag_max     ALL       Magnitude range
+            require_clean        True      Only return stars that are clean
+                                           detections
+            allow_double         False     Allow double stars
+            allow_galaxy         False     Allow galaxies and extended objects
+            require_pm           True      Only return stars with known proper
+                                           motion
+            full_result          True      Populate all fields
+                                           False: Stop after fields required
+                                           for matching criteria
+            optimize_ra          True      Use a binary search to find the
+                                           starting RA
+        """
+        
+        start_znum = int(max(np.floor((dec_min*DPR+90)*5)+1, 1))
+        end_znum = int(min(np.floor((dec_max*DPR+90-1e-15)*5)+1, 900))
         
         for znum in xrange(start_znum, end_znum+1):
             fn = self._zone_filename(znum)
@@ -204,8 +170,8 @@ class UCAC4Catalog(StarCatalog):
                              **kwargs):
         """Yield the results for a single zone."""
         full_result = kwargs.get('full_result', True)
-        mag_min = kwargs.get('mag_min', None)
-        mag_max = kwargs.get('max_max', None)
+        vmag_min = kwargs.get('vmag_min', None)
+        vmag_max = kwargs.get('vmag_max', None)
         require_clean = kwargs.get('require_clean', True)
         allow_double = kwargs.get('allow_double', False)
         allow_galaxy = kwargs.get('allow_galaxy', False)
@@ -223,7 +189,7 @@ class UCAC4Catalog(StarCatalog):
                 break
             rec_num += 1 # This makes rec_num 1-based
             parsed = struct.unpack(UCAC4_FMT, record)
-            star = Star()
+            star = UCAC4Star()
             
             if self.debug:
                 print 'EXAMINING UNIQUE ID', parsed[42], '...',
@@ -243,8 +209,8 @@ class UCAC4Catalog(StarCatalog):
 #    original UCAC observation cannot be recovered from these data. 
 #    The declination is given in south pole distance (spd) and can be
 #    converted back to a true declination by subtracting 324000000 mas.
-            star.ra = parsed[0] * MAS_TO_DEG
-            star.dec = parsed[1] * MAS_TO_DEG - 90
+            star.ra = parsed[0] * MAS_TO_DEG * RPD
+            star.dec = (parsed[1] * MAS_TO_DEG - 90) * RPD
             if star.ra >= ra_max:
                 # RA is in ascending order in the file
                 if self.debug:
@@ -279,26 +245,26 @@ class UCAC4Catalog(StarCatalog):
 #    the larger of the 2.  If that error exceeds 0.9 mag the error
 #    was set to 0.9 mag (= value 90 in catalog data, unit = 10 mmag).
             if parsed[2] == 20000:
-                star.mag_model = None
+                star.vmag_model = None
             else:
-                star.mag_model = parsed[2] / 1000.
+                star.vmag_model = parsed[2] / 1000.
             if parsed[3] == 20000:
-                star.mag_aper = None
+                star.vmag = None
             else:
-                star.mag_aper = parsed[3] / 1000.
+                star.vmag = parsed[3] / 1000.
             if parsed[4] == 99:
-                star.mag_sigma = None
+                star.vmag_sigma = None
             else:
-                star.mag_sigma = parsed[4] / 100.
-            if mag_min is not None:
-                if star.mag_aper is None or star.mag_aper < mag_min:
+                star.vmag_sigma = parsed[4] / 100.
+            if vmag_min is not None:
+                if star.vmag is None or star.vmag < vmag_min:
                     if self.debug:
-                        print 'SKIPPED MODEL MAG', star.mag_model
+                        print 'SKIPPED MODEL MAG', star.vmag_model
                     continue
-            if mag_max is not None:
-                if star.mag_aper is None or star.mag_aper > mag_max:
+            if vmag_max is not None:
+                if star.vmag is None or star.vmag > vmag_max:
                     if self.debug:
-                        print 'SKIPPED MODEL MAG', star.mag_model
+                        print 'SKIPPED MODEL MAG', star.vmag_model
                     continue
             
             ###############
@@ -446,30 +412,30 @@ class UCAC4Catalog(StarCatalog):
 
             prse = parsed[16]+128
             pdse = parsed[17]+128
-            star.pm_rac_syst_err = prse * 0.1 * MAS_TO_DEG # RA*COS(DEC), DEG/YR
-            star.pm_dec_syst_err = pdse * 0.1 * MAS_TO_DEG # DEG/YR
+            star.pm_rac_sigma = prse * 0.1 * MAS_TO_DEG # RA*COS(DEC), DEG/YR
+            star.pm_dec_sigma = pdse * 0.1 * MAS_TO_DEG # DEG/YR
             if prse == 251:
-                star.pm_rac_syst_err = 27.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 27.5 * MAS_TO_DEG
             elif prse == 252:
-                star.pm_rac_syst_err = 32.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 32.5 * MAS_TO_DEG
             elif prse == 253:
-                star.pm_rac_syst_err = 37.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 37.5 * MAS_TO_DEG
             elif prse == 254:
-                star.pm_rac_syst_err = 45.0 * MAS_TO_DEG
+                star.pm_rac_sigma = 45.0 * MAS_TO_DEG
             elif prse == 255:
-                star.pm_rac_syst_err = None
+                star.pm_rac_sigma = None
                 if star.pm_rac == 0:
                     star.pm_rac = None
             if pdse == 251:
-                star.pm_dec_syst_err = 27.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 27.5 * MAS_TO_DEG
             elif pdse == 252:
-                star.pm_dec_syst_err = 32.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 32.5 * MAS_TO_DEG
             elif pdse == 253:
-                star.pm_dec_syst_err = 37.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 37.5 * MAS_TO_DEG
             elif pdse == 254:
-                star.pm_dec_syst_err = 45.0 * MAS_TO_DEG
+                star.pm_dec_sigma = 45.0 * MAS_TO_DEG
             elif pdse == 255:
-                star.pm_dec_syst_err = None
+                star.pm_dec_sigma = None
                 if star.pm_dec == 0:
                     star.pm_dec = None
 
@@ -505,8 +471,8 @@ class UCAC4Catalog(StarCatalog):
 #    catalog like Hipparcos, Tycho or high proper motion data, a mean
 #    error in position and proper motion depending on the catalog and
 #    magnitude of the star was adopted.
-            star.rac_syst_err = (parsed[7]+128.) * MAS_TO_DEG # RA * COS(DEC)
-            star.dec_syst_err = (parsed[8]+128.) * MAS_TO_DEG
+            star.rac_sigma = (parsed[7]+128.) * MAS_TO_DEG # RA * COS(DEC)
+            star.dec_sigma = (parsed[8]+128.) * MAS_TO_DEG
 
             ##############
             # IMAGE INFO #
@@ -758,10 +724,10 @@ class UCAC4Catalog(StarCatalog):
 
 import unittest
 
-class Test_UCAC4(unittest.TestCase):
+class Test_UCAC4StarCatalog(unittest.TestCase):
 
     def runTest(self):
-        cat = UCAC4Catalog('t:/external/ucac4')
+        cat = UCAC4StarCatalog('t:/external/ucac4')
 
         # Zone 1
         num_pm = cat.count_stars(require_clean=False, allow_double=True,
