@@ -132,7 +132,7 @@ class UCAC4StarCatalog(StarCatalog):
             self.dirname = os.environ["UCAC4_DIR"]
         else:
             self.dirname = dir
-        self.debug = False
+        self.debug_level = 0
         
     def _find_stars(self, ra_min, ra_max, dec_min, dec_max, **kwargs):
         """Yield the results for all zones in the DEC range.
@@ -147,6 +147,10 @@ class UCAC4StarCatalog(StarCatalog):
             allow_galaxy         False     Allow galaxies and extended objects
             require_pm           True      Only return stars with known proper
                                            motion
+            return_everything    False     Override require_clean,
+                                           allow_double, allow_galaxy, and
+                                           require_pm so that every entry
+                                           is returned.
             full_result          True      Populate all fields
                                            False: Stop after fields required
                                            for matching criteria
@@ -176,7 +180,14 @@ class UCAC4StarCatalog(StarCatalog):
         allow_double = kwargs.get('allow_double', False)
         allow_galaxy = kwargs.get('allow_galaxy', False)
         require_pm = kwargs.get('require_pm', True)
+        return_everything = kwargs.get('return_everything', False)
         optimize_ra = kwargs.get('optimize_ra', True)
+        
+        if return_everything:
+            require_clean = False
+            allow_double = True
+            allow_galaxy = True
+            require_pm = False
         
         if optimize_ra:
             rec_num = self._find_starting_ra(fp, ra_min) # 0-based
@@ -190,10 +201,7 @@ class UCAC4StarCatalog(StarCatalog):
             rec_num += 1 # This makes rec_num 1-based
             parsed = struct.unpack(UCAC4_FMT, record)
             star = UCAC4Star()
-            
-            if self.debug:
-                print 'EXAMINING UNIQUE ID', parsed[42], '...',
-            
+                        
             ###########
             # RA, DEC #
             ###########
@@ -213,13 +221,14 @@ class UCAC4StarCatalog(StarCatalog):
             star.dec = (parsed[1] * MAS_TO_DEG - 90) * RPD
             if star.ra >= ra_max:
                 # RA is in ascending order in the file
-                if self.debug:
-                    print 'SKIPPED RA AND REST OF FILE', star.ra
+                if self.debug_level > 1:
+                    print 'ID', parsed[42], 'SKIPPED RA AND REST OF FILE',
+                    print star.ra
                 break
             if (star.ra < ra_min or
                 star.dec < dec_min or star.dec >= dec_max):
-                if self.debug:
-                    print 'SKIPPED RA/DEC', star.ra, star.dec
+                if self.debug_level > 1:
+                    print 'ID', parsed[42], 'SKIPPED RA/DEC', star.ra, star.dec
                 continue
 
             #############
@@ -258,13 +267,15 @@ class UCAC4StarCatalog(StarCatalog):
                 star.vmag_sigma = parsed[4] / 100.
             if vmag_min is not None:
                 if star.vmag is None or star.vmag < vmag_min:
-                    if self.debug:
-                        print 'SKIPPED MODEL MAG', star.vmag_model
+                    if self.debug_level > 1:
+                        print 'ID', parsed[42], 'SKIPPED MODEL MAG',
+                        print star.vmag_model
                     continue
             if vmag_max is not None:
                 if star.vmag is None or star.vmag > vmag_max:
-                    if self.debug:
-                        print 'SKIPPED MODEL MAG', star.vmag_model
+                    if self.debug_level > 1:
+                        print 'ID', parsed[42], 'SKIPPED MODEL MAG',
+                        print star.vmag_model,
                     continue
             
             ###############
@@ -298,8 +309,8 @@ class UCAC4StarCatalog(StarCatalog):
                  star.obj_type == OBJ_TYPE_HPM_NOT_MATCHED or
                  star.obj_type == OBJ_TYPE_HPM_DISCREPANT)):
                 # Use with extreme caution
-                if self.debug:
-                    print 'SKIPPED NOT CLEAN', star.obj_type
+                if self.debug_level:
+                    print 'ID', parsed[42], 'SKIPPED NOT CLEAN', star.obj_type
                 continue
 
             #############################
@@ -339,8 +350,8 @@ class UCAC4StarCatalog(StarCatalog):
 #    but a zero means "likely some double star component or blended image".
             cdf = parsed[6]
             if not allow_double and cdf != 0:
-                if self.debug:
-                    print 'SKIPPED DOUBLE', star.cdf
+                if self.debug_level:
+                    print 'ID', parsed[42], 'SKIPPED DOUBLE', cdf
                 continue
             star.double_star_flag = cdf // 10
             star.double_star_type = cdf % 10
@@ -363,8 +374,9 @@ class UCAC4StarCatalog(StarCatalog):
             star.galaxy_match = parsed[40]
             star.extended_source = parsed[41] # XXX What units is this in?
             if not allow_galaxy and (star.galaxy_match or star.extended_source):
-                if self.debug:
-                    print 'SKIPPED GALAXY/EXTENDED', star.galaxy_match, star.extended_source
+                if self.debug_level:
+                    print 'ID', parsed[42], 'SKIPPED GALAXY/EXTENDED',
+                    print star.galaxy_match, star.extended_source
                 continue
             if star.galaxy_match:
                 star.galaxy_match = 10.**star.galaxy_match / 10. / 60. # Degrees
@@ -440,8 +452,8 @@ class UCAC4StarCatalog(StarCatalog):
                     star.pm_dec = None
 
             if require_pm and (star.pm_rac is None or star.pm_dec is None):
-                if self.debug:
-                    print 'SKIPPED NO PM', parsed[14:18]
+                if self.debug_level:
+                    print 'ID', parsed[42], 'SKIPPED NO PM', parsed[14:18]
                 continue
             
             #################################
@@ -451,8 +463,8 @@ class UCAC4StarCatalog(StarCatalog):
             #################################
             
             if not full_result:
-                if self.debug:
-                    print 'OK!'
+                if self.debug_level:
+                    print 'ID', parsed[42], 'OK!'
                 yield star
                 continue
             
@@ -674,8 +686,8 @@ class UCAC4StarCatalog(StarCatalog):
             
             star.id_str = 'UCAC4-%03d-%06d' % (znum, rec_num)
             
-            if self.debug:
-                print 'OK!'
+            if self.debug_level:
+                print 'ID', parsed[42], 'OK!'
             yield star            
 
 #############################################################################

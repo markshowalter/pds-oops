@@ -25,7 +25,7 @@ class SpiceStarCatalog(StarCatalog):
     def __init__(self, name):
         self.filename = os.path.join(os.environ["SPICE_PATH"], "Stars", name+'.bdb')
         self.catalog = cspice.stcl01(self.filename)[0]
-        self.debug = False
+        self.debug_level = 0
         
         # (ra, dec, ra_uncertainty, dec_uncertainty,
         #  catalog_number, spectral_type, v_magnitude)
@@ -43,15 +43,15 @@ class SpiceStarCatalog(StarCatalog):
             (star.ra, star.dec, star.ra_sigma, star.dec_sigma,
              star.unique_number, star.spectral_type, star.vmag) = result
             if vmag_min is not None and star.vmag < vmag_min:
-                if self.debug:
+                if self.debug_level:
                     print 'SKIPPED VMAG', star.vmag
                 continue
             if vmag_max is not None and star.vmag > vmag_max:
-                if self.debug:
+                if self.debug_level:
                     print 'SKIPPED VMAG', star.vmag
                 continue
     
-            if self.debug:
+            if self.debug_level:
                 print 'OK!'
             yield star
             
