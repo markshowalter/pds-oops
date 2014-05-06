@@ -45,8 +45,10 @@ class UCAC4Star(Star):
         self.galaxy_match = None
         self.extended_source = None
         self.pm_rac = None
+        self.pm_ra = None
         self.pm_rac_sigma = None
         self.rac_sigma = None
+        self.ra_sigma = None
         self.num_img_total = None
         self.num_img_used = None
         self.num_cat_pm = None
@@ -140,7 +142,7 @@ class UCAC4StarCatalog(StarCatalog):
         Optional arguments:      DEFAULT
             ra_min, ra_max       0, 2PI    RA range in radians
             dec_min, dec_max     -PI, PI   DEC range in radians
-            vmag_min, vmag_max     ALL       Magnitude range
+            vmag_min, vmag_max     ALL     Magnitude range
             require_clean        True      Only return stars that are clean
                                            detections
             allow_double         False     Allow double stars
@@ -217,8 +219,8 @@ class UCAC4StarCatalog(StarCatalog):
 #    original UCAC observation cannot be recovered from these data. 
 #    The declination is given in south pole distance (spd) and can be
 #    converted back to a true declination by subtracting 324000000 mas.
-            star.ra = parsed[0] * MAS_TO_DEG * RPD
-            star.dec = (parsed[1] * MAS_TO_DEG - 90) * RPD
+            star.ra = parsed[0] * MAS_TO_RAD
+            star.dec = parsed[1] * MAS_TO_RAD - HALFPI
             if star.ra >= ra_max:
                 # RA is in ascending order in the file
                 if self.debug_level > 1:
@@ -414,44 +416,52 @@ class UCAC4StarCatalog(StarCatalog):
 #    catalog and the brightness of the star rather than giving the 
 #    individual star's error quoted in those catalogs.
     
-            star.pm_rac = parsed[14] * 0.1 * MAS_TO_DEG # RA*COS(DEC), DEG/YR
-            star.pm_dec = parsed[15] * 0.1 * MAS_TO_DEG # DEG/YR
+            star.pm_rac = parsed[14] * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
+            star.pm_ra = star.pm_rac / np.cos(star.dec)
+            star.pm_dec = parsed[15] * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
+            
             if parsed[14] == 32767 or parsed[15] == 32767:
                 # PM is too large and needs to be looked up in another
                 # table, which we don't support yet. XXX
                 star.pm_rac = None
+                star.pm_ra = None
                 star.pm_dec = None
 
             prse = parsed[16]+128
             pdse = parsed[17]+128
-            star.pm_rac_sigma = prse * 0.1 * MAS_TO_DEG # RA*COS(DEC), DEG/YR
-            star.pm_dec_sigma = pdse * 0.1 * MAS_TO_DEG # DEG/YR
+            star.pm_rac_sigma = prse * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
+            star.pm_dec_sigma = pdse * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
             if prse == 251:
-                star.pm_rac_sigma = 27.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 27.5 * MAS_TO_RAD * YEAR_TO_SEC
             elif prse == 252:
-                star.pm_rac_sigma = 32.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 32.5 * MAS_TO_RAD * YEAR_TO_SEC
             elif prse == 253:
-                star.pm_rac_sigma = 37.5 * MAS_TO_DEG
+                star.pm_rac_sigma = 37.5 * MAS_TO_RAD * YEAR_TO_SEC
             elif prse == 254:
-                star.pm_rac_sigma = 45.0 * MAS_TO_DEG
+                star.pm_rac_sigma = 45.0 * MAS_TO_RAD * YEAR_TO_SEC
             elif prse == 255:
                 star.pm_rac_sigma = None
                 if star.pm_rac == 0:
                     star.pm_rac = None
+            if star.pm_rac_sigma is None:
+                star.pm_ra_sigma = None
+            else:
+                star.pm_ra_sigma = star.pm_rac_sigma / np.cos(star.dec) # THIS MAY BE WRONG 
+                
             if pdse == 251:
-                star.pm_dec_sigma = 27.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 27.5 * MAS_TO_RAD
             elif pdse == 252:
-                star.pm_dec_sigma = 32.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 32.5 * MAS_TO_RAD
             elif pdse == 253:
-                star.pm_dec_sigma = 37.5 * MAS_TO_DEG
+                star.pm_dec_sigma = 37.5 * MAS_TO_RAD
             elif pdse == 254:
-                star.pm_dec_sigma = 45.0 * MAS_TO_DEG
+                star.pm_dec_sigma = 45.0 * MAS_TO_RAD
             elif pdse == 255:
                 star.pm_dec_sigma = None
                 if star.pm_dec == 0:
                     star.pm_dec = None
 
-            if require_pm and (star.pm_rac is None or star.pm_dec is None):
+            if require_pm and (star.pm_ra is None or star.pm_dec is None):
                 if self.debug_level:
                     print 'ID', parsed[42], 'SKIPPED NO PM', parsed[14:18]
                 continue
@@ -483,8 +493,8 @@ class UCAC4StarCatalog(StarCatalog):
 #    catalog like Hipparcos, Tycho or high proper motion data, a mean
 #    error in position and proper motion depending on the catalog and
 #    magnitude of the star was adopted.
-            star.rac_sigma = (parsed[7]+128.) * MAS_TO_DEG # RA * COS(DEC)
-            star.dec_sigma = (parsed[8]+128.) * MAS_TO_DEG
+            star.rac_sigma = (parsed[7]+128.) * MAS_TO_RAD # RA * COS(DEC)
+            star.dec_sigma = (parsed[8]+128.) * MAS_TO_RAD
 
             ##############
             # IMAGE INFO #
@@ -715,7 +725,7 @@ class UCAC4StarCatalog(StarCatalog):
             fp.seek(mid*UCAC4_RECORD_SIZE, os.SEEK_SET)
             record = fp.read(UCAC4_RECORD_SIZE_RA)
             parsed = struct.unpack(UCAC4_FMT_RA, record)
-            midval = parsed[0] * MAS_TO_DEG
+            midval = parsed[0] * MAS_TO_RAD
             if midval < ra_min:
                 lo = mid+1
             elif midval > ra_min: 

@@ -8,6 +8,9 @@ DPR = 180/np.pi
 RPD = np.pi/180
 AS_TO_DEG = 1/3600.
 MAS_TO_DEG = AS_TO_DEG / 1000.
+MAS_TO_RAD = MAS_TO_DEG * RPD
+YEAR_TO_SEC = 1/365.25/86400.
+
 TWOPI = 2*np.pi
 HALFPI = np.pi/2
 
@@ -18,6 +21,8 @@ class Star(object):
     star catalogs."""
     
     def __init__(self):
+        """Constructor for Star superclass."""
+        
         self.ra = None
         """Right ascension at J2000 epoch (radians)"""
         
@@ -37,19 +42,34 @@ class Star(object):
         """Visual magnitude error"""
         
         self.pm_ra = None
-        """Proper motion in RA (radians/yr)"""
+        """Proper motion in RA (radians/sec)"""
         
         self.pm_ra_sigma = None
-        """Proper motion in RA error (radians/yr)"""
+        """Proper motion in RA error (radians/sec)"""
         
         self.pm_dec = None
-        """Proper motion in DEC (radians/yr)"""
+        """Proper motion in DEC (radians/sec)"""
         
         self.pm_dec_sigma = None
-        """Proper motion in DEC error (radians/yr)"""
+        """Proper motion in DEC error (radians/sec)"""
         
         self.unique_number = None
         """Unique catalog number"""
+
+    def ra_dec_with_pm(self, tdb):
+        """Return the star's RA and DEC adjusted for proper motion.
+        
+        If no proper motion is available, the original RA and DEC are returned.
+        
+        Input:
+            tdb        time since the J2000 epoch in seconds
+        """
+        
+        if self.pm_ra is None or self.pm_dec is None:
+            return (self.ra, self.dec)
+        
+        return (self.ra + tdb*self.pm_ra, self.dec + tdb*self.pm_dec)
+        
 
 class StarCatalog(object):
     def __init__(self):
