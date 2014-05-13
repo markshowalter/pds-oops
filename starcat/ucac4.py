@@ -56,7 +56,13 @@ class UCAC4Star(Star):
         self.dec_mean_epoch = None
         self.cat_match = None
         self.id_str = None
+        self.id_str_ucac2 = None
+
+    def __str__(self):
+        ret = Star.__str__(self)
         
+        return ret
+    
 
 #col byte item   fmt unit       explanation                            notes
 #---------------------------------------------------------------------------
@@ -446,7 +452,7 @@ class UCAC4StarCatalog(StarCatalog):
             if star.pm_rac_sigma is None:
                 star.pm_ra_sigma = None
             else:
-                star.pm_ra_sigma = star.pm_rac_sigma / np.cos(star.dec) # THIS MAY BE WRONG 
+                star.pm_ra_sigma = star.pm_rac_sigma / np.cos(star.dec) 
                 
             if pdse == 251:
                 star.pm_dec_sigma = 27.5 * MAS_TO_RAD
@@ -494,6 +500,7 @@ class UCAC4StarCatalog(StarCatalog):
 #    error in position and proper motion depending on the catalog and
 #    magnitude of the star was adopted.
             star.rac_sigma = (parsed[7]+128.) * MAS_TO_RAD # RA * COS(DEC)
+            star.ra_sigma = star.rac_sigma / np.cos(star.dec)
             star.dec_sigma = (parsed[8]+128.) * MAS_TO_RAD
 
             ##############
@@ -686,12 +693,21 @@ class UCAC4StarCatalog(StarCatalog):
 #    separate star entry in UCAC4.
             star.unique_number = parsed[42]
 
-            # SKIP UCAC2 REFERENCES
+            ###################################
+            # UCAC2 IDENTIFICATION NUMBER #
+            ###################################
+            
 #52 73-74 zn2    I*2            zone number of UCAC2 (0 = no match)     (21)
 #53 75-78 rn2    I*4            running record number along UCAC2 zone  (21)
 
+            if parsed[43] == 0:
+                star.id_str_ucac2 = None
+            else:
+                star.id_str_ucac2 = 'UCAC2-%03d-%06d' % (parsed[43],
+                                                         parsed[44])
+            
             ###################################
-            # SET UCAC4 IDENTIFICATION NUMBER #
+            # UCAC4 IDENTIFICATION NUMBER #
             ###################################
             
             star.id_str = 'UCAC4-%03d-%06d' % (znum, rec_num)
@@ -806,7 +822,8 @@ class Test_UCAC4StarCatalog(unittest.TestCase):
                                              ra_min=ra_min, ra_max=ra_max,
                                              optimize_ra=False)
                 self.assertEqual(num_opt, num_no_opt)
-            
+        
+
+        
 if __name__ == '__main__':
     unittest.main(verbosity=2)
-    

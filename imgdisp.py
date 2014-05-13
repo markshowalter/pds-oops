@@ -1275,7 +1275,7 @@ if __name__ == '__main__':
     iss_nac_obs2 = iss.from_file(iss_nac_fn2)
     
     # Simple display
-    imdisp = ImageDisp(iss_nac_obs1.data, canvas_size=(512,1024), flip_y=False)
+    imdisp = ImageDisp(iss_nac_obs1.data, canvas_size=(1024,512), flip_y=False)
     mainloop()
 
     # Two images with overlay, auto_update, enlarge and separate zooms
