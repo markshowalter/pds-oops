@@ -303,7 +303,7 @@ class ImageDisp(Frame):
         
         for i in xrange(len(imgdata_list)):
             if (self.overlay_list[i] is None or
-                self.overlay_list[i].shape == imgdata_list[i].shape):
+                self.overlay_list[i].shape[:2] == imgdata_list[i].shape):
                 new_imgdata_list.append(imgdata_list[i])
                 overlay_scale_x_list.append(1)
                 overlay_scale_y_list.append(1)
@@ -729,8 +729,11 @@ class ImageDisp(Frame):
         if self.flip_y:
             y = self.imgdata_list[img_num].shape[0] - y - 1
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' % (x, y))
-        self.label_val.config(text='Mouse val: %11.7f' %
-                              self.imgdata_list[img_num][y,x])
+        val = self.imgdata_list[img_num][y,x]
+        if val > 10000:
+            self.label_val.config(text='Mouse val: %e' % val)
+        else:
+            self.label_val.config(text='Mouse val: %12.7f' % val)
 
     def _mousemove_callback_handler(self, event, img_num, callback_func):
         """Internal - callback for mouse move once the user has registered
@@ -749,8 +752,11 @@ class ImageDisp(Frame):
             y = self.imgdata_list[img_num].shape[0] - y -1
         # We can only bind one event handler, so this one has to do both parts
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' % (x, y))
-        self.label_val.config(text='Mouse val: %11.7f' %
-                              self.imgdata_list[img_num][y,x])
+        val = self.imgdata_list[img_num][y,x]
+        if val > 10000:
+            self.label_val.config(text='Mouse val: %e' % val)
+        else:
+            self.label_val.config(text='Mouse val: %12.7f' % val)
         callback_func(x, y)
         
     def _b1press_callback_handler(self, event, img_num, callback_func):

@@ -2,6 +2,8 @@
 # starcat/ucac4.py
 ################################################################################
 
+#    Zacharias, N. et al. 2013, The Astronomical Journal, 145, 44
+
 from starcatalog import *
 import numpy as np
 import os.path
@@ -55,12 +57,25 @@ class UCAC4Star(Star):
         self.ra_mean_epoch = None
         self.dec_mean_epoch = None
         self.cat_match = None
+        self.apass_mag_b = None
+        self.apass_mag_v = None
+        self.apass_mag_g = None
+        self.apass_mag_r = None
+        self.apass_mag_i = None
+        self.apass_mag_b_sigma = None
+        self.apass_mag_v_sigma = None
+        self.apass_mag_g_sigma = None
+        self.apass_mag_r_sigma = None
+        self.apass_mag_i_sigma = None
+        self.johnson_mag_b = None
+        self.johnson_mag_v = None
         self.id_str = None
         self.id_str_ucac2 = None
+        self.spectral_class = None
+        self.temperature = None
 
     def __str__(self):
         ret = Star.__str__(self)
-        
         return ret
     
 
@@ -421,7 +436,6 @@ class UCAC4StarCatalog(StarCatalog):
 #    catalogs a mean error in positions was adopted depending on input
 #    catalog and the brightness of the star rather than giving the 
 #    individual star's error quoted in those catalogs.
-    
             star.pm_rac = parsed[14] * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
             star.pm_ra = star.pm_rac / np.cos(star.dec)
             star.pm_dec = parsed[15] * 0.1 * MAS_TO_RAD * YEAR_TO_SEC
@@ -588,7 +602,6 @@ class UCAC4StarCatalog(StarCatalog):
 #36 59     (3)   I*1 1/100 mag  error of g magnitude from APASS         (14)
 #37 60     (4)   I*1 1/100 mag  error of r magnitude from APASS         (14)
 #38 61     (5)   I*1 1/100 mag  error of i magnitude from APASS         (14)
-#39 62    gcflg  I*1            Yale SPM g-flag*10  c-flag              (15)
 #    Note (13):  Data are from the AAVSO Photometric all-sky survey (APASS)
 #    DR6 plus single observation stars kindly provided by A.Henden.
 #    A magnitude entry of 20000 indicates "no data".  For bright stars
@@ -606,6 +619,118 @@ class UCAC4StarCatalog(StarCatalog):
 #    errors for single observations are multiplied by -1 for this column.
 #    The valid range for each APASS magnitude error is +-90 = +-0.90 mag.
 #    For "no data" (i.e. magnitude = 20000 = 20.0 mag) the error is set to 99.
+# ============================================================================
+#    APASS is described in:
+#    
+#        Henden, A. A., et al. 2009, The AAVSO Photometric All-Sky Survey,
+#        AAS 214, 0702.
+#    
+#        Henden, A. A., et al. 2010, New Results from the AAVSO Photometric
+#        All Sky Survey, AAS 215, 47011.
+#    
+#        Henden, A. A., et al. 2011,The AAVSO Photometric All-Sky Survey,
+#        in prep.
+#    
+#        Smith, T. C., et al. 2010, AAVSO Photometric All-Sky Survey
+#        Implementation at the Dark Ridge Observatory, SAS.
+#
+#    APASS provides magnitudes in five pass bands: Johnson B and V, and Sloan
+#    g', r', and i'.
+#    
+#    The Johnson system is described in:
+#    
+#        Johnson, H.L. and Morgan, W.W. 1953, The Astrophysical Journal, 117,
+#        313
+#    
+#    Johnson filter transmission data can be found at:
+#    
+#        http://obswww.unige.ch/gcpd/filters/fil01.html
+#    
+#        ftp://obsftp.unige.ch/pub/mermio/filters/ph01.Bj
+#        ftp://obsftp.unige.ch/pub/mermio/filters/ph01.Vj
+#    
+#    The SDSS photometric system is described in:
+#    
+#        Fukugita, M. et al. 1996, The Astronomical Journal, 111, 1748
+#    
+#    SDSS filter transmission data can be found at:
+#    
+#        http://www.sdss.org/dr1/instruments/imager/index.html#filters
+#        
+#        http://www.sdss.org/dr1/instruments/imager/filters/g.dat
+#        http://www.sdss.org/dr1/instruments/imager/filters/r.dat
+#        http://www.sdss.org/dr1/instruments/imager/filters/i.dat
+#    
+#    The Tycho-2 photometric system is described in:
+#    
+#        The Hipparcos and Tycho Catalogues, ESA SP-1200, Vol. 1, June 1997.
+#    
+#    Bt and Vt filter transmission data is shown in Table 1.3.1 of SP-1200.
+#    
+#    ESA SP-1200 p. 57 provides the following conversion from Tycho V_T and B_T
+#    to Johnson V, B:
+#    
+#        V_J = V_T - 0.090 * (B_T - V_T)
+#        (B_J - V_J) = 0.850 * (B_T - V_T)
+#            or
+#        B_J = V_J + 0.850 * (B_T - V_T)
+#    
+#    These transformations fail for M-type stars and apply only to unreddened
+#    stars.
+            if parsed[28] != 20000:
+                star.apass_mag_b = parsed[28] * .001
+            if parsed[29] != 20000:
+                star.apass_mag_v = parsed[29] * .001
+            if parsed[30] != 20000:
+                star.apass_mag_g = parsed[30] * .001
+            if parsed[31] != 20000:
+                star.apass_mag_r = parsed[31] * .001
+            if parsed[32] != 20000:
+                star.apass_mag_i = parsed[32] * .001
+            star.apass_mag_b_sigma = parsed[33] * .01
+            star.apass_mag_v_sigma = parsed[34] * .01
+            star.apass_mag_g_sigma = parsed[35] * .01
+            star.apass_mag_r_sigma = parsed[36] * .01
+            star.apass_mag_i_sigma = parsed[37] * .01
+            
+            star.johnson_mag_b = star.apass_mag_b
+            star.johnson_mag_v = star.apass_mag_v
+            
+            if (parsed[28] < 20000 and parsed[33] == 0 and
+                parsed[29] < 20000 and parsed[34] == 0):
+                star.johnson_mag_v = (star.apass_mag_v -
+                                      0.09 * (star.apass_mag_b -
+                                              star.apass_mag_v))
+                star.johnson_mag_b = (star.johnson_mag_v +
+                                      0.85 * (star.apass_mag_b -
+                                              star.apass_mag_v))
+            
+#29 47-48 apasm  I*2 millimag   B magnitude from APASS                  (13)
+#30 49-50  (2)   I*2 millimag   V magnitude from APASS                  (13)
+#31 51-52  (3)   I*2 millimag   g magnitude from APASS                  (13)
+#32 53-54  (4)   I*2 millimag   r magnitude from APASS                  (13)
+#33 55-56  (5)   I*2 millimag   i magnitude from APASS                  (13)
+#34 57    apase  I*1 1/100 mag  error of B magnitude from APASS         (14)
+#35 58     (2)   I*1 1/100 mag  error of V magnitude from APASS         (14)
+#36 59     (3)   I*1 1/100 mag  error of g magnitude from APASS         (14)
+#37 60     (4)   I*1 1/100 mag  error of r magnitude from APASS         (14)
+#38 61     (5)   I*1 1/100 mag  error of i magnitude from APASS         (14)
+
+
+            #######################
+            # CATALOG MATCH FLAGS #
+            #######################
+            
+#39 62    gcflg  I*1            Yale SPM g-flag*10  c-flag              (15)
+#40 63-66 icf(1) I*4            FK6-Hipparcos-Tycho source flag         (16)
+#41       icf(2) ..             AC2000       catalog match flag         (17)
+#42       icf(3) ..             AGK2 Bonn    catalog match flag         (17)
+#43       icf(4) ..             AKG2 Hamburg catalog match flag         (17)
+#44       icf(5) ..             Zone Astrog. catalog match flag         (17)
+#45       icf(6) ..             Black Birch  catalog match flag         (17)
+#46       icf(7) ..             Lick Astrog. catalog match flag         (17)
+#47       icf(8) ..             NPM  Lick    catalog match flag         (17)
+#48       icf(9) ..             SPM  YSJ1    catalog match flag         (17)
 #
 #    Note (15):  The g-flag from the Yale San Juan first epoch Southern
 #    Proper Motion data (YSJ1, SPM) has the following meaning:
@@ -626,20 +751,6 @@ class UCAC4StarCatalog(StarCatalog):
 #     5 = 2MASS xsc (extended sources, largely (but not all!) galaxies)
 #     6 = LEDA  (confirmed galaxies, Paturel et al. 2005)
 #     7 = QSO   (Veron-Cetty & Veron 2006)
-     
-            #######################
-            # CATALOG MATCH FLAGS #
-            #######################
-            
-#40 63-66 icf(1) I*4            FK6-Hipparcos-Tycho source flag         (16)
-#41       icf(2) ..             AC2000       catalog match flag         (17)
-#42       icf(3) ..             AGK2 Bonn    catalog match flag         (17)
-#43       icf(4) ..             AKG2 Hamburg catalog match flag         (17)
-#44       icf(5) ..             Zone Astrog. catalog match flag         (17)
-#45       icf(6) ..             Black Birch  catalog match flag         (17)
-#46       icf(7) ..             Lick Astrog. catalog match flag         (17)
-#47       icf(8) ..             NPM  Lick    catalog match flag         (17)
-#48       icf(9) ..             SPM  YSJ1    catalog match flag         (17)
 #    Note (16, 17) binary data:  a single 4-byte integer is used to store
 #    the 10 flags of "icf".  That 4-byte integer has the value:
 #       icf = icf(1)*10^8 + icf(2)*10^7 + ...  + icf(8)*10 + icf(9)
@@ -679,7 +790,7 @@ class UCAC4StarCatalog(StarCatalog):
             # UCAC4 UNIQUE ID #
             ###################
             
-#51 69-72 rnm    I*4            unique star identification number       (20)
+#(43)51 69-72 rnm    I*4            unique star identification number       (20)
 #    Note (20):  This unique star identification number is between 200001
 #    and  321640 for Hipparcos stars, and between 1 and 9430 for non-
 #    Hipparcos stars supplemented to the UCAC4 catalog (no CCD observ.).
@@ -693,12 +804,12 @@ class UCAC4StarCatalog(StarCatalog):
 #    separate star entry in UCAC4.
             star.unique_number = parsed[42]
 
-            ###################################
+            ###############################
             # UCAC2 IDENTIFICATION NUMBER #
-            ###################################
+            ###############################
             
-#52 73-74 zn2    I*2            zone number of UCAC2 (0 = no match)     (21)
-#53 75-78 rn2    I*4            running record number along UCAC2 zone  (21)
+#(44)52 73-74 zn2    I*2            zone number of UCAC2 (0 = no match)     (21)
+#(45)53 75-78 rn2    I*4            running record number along UCAC2 zone  (21)
 
             if parsed[43] == 0:
                 star.id_str_ucac2 = None
@@ -706,12 +817,25 @@ class UCAC4StarCatalog(StarCatalog):
                 star.id_str_ucac2 = 'UCAC2-%03d-%06d' % (parsed[43],
                                                          parsed[44])
             
-            ###################################
+            ###############################
             # UCAC4 IDENTIFICATION NUMBER #
-            ###################################
+            ###############################
             
             star.id_str = 'UCAC4-%03d-%06d' % (znum, rec_num)
-            
+
+            ##################################################
+            # COMPUTE SPECTRAL CLASS AND SURFACE TEMPERATURE #
+            ##################################################
+
+            if (star.johnson_mag_b is not None and
+                star.johnson_mag_v is not None):                
+                star.spectral_class = self.sclass_from_bv(star.johnson_mag_b,
+                                                          star.johnson_mag_v)
+
+            if star.spectral_class is not None:
+                star.temperature = self.temperature_from_sclass(star.
+                                                                spectral_class)
+                                    
             if self.debug_level:
                 print 'ID', parsed[42], 'OK!'
             yield star            

@@ -17,8 +17,8 @@ class SpiceStar(Star):
         Star.__init__(self)
         
         # Initialize the SPICE-specific fields
-        self.spectral_type = None
-        """The spectral type"""
+        self.spectral_class = None
+        """The spectral class"""
         
 
 class SpiceStarCatalog(StarCatalog):
@@ -41,7 +41,7 @@ class SpiceStarCatalog(StarCatalog):
             star = SpiceStar()
             result = tuple(cspice.stcg01(i))
             (star.ra, star.dec, star.ra_sigma, star.dec_sigma,
-             star.unique_number, star.spectral_type, star.vmag) = result
+             star.unique_number, star.spectral_class, star.vmag) = result
             if vmag_min is not None and star.vmag < vmag_min:
                 if self.debug_level:
                     print 'SKIPPED VMAG', star.vmag
@@ -51,6 +51,7 @@ class SpiceStarCatalog(StarCatalog):
                     print 'SKIPPED VMAG', star.vmag
                 continue
     
+            star.temperature = self.temperature_from_sclass(star.spectral_class)
             if self.debug_level:
                 print 'OK!'
             yield star

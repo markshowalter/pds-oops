@@ -14,6 +14,168 @@ YEAR_TO_SEC = 1/365.25/86400.
 TWOPI = 2*np.pi
 HALFPI = np.pi/2
 
+#===============================================================================
+#
+# Jacobson B-V photometry vs. stellar spectral classification
+# 
+# Data from
+#     Zombeck, M. V. Handbook of Space Astronomy and Astrophysics,
+#     Cambridge, UK: Cambridge University Press, 2nd ed., pp. 68-70
+#     http://ads.harvard.edu/books/hsaa/
+# as transcribed:
+#     http://www.vendian.org/mncharity/dir3/starcolor/details.html
+#
+# The tables below only include main sequence stars, but the temperature
+# difference between main sequence stars and giant stars is minimal for our
+# purposes. Missing values have been linearly interpolated.
+#
+#===============================================================================
+
+SCLASS_TO_B_MINUS_V = {
+    'O5': -0.32,
+    'O6': -0.32,
+    'O7': -0.32,
+    'O8': -0.31,
+    'O9': -0.31,
+    'O9.5': -0.30,
+    'B0': -0.30,
+    'B0.5': -0.28,
+    'B1': -0.26,
+    'B2': -0.24,
+    'B3': -0.20,
+    'B4': -0.18, # Interp
+    'B5': -0.16,
+    'B6': -0.14,
+    'B7': -0.12,
+    'B8': -0.09,
+    'B9': -0.06,
+    'A0': +0.00,
+    'A1': +0.02, # Interp
+    'A2': +0.04, # Interp
+    'A3': +0.06,
+    'A4': +0.10, # Interp
+    'A5': +0.14,
+    'A6': +0.16, # Interp
+    'A7': +0.19,
+    'A8': +0.23, # Interp
+    'A9': +0.27, # Interp
+    'F0': +0.31,
+    'F1': +0.33, # Interp
+    'F2': +0.36,
+    'F3': +0.38, # Interp
+    'F4': +0.41, # Interp
+    'F5': +0.43,
+    'F6': +0.47, # Interp
+    'F7': +0.51, # Interp
+    'F8': +0.54,
+    'F9': +0.56, # Interp
+    'G0': +0.59,
+    'G1': +0.61, # Interp
+    'G2': +0.63,
+    'G3': +0.64, # Interp
+    'G4': +0.65, # Interp
+    'G5': +0.66,
+    'G6': +0.69, # Interp
+    'G7': +0.72, # Interp
+    'G8': +0.74,
+    'G9': +0.78, # Interp
+    'K0': +0.82,
+    'K1': +0.87, # Interp
+    'K2': +0.92,
+    'K3': +0.99, # Interp
+    'K4': +1.07, # Interp
+    'K5': +1.15,
+    'K6': +1.22, # Interp
+    'K7': +1.30,
+    'K8': +1.33, # Interp
+    'K9': +1.37, # Interp
+    'M0': +1.41,
+    'M1': +1.48,
+    'M2': +1.52,
+    'M3': +1.55,
+    'M4': +1.56,
+    'M5': +1.61,
+    'M6': +1.72,
+    'M7': +1.84,
+    'M8': +2.00
+}
+
+SCLASS_TO_SURFACE_TEMP = {
+    'O5': 38000,
+    'O6': 38000,
+    'O7': 38000,
+    'O8': 35000,
+    'O9': 35000,
+    'O9.5': 31900,
+    'B0': 30000,
+    'B0.5': 27000,
+    'B1': 24200,
+    'B2': 22100,
+    'B3': 18800,
+    'B4': 17600, # Interp
+    'B5': 16400,
+    'B6': 15400,
+    'B7': 14500,
+    'B8': 13400,
+    'B9': 12400,
+    'A0': 10800,
+    'A1': 10443, # Interp
+    'A2': 10086, # Interp
+    'A3': 9730,
+    'A4': 9175, # Interp
+    'A5': 8620,
+    'A6': 8405, # Interp
+    'A7': 8190,
+    'A8': 7873, # Interp
+    'A9': 7557, # Interp
+    'F0': 7240,
+    'F1': 7085, # Interp
+    'F2': 6930,
+    'F3': 6800, # Interp
+    'F4': 6670, # Interp
+    'F5': 6540,
+    'F6': 6427, # Interp
+    'F7': 6313, # Interp
+    'F8': 6200,
+    'F9': 6060, # Interp
+    'G0': 5920,
+    'G1': 5850, # Interp
+    'G2': 5780,
+    'G3': 5723, # Interp
+    'G4': 5667, # Interp
+    'G5': 5610,
+    'G6': 5570, # Interp
+    'G7': 5530, # Interp
+    'G8': 5490,
+    'G9': 5365, # Interp
+    'K0': 5240,
+    'K1': 5010, # Interp
+    'K2': 4780,
+    'K3': 4706, # Interp
+    'K4': 4632, # Interp
+    'K5': 4558, # Interp
+    'K6': 4484, # Interp
+    'K7': 4410,
+    'K8': 4247, # Interp
+    'K9': 4083, # Interp
+    'M0': 3920,
+    'M1': 3680,
+    'M2': 3500,
+    'M3': 3360,
+    'M4': 3230,
+    'M5': 3120,
+    'M6': 2168, # Interp
+    'M7': 1217, # Interp
+    'M8': 266
+}
+
+
+#===============================================================================
+#
+# STAR Superclass
+# 
+#===============================================================================
+
 class Star(object):
     """A holder for star attributes.
     
@@ -184,3 +346,48 @@ class StarCatalog(object):
     def _find_stars(self, **kwargs):
         assert False
         
+    @staticmethod
+    def sclass_from_bv(b, v):
+        """Return a star's spectral class given photometric B and V."""
+        bmv = b-v
+        
+        best_temp = None
+        best_sclass = None
+        best_resid = 1e38
+        
+        min_bmv = 1e38
+        max_bmv = -1e38
+        for sclass, sbmv in SCLASS_TO_B_MINUS_V.iteritems():
+            min_bmv = min(min_bmv, sbmv)
+            max_bmv = max(max_bmv, sbmv)
+            resid = abs(sbmv-bmv) 
+            if resid < best_resid:
+                best_resid = resid
+                best_sclass = sclass
+
+        if min_bmv <= bmv <= max_bmv:
+            return best_sclass
+        
+        return None
+    
+    @staticmethod
+    def temperature_from_sclass(sclass):
+        """Return a star's temperature (K) given its spectral class."""
+        if sclass[-1] == '*': # This happens on some SPICE catalog stars
+            sclass = sclass[:-1]
+        sclass = sclass.strip().upper()
+        try:
+            return SCLASS_TO_SURFACE_TEMP[sclass]
+        except KeyError:
+            return None
+    
+    @staticmethod
+    def bmv_from_sclass(sclass):
+        if sclass[-1] == '*': # This happens on some SPICE catalog stars
+            sclass = sclass[:-1]
+        sclass = sclass.strip().upper()
+        try:
+            return SCLASS_TO_B_MINUS_V[sclass]
+        except KeyError:
+            return None
+    
