@@ -10,7 +10,6 @@ from starcat import UCAC4StarCatalog
 from cb_config import STAR_CATALOG_FILENAME, ISS_PSF_SIGMA
 from cb_util_oops import *
 from cb_util_flux import *
-from cb_util_star import *
 
 
 STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_FILENAME)
