@@ -290,7 +290,15 @@ class ImageDisp(Frame):
             if (type(overlay_list) != type([]) and
                 type(overlay_list) != type(())):
                 overlay_list = [overlay_list]
-            self.overlay_list = overlay_list
+            new_overlay_list = []
+            for overlay in overlay_list:
+                if len(overlay.shape) == 2:
+                    new_overlay = np.zeros(overlay.shape + (3,))
+                    new_overlay[:,:,0] = overlay
+                    new_overlay_list.append(new_overlay)
+                else:
+                    new_overlay_list.append(overlay)
+            self.overlay_list = new_overlay_list
 
         assert len(imgdata_list) == len(self.overlay_list)
 
@@ -1189,11 +1197,19 @@ def draw_circle(img, x0, y0, r, color, thickness=1):
             
         while x < 0:
             for xoff in off_list:
-                for yoff in off_list: 
-                    img[y0+y+yoff, x0-x+xoff] = color
-                    img[y0-x+yoff, x0-y+xoff] = color
-                    img[y0-y+yoff, x0+x+xoff] = color
-                    img[y0+x+yoff, x0+y+xoff] = color
+                for yoff in off_list:
+                    if (0 <= y0+y+yoff < img.shape[0] and
+                        0 <= x0-x+xoff < img.shape[1]):
+                        img[y0+y+yoff,x0-x+xoff] = color
+                    if (0 <= y0-x+yoff < img.shape[0] and
+                        0 <= x0-y+xoff < img.shape[1]):
+                        img[y0-x+yoff,x0-y+xoff] = color
+                    if (0 <= y0-y+yoff < img.shape[0] and
+                        0 <= x0+x+xoff < img.shape[1]):
+                        img[y0-y+yoff,x0+x+xoff] = color
+                    if (0 <= y0+x+yoff < img.shape[0] and
+                        0 <= x0+y+xoff < img.shape[1]):
+                        img[y0+x+yoff,x0+y+xoff] = color
             r = err
             if r <= y:
                 y = y+1
