@@ -4,33 +4,9 @@ import logging
 import oops
 import solar
 import numpy as np
+from polymath import *
 
 LOGGING_NAME = 'cb.' + __name__
-
-
-#===============================================================================
-# 
-# IMAGE MANIPULATION
-#
-#===============================================================================
-
-def shift_image(image, offset_u, offset_v):
-    """Shift an image by an offset"""
-    image = np.roll(image, -offset_u, 1)
-    image = np.roll(image, -offset_v, 0)
-
-    if offset_u != 0:    
-        if offset_u < 0:
-            image[:,:-offset_u] = 0
-        else:
-            image[:,-offset_u:] = 0
-    if offset_v != 0:
-        if offset_v < 0:
-            image[:-offset_v,:] = 0
-        else:
-            image[-offset_v:,:] = 0
-    
-    return image
 
 
 #===============================================================================
@@ -90,9 +66,153 @@ def compute_ra_dec_limits(obs):
     return ra_min, ra_max, dec_min, dec_max
 
 def compute_sun_saturn_distance(obs):
-    """Compute the distance from the Sun to Saturn in AU"""
+    """Compute the distance from the Sun to Saturn in AU."""
     target_sun_path = oops.Path.as_waypoint("SATURN").wrt('SUN')
     sun_event = target_sun_path.event_at_time(obs.midtime)
     solar_range = sun_event.pos.norm().vals / solar.AU
 
     return solar_range
+
+#===============================================================================
+# 
+#===============================================================================
+
+class InventoryBody(object):
+    pass
+
+def obs_inventory(obs, bodies):
+    """Return the body names that appear unobscured inside the FOV.
+
+    Input:
+        bodies      a list of the names of the body objects to be included
+                    in the inventory.
+        expand      an optional angle in radians by which to extend the
+                    limits of the field of view. This can be used to
+                    accommodate pointing uncertainties.
+
+    Return:         list, array, or (list,array)
+
+    Restrictions: All inventory calculations are performed at the
+    observation midtime and all bodies are assumed to be spherical.
+    """
+
+    body_names = [oops.Body.as_body_name(body) for body in bodies]
+    bodies  = [oops.Body.as_body(body) for body in bodies]
+    nbodies = len(bodies)
+
+    path_ids = [body.path for body in bodies]
+    multipath = oops.path.MultiPath(path_ids)
+
+    obs_event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
+                           obs.path, obs.frame)
+    _, obs_event = multipath.photon_to_event(obs_event)   # insert photon arrivals
+
+    body_uv = obs.fov.uv_from_los(-obs_event.arr).vals
+
+    centers = -obs_event.arr
+    ranges = centers.norm().vals
+    radii = [body.radius for body in bodies]
+    radius_angles = np.arcsin(radii / ranges)
+
+    inner_radii = [body.inner_radius for body in bodies]
+    inner_angles = np.arcsin(inner_radii / ranges)
+
+    # This array equals True for each body falling somewhere inside the FOV
+    falls_inside = np.empty(nbodies, dtype='bool')
+    for i in range(nbodies):
+        falls_inside[i] = obs.fov.sphere_falls_inside(centers[i], radii[i])
+
+    # This array equals True for each body completely hidden by another
+    is_hidden = np.zeros(nbodies, dtype='bool')
+    for i in range(nbodies):
+      if not falls_inside[i]: continue
+
+      for j in range(nbodies):
+        if not falls_inside[j]: continue
+
+        if ranges[i] < ranges[j]: continue
+        if radius_angles[i] > inner_angles[j]: continue
+
+        sep = centers[i].sep(centers[j])
+        if sep < inner_angles[j] - radius_angles[i]:
+            is_hidden[i] = True
+
+    flags = falls_inside & ~is_hidden
+
+    body_list = []
+    for i in range(nbodies):
+        if flags[i]:
+            body = InventoryBody()
+            body.body_name = body_names[i]
+            body.center_uv = body_uv[i]
+            body.center = centers[i]
+            body.range = ranges[i]
+            body.outer_radius = radii[i]
+            body.inner_radius = inner_radii[i]
+            u_scale = obs.fov.uv_scale.vals[0]
+            v_scale = obs.fov.uv_scale.vals[1]
+            u = body.center_uv[0]
+            v = body.center_uv[1]
+            body.u_min = np.clip(np.floor(u-radius_angles[i]/u_scale), 0,
+                                 obs.data.shape[1]-1)
+            body.u_max = np.clip(np.ceil(u+radius_angles[i]/u_scale), 0,
+                                 obs.data.shape[1]-1)
+            body.v_min = np.clip(np.floor(v-radius_angles[i]/v_scale), 0,
+                                 obs.data.shape[0]-1)
+            body.v_max = np.clip(np.ceil(v+radius_angles[i]/v_scale), 0,
+                                 obs.data.shape[0]-1)
+            body_list.append(body)
+
+    return body_list
+
+#===============================================================================
+# 
+#===============================================================================
+
+def mask_to_array(mask, shape):
+    if np.shape(mask) == shape:
+        return mask
+    
+    new_mask = np.empty(shape)
+    new_mask[:,:] = mask
+    return new_mask
+
+def XXcreate_model_one_body(obs, body_name, lambert=False,
+                          u_min=None, u_max=None, v_min=None, v_max=None):
+    logger = logging.getLogger(LOGGING_NAME+'.create_model_one_body')
+
+    if u_min is None:
+        u_min = 0
+    if u_max is None:
+        u_max = obs.data.shape[1]-1
+    if v_min is None:
+        v_min = 0
+    if v_max is None:
+        v_max = obs.data.shape[0]-1
+           
+    logger.debug('"%s" range U %d to %d V %d to %d',
+                 body_name, u_min, u_max, v_min, v_max)
+    
+    # Create a Meshgrid that only covers the extent of the body
+    restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                           origin=(u_min+.5, v_min+.5),
+                                           limit =(u_max+.5, v_max+.5),
+                                           swap  =True)
+
+    restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
+
+    restr_body_mask = restr_bp.where_intercepted(body_name).vals
+    restr_body_mask = mask_to_array(restr_body_mask, restr_bp.shape)
+
+    if lambert:
+        restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
+        restr_model[np.logical_not(restr_body_mask)] = 0.
+    else:
+        restr_model = restr_body_mask.astype('float')
+
+    # Take the full-resolution object and put it back in the right place in a
+    # full-size image
+    model = np.zeros(obs.data.shape)
+    model[v_min:v_max+1,u_min:u_max+1] = restr_model
+        
+    return model

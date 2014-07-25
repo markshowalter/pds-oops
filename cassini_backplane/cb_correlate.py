@@ -10,16 +10,26 @@ LOGGING_NAME = 'cb.' + __name__
 
 def correlate2d(image, model, normalize=False, retile=False):
     """Correlate the image with the model; normalization to [-1,1] is optional.
-    
-    If retile is True, the resulting correlation matrix is shifted by 1/2 along
-    each dimension so that (0,0) is now in the center.
+
+    Inputs:
+        image              The image.
+        model              The model to correlation against image.
+        normalize          If True, normalize the correlation to 1.
+        retile             If True, the resulting correlation matrix is
+                           shifted by 1/2 along each dimension so that
+                           (0,0) is now in the center.
+                       
+    Returns:
+        The 2-D correlation matrix.
     """
     image_fft = fftpack.fft2(image)
     model_fft = fftpack.fft2(model)
     corr = np.real(fftpack.ifft2(image_fft * np.conj(model_fft)))
 
     if normalize:
-        corr /= np.sqrt(np.sum(image**2) * np.sum(model**2))
+        norm_amt = np.sqrt(np.sum(image**2) * np.sum(model**2))
+        if norm_amt != 0:
+            corr /= norm_amt 
     
     if retile:
         y = corr.shape[0] // 2
@@ -33,55 +43,108 @@ def correlate2d(image, model, normalize=False, retile=False):
     
     return corr
 
-def find_correlated_offset(image, model, search_size=30):
-    """Find the offset that best aligns an image and a model.
-    
-    search_size is the number of pixels from an offset of zero to search.
-    If search_size is a single number, the same search size is used in
-    each dimension. Otherwise it is (search_size_u, search_size_v).
-    
-    Returns offset_u, offset_v, peak value
-    """
-    logger = logging.getLogger(LOGGING_NAME+'.star_list_for_obs')
+def find_correlated_offset(corr, search_size_min=0, search_size_max=30):
+    """Find the offset that best aligns an image and a model given the correlation.
 
-    image = image.astype('float')
-    corr = correlate2d(image, model, retile=True)
-
-    if np.shape(search_size) == ():
-        search_size_u = search_size
-        search_size_v = search_size
-    else:
-        search_size_u, search_size_v = search_size
+    Inputs:
+        corr               A 2-D correlation matrix.
+        search_size_min    The number of pixels from an offset of zero to
+        search_size_max    search. If either is a single number, the same search
+                           size is used in each dimension. Otherwise it is
+                           (search_size_u, search_size_v).
+    Returns:
+        offset_u, offset_v, peak_value
         
-    slice = corr[corr.shape[0]//2-search_size_v:
-                 corr.shape[1]//2+search_size_v+1,
-                 corr.shape[0]//2-search_size_u:
-                 corr.shape[1]//2+search_size_u+1]
-    peak = np.where(slice == slice.max())
-    offset_v = peak[0]-search_size_v
-    offset_u = peak[1]-search_size_u
+        offset_u           The offset in the U direction.
+        offset_v           The offset in the V direction.
+        peak_value         The correlation value at the peak.
+    """
+    logger = logging.getLogger(LOGGING_NAME+'.find_correlated_offset')
+
+    if np.shape(search_size_min) == ():
+        search_size_min_u = search_size_min
+        search_size_min_v = search_size_min
+    else:
+        search_size_min_u, search_size_min_v = search_size_min
+
+    if np.shape(search_size_max) == ():
+        search_size_max_u = search_size_max
+        search_size_max_v = search_size_max
+    else:
+        search_size_max_u, search_size_max_v = search_size_max
+        
+    assert 0 <= search_size_min_u <= search_size_max_u
+    assert 0 <= search_size_min_v <= search_size_max_v
+    assert 0 <= search_size_max_u <= corr.shape[1]//2 
+    assert 0 <= search_size_max_v <= corr.shape[0]//2 
+
+    slice = corr[corr.shape[0]//2-search_size_max_v:
+                 corr.shape[0]//2+search_size_max_v+1,
+                 corr.shape[1]//2-search_size_max_u:
+                 corr.shape[1]//2+search_size_max_u+1]
+
+    if search_size_min_u != 0 and search_size_min_v != 0:
+        slice[slice.shape[0]//2-search_size_min_v+1:
+              slice.shape[0]//2+search_size_min_v,
+              slice.shape[1]//2-search_size_min_u+1:
+              slice.shape[1]//2+search_size_min_u] = -1.1
     
-    logger.debug('Offset U,V %d,%d PEAK %f', offset_u, offset_v, slice[peak])
-    print 'OFFSET', offset_u, offset_v
+    peak = np.where(slice == slice.max())
+    
+    if len(peak[0]) != 1:
+        logger.debug('Search U %d to %d V %d to %d NO PEAK FOUND', 
+                     search_size_min_u, search_size_max_u,
+                     search_size_min_v, search_size_max_v)
+        return None, None, None
+    
+    peak_v = peak[0][0]
+    peak_u = peak[1][0]
+    offset_v = peak_v-search_size_max_v
+    offset_u = peak_u-search_size_max_u
+    
+    logger.debug('Search U %d to %d V %d to %d Offset U,V %d,%d PEAK %f', 
+                 search_size_min_u, search_size_max_u,
+                 search_size_min_v, search_size_max_v,
+                 offset_u, offset_v,
+                 slice[peak_v,peak_u])
 
-    #corrpsf = GaussianPSF(sigma=1.)
-    #
-    #print peak
-    #ret = corrpsf.find_position(slice, (11,11), peak, search_limit=(4, 4),
-    #                  bkgnd_degree=None, tolerance=1e-20)
-    #if ret is not None:
-    #    print ret[0:2]
+    if False:
+        plt.jet()
+        plt.imshow(slice)
+        plt.contour(slice)
+        plt.plot((search_size_max_u,search_size_max_u),(0,2*search_size_max_v),'k')
+        plt.plot((0,2*search_size_max_u),(search_size_max_v,search_size_max_v),'k')
+        plt.plot(peak[1], peak[0], 'ko')
+        plt.xticks(range(0,2*search_size_max_u+1,2), 
+                   [str(x) for x in range(-search_size_max_u,search_size_max_u+1,2)])
+        plt.yticks(range(0,2*search_size_max_v+1,2), 
+                   [str(y) for y in range(-search_size_max_v,search_size_max_v+1,2)])
+        plt.xlabel('U')
+        plt.ylabel('V')
+        plt.show()
 
-#    plt.jet()
-#    plt.imshow(slice)
-#    plt.contour(slice)
-#    plt.plot((search_size_u,search_size_u),(0,2*search_size_v),'k')
-#    plt.plot((0,2*search_size_u),(search_size_v,search_size_v),'k')
-#    plt.plot(peak[1], peak[0], 'ko')
-#    plt.xticks(range(0,2*search_size_u+1,10), 
-#               [str(x) for x in range(-search_size_v,search_size_v+1,10)])
-#    plt.yticks(range(0,2*search_size_v+1,10), 
-#               [str(y) for y in range(search_size_u,-search_size_u-1,-10)])
-#    plt.show()
+    return offset_u, offset_v, slice[peak_v,peak_u]
 
-    return offset_u, offset_v, slice[peak]
+def find_correlation_and_offset(image, model, search_size_min=0,
+                                search_size_max=30):
+    """Find the offset that best aligns an image and a model.
+
+    Inputs:
+        image              The image.
+        model              The model to correlation against image.
+        search_size_min    The number of pixels from an offset of zero to
+        search_size_max    search. If either is a single number, the same search
+                           size is used in each dimension. Otherwise it is
+                           (search_size_u, search_size_v).
+
+    Returns:
+        offset_u, offset_v, peak_value
+        
+        offset_u           The offset in the U direction.
+        offset_v           The offset in the V direction.
+        peak_value         The correlation value at the peak.    
+    """
+    image = image.astype('float')
+    corr = correlate2d(image, model, normalize=True, retile=True)
+    
+    return find_correlated_offset(corr, search_size_min, search_size_max)

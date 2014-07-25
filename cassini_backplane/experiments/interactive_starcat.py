@@ -14,13 +14,10 @@ import cspice
 from polymath import *
 from imgdisp import *
 import Tkinter as tk
-from scipy.ndimage.filters import maximum_filter, gaussian_filter, median_filter
 from psfmodel.gaussian import GaussianPSF
 from cb_correlate import *
 from cb_stars import *
 
-from starcat import UCAC4StarCatalog
-star_catalog = UCAC4StarCatalog('t:/external/ucac4')
 #from starcat import SpiceStarCatalog
 #star_catalog = SpiceStarCatalog('hipparcos')
 
@@ -85,7 +82,7 @@ best_offset_v = None
 for star_offset_u in [0]:#np.arange(-1., 1.1, 0.25):
     for star_offset_v in [0]:#np.arange(-1., 1.1, 0.25):
 
-        star_list = star_list_for_obs(star_catalog, obs, num_stars=30)
+        star_list = star_list_for_obs(obs, num_stars=30)
         assert len(star_list) > 0
         
         model = star_create_model(obs, star_list,

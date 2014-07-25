@@ -28,7 +28,7 @@ LOGGING_NAME = 'cb.' + __name__
 #===============================================================================
 
 def interpolate_and_convolve_2(x1, y1, x2, y2):
-    """Convolve two tabulations and return the intersected interval"""
+    """Convolve two tabulations and return the intersected interval."""
     min_x = max(np.min(x1), np.min(x2))
     max_x = min(np.max(x1), np.max(x2))
     new_x = np.arange(min_x, max_x+0.1)
@@ -39,7 +39,7 @@ def interpolate_and_convolve_2(x1, y1, x2, y2):
     return new_x, new_y1*new_y2
 
 def interpolate_and_convolve_3(x1, y1, x2, y2, x3, y3):
-    """Convolve three tabulations and return the intersected interval"""
+    """Convolve three tabulations and return the intersected interval."""
     min_x = max(np.min(x1), np.min(x2), np.min(x3))
     max_x = min(np.max(x1), np.max(x2), np.max(x3))
     new_x = np.arange(min_x, max_x+0.1)
@@ -110,7 +110,7 @@ def _read_cisscal_calib_file(filename):
 CISSCAL_FILTER_TRANSMISSION_CACHE = {}
 
 def cisscal_filter_transmission(obs):
-    """Return the (wavelengths, transmission) for the joint filters"""
+    """Return the (wavelengths, transmission) for the joint filters."""
     key = (obs.detector, obs.filter1, obs.filter2)
     if key not in CISSCAL_FILTER_TRANSMISSION_CACHE:
         filter_filename = 'iss' + obs.detector.lower()[:2] + obs.filter1.lower()
@@ -129,7 +129,7 @@ def cisscal_filter_transmission(obs):
 CISSCAL_QE_CORRECTION_CACHE = {}
 
 def cisscal_qe_correction(obs):
-    """Return the (wavelengths, vals) for QE correction"""
+    """Return the (wavelengths, vals) for QE correction."""
     key = obs.detector
     if key not in CISSCAL_QE_CORRECTION_CACHE:    
         qecorr_filename = os.path.join(CISSCAL_CALIB_PATH, 'correction',
@@ -146,7 +146,7 @@ def cisscal_qe_correction(obs):
 CISSCAL_SOLAR_FLUX_CACHE = None
 
 def cisscal_solar_flux():
-    """Return the (wavelengths, flux) for the solar flux in phot/cm^2/s/nm at 1 AU"""
+    """Return the (wavelengths, flux) for the solar flux in phot/cm^2/s/nm at 1 AU."""
     global CISSCAL_SOLAR_FLUX_CACHE
     
     if CISSCAL_SOLAR_FLUX_CACHE is None:    
@@ -304,11 +304,11 @@ def calibrate_iof_image_as_dn(obs):
     """
     logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_dn')
 
-    key = (obs.detector, obs.filter1, obs.filter2)
+    key = (obs.detector, obs.filter1, obs.filter2, obs.texp)
     if key in IOF_DN_CONVERSION_FACTOR_CACHE:
         factor = IOF_DN_CONVERSION_FACTOR_CACHE[key]
-        logger.debug('Calibration for %s %s %s cached; factor = %f',
-                     obs.detector, obs.filter1, obs.filter2, factor)
+        logger.debug('Calibration for %s %s %s %.2f cached; factor = %f',
+                     obs.detector, obs.filter1, obs.filter2, obs.texp, factor)
         return obs.data * factor
 
     logger.debug('Calibrating %s %s %s', 
@@ -357,7 +357,7 @@ def calibrate_iof_image_as_dn(obs):
 CASSINI_FILTER_TRANSMISSION = {} 
 
 def cassini_filter_transmission(detector, filter):
-    """Return the (wavelengths, transmission) for the given Cassini filter"""
+    """Return the (wavelengths, transmission) for the given Cassini filter."""
 
     logger = logging.getLogger(LOGGING_NAME+
                                '.cassini_filter_transmission')
@@ -423,7 +423,7 @@ def cassini_filter_transmission(detector, filter):
 
 
 def plot_cassini_filter_transmission():
-    """Plot the Cassini filter transmission functions"""
+    """Plot the Cassini filter transmission functions."""
     
     color_info = {
         'CL1': ('#000000', '-'),
@@ -522,7 +522,7 @@ def _compute_planck_curve(wavelength, T):
 
 
 def plot_planck_vs_solar_flux():
-    """Plot a scale Planck curve vs. the solar flux"""
+    """Plot a scale Planck curve vs. the solar flux."""
     
     solarflux_wl, solarflux_flux = cisscal_solar_flux()
 
@@ -546,9 +546,20 @@ def plot_planck_vs_solar_flux():
 
     scale_factor = np.mean(solarflux_v) / np.mean(planck_v)
         
-    plt.plot(wl, solarflux_v, '-', color='red', lw=1, label='Sun w/V')
-    plt.plot(wl, planck_v*scale_factor, '-', color='blue', lw=1,
+    plt.plot(wl, solarflux_v, '--', color='red', lw=1, label='Sun w/V')
+    plt.plot(wl, planck_v*scale_factor, '--', color='blue', lw=1,
              label='Planck w/V')
+
+    wl, solarflux_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
+                                                 solarflux_wl, solarflux_flux)
+    wl, planck_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
+                                              solarflux_wl, planck_flux)
+
+    scale_factor = np.mean(solarflux_b) / np.mean(planck_b)
+        
+    plt.plot(wl, solarflux_b, ':', color='red', lw=1, label='Sun w/B')
+    plt.plot(wl, planck_b*scale_factor, ':', color='blue', lw=1,
+             label='Planck w/B')
 
     plt.legend()
     plt.title('Planck vs. Solar Flux')
@@ -576,9 +587,29 @@ def _v_magnitude_to_photon_flux(v, detector):
     
     return flux
 
+def _b_magnitude_to_photon_flux(b, detector):
+    """Return the V-band photon flux for a star with the given Johnson B magnitude.
+    
+    detector is the Cassini camera ('NAC' or 'WAC').
+    
+    Returned value is in photons / cm^2 / s
+    """
+    # http://www.astro.umd.edu/~ssm/ASTR620/mags.html#flux
+    # From Bessel, M. S. 2005, ARA&A, 43, 293 
+    # B band flux at m = 0: 4260
+    # B band dlambda/lambda = 0.22
+
+    # Jansky = 1.51e3 photons / cm^2 / s / (dlambda/lambda)
+    jy = 4260. * 10**(-0.4*b)
+    
+    # flux in photons / cm^2 / s
+    flux = jy * 1.51e3 * 0.22
+    
+    return flux
+
 
 def _compute_stellar_spectrum(obs, star):
-    """Compute the stellar spectrum for a given star
+    """Compute the stellar spectrum for a given star.
     
     Returned value is in photons / cm^2 / s
     """
@@ -590,23 +621,35 @@ def _compute_stellar_spectrum(obs, star):
     # going to scale it later
     planck_wl = np.arange(100., 1600.)
     planck = _compute_planck_curve(planck_wl, star.temperature)
+    
     wl_new, planck_v = interpolate_and_convolve_2(JOHNSON_V_WL, JOHNSON_V,
                                                   planck_wl, planck)
-
     # Total photons seen through V filter 
     planck_v_sum = np.sum(planck_v)
-
     # Predicted photons seen through V - photons / cm^2 / s
     predicted_v = _v_magnitude_to_photon_flux(star.johnson_mag_v,
                                               obs.detector)
-     
 #    logger.debug('Star %9d Temp %9.2f Predicted V-band total flux %e', 
 #                 star.unique_number, star.temperature, predicted_v)
-    
-    scale_factor = predicted_v / planck_v_sum
+    scale_factor_v = predicted_v / planck_v_sum
+
+    wl_new, planck_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
+                                                  planck_wl, planck)
+    # Total photons seen through B filter 
+    planck_b_sum = np.sum(planck_b)
+    # Predicted photons seen through V - photons / cm^2 / s
+    predicted_b = _b_magnitude_to_photon_flux(star.johnson_mag_b,
+                                              obs.detector)
+#    logger.debug('Star %9d Temp %9.2f Predicted V-band total flux %e', 
+#                 star.unique_number, star.temperature, predicted_v)
+    scale_factor_b = predicted_b / planck_b_sum
+
+    logger.debug('Star %9d Temp %9.2f Scale V %e Scale B %e', 
+                 star.unique_number, star.temperature, scale_factor_v,
+                 scale_factor_b)
 
     # Return is in photons / cm^2 / s
-    return planck_wl, planck*scale_factor
+    return planck_wl, planck*scale_factor_v
 
 
 def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
@@ -672,15 +715,9 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     return dn
 
 
-DN_FROM_STAR_CACHE = {}
-
 def compute_dn_from_star(obs, star):
-    key = (obs.detector, obs.filter1, obs.filter2, obs.texp,
-           obs.data.shape, obs.gain_mode, star.temperature)
-    
-    if key not in DN_FROM_STAR_CACHE:
-        spectrum_wl, spectrum = _compute_stellar_spectrum(obs, star)
-        dn = _compute_dn_from_spectrum(obs, spectrum_wl, spectrum)
-        DN_FROM_STAR_CACHE[key] = dn
+    """Compute the theoretical integrated DN for a star."""
+    spectrum_wl, spectrum = _compute_stellar_spectrum(obs, star)
+    dn = _compute_dn_from_spectrum(obs, spectrum_wl, spectrum)
 
-    return DN_FROM_STAR_CACHE[key]
+    return dn
