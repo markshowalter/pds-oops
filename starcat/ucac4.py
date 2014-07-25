@@ -76,6 +76,12 @@ class UCAC4Star(Star):
 
     def __str__(self):
         ret = Star.__str__(self)
+        if self.temperature is None:
+            ret += 'TEMP NONE'
+        else:
+            ret += 'TEMP %5d' % (self.temperature)
+        ret += ' | SCLASS %2s' % (self.spectral_class)
+        ret += '\n'
         return ret
     
 

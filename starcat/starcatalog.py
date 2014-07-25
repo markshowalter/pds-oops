@@ -225,7 +225,7 @@ class Star(object):
         hh = int(ra_deg)
         mm = int((ra_deg-hh)*60)
         ss = (ra_deg-hh-mm/60.)*3600
-        ret += '   RA %02dh%02dm%05.3fs' % (hh,mm,ss)
+        ret += ' | RA %02dh%02dm%05.3fs' % (hh,mm,ss)
 
         if self.ra_sigma is not None:
             ret += ' +/- %.4fs' % (self.ra_sigma*DPR*3600)
@@ -238,7 +238,7 @@ class Star(object):
         dd = int(dec_deg)
         mm = int((dec_deg-dd)*60)
         ss = (dec_deg-dd-mm/60.)*3600
-        ret += ' DEC %s%03dd%02dm%05.3fs' % (neg,dd,mm,ss)
+        ret += ' | DEC %s%03dd%02dm%05.3fs' % (neg,dd,mm,ss)
         
         if self.dec_sigma is not None:
             ret += ' +/- %.4fs' % (self.dec_sigma*DPR*3600)
@@ -251,12 +251,12 @@ class Star(object):
                 ret += '+/- %6.3f ' % (self.vmag_sigma)
          
         if self.pm_ra is not None:
-            ret += 'PM RA %.3f mas/yr ' % (self.pm_ra/MAS_TO_RAD/YEAR_TO_SEC)
+            ret += ' | PM RA %.3f mas/yr ' % (self.pm_ra/MAS_TO_RAD/YEAR_TO_SEC)
             if self.pm_ra_sigma:
                 ret += '+/- %.3f ' % (self.pm_ra_sigma/MAS_TO_RAD/YEAR_TO_SEC)
 
         if self.pm_dec is not None:
-            ret += 'PM DEC %.3f mas/yr ' % (self.pm_dec/MAS_TO_RAD/YEAR_TO_SEC)
+            ret += ' | PM DEC %.3f mas/yr ' % (self.pm_dec/MAS_TO_RAD/YEAR_TO_SEC)
             if self.pm_dec_sigma:
                 ret += '+/- %.3f ' % (self.pm_dec_sigma/MAS_TO_RAD/YEAR_TO_SEC)
         
