@@ -17,7 +17,7 @@ class ImageDisp(Frame):
     various events."""
     
     def __init__(self, imgdata_list, overlay_list=None, color_column_list=None,
-                 parent=None, canvas_size=None, flip_y=False,
+                 parent=None, canvas_size=None, flip_y=False, origin=(0,0),
                  allow_enlarge=False, enlarge_limit=5,
                  one_zoom=True, auto_update=False,
                  whitepoint_ignore_frac=1.00):
@@ -91,6 +91,7 @@ class ImageDisp(Frame):
         self.canvas_size_x = imwidth
         self.canvas_size_y = imheight
         self.flip_y = flip_y
+        self.origin = origin
         self.whitepoint_ignore_frac = whitepoint_ignore_frac
                 
         ### Construct the canvases
@@ -736,7 +737,8 @@ class ImageDisp(Frame):
             return
         if self.flip_y:
             y = self.imgdata_list[img_num].shape[0] - y - 1
-        self.label_xy.config(text='Mouse coord: %.2f, %.2f' % (x, y))
+        self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
+                             (x-self.origin[0], y-self.origin[1]))
         val = self.imgdata_list[img_num][y,x]
         if val > 10000:
             self.label_val.config(text='Mouse val: %e' % val)
@@ -759,7 +761,8 @@ class ImageDisp(Frame):
         if self.flip_y:
             y = self.imgdata_list[img_num].shape[0] - y -1
         # We can only bind one event handler, so this one has to do both parts
-        self.label_xy.config(text='Mouse coord: %.2f, %.2f' % (x, y))
+        self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
+                             (x-self.origin[0], y-self.origin[1]))
         val = self.imgdata_list[img_num][y,x]
         if val > 10000:
             self.label_val.config(text='Mouse val: %e' % val)
