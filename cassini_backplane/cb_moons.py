@@ -219,21 +219,27 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True):
     return model
 
 def moons_create_model(obs, body_name, lambert=True,
-                       u_min=0, u_max=1023, v_min=0, v_max=1023,
+                       u_min=0, u_max=10000, v_min=0, v_max=10000,
+                       extend_fov_u=0, extend_fov_v=0,
                        force_spherical=True, use_cartographic=True):
     logger = logging.getLogger(LOGGING_NAME+'.moons_create_model')
 
     body_name = body_name.upper()
-    
-    u_min = np.clip(u_min, 0, obs.data.shape[1]-1)
-    u_max = np.clip(u_max, 0, obs.data.shape[1]-1)
-    v_min = np.clip(v_min, 0, obs.data.shape[0]-1)
-    v_max = np.clip(v_max, 0, obs.data.shape[0]-1)
+
+    u_min = np.clip(u_min, -extend_fov_u, obs.data.shape[1]-extend_fov_u-1)
+    u_max = np.clip(u_max, -extend_fov_u, obs.data.shape[1]-extend_fov_u-1)
+    v_min = np.clip(v_min, -extend_fov_v, obs.data.shape[0]-extend_fov_v-1)
+    v_max = np.clip(v_max, -extend_fov_v, obs.data.shape[0]-extend_fov_v-1)
            
-    logger.debug('"%s" range U %d to %d V %d to %d',
-                 body_name, u_min, u_max, v_min, v_max)
+    logger.debug('"%s" image size %d %d extend %d %d subrect U %d to %d '
+                 'V %d to %d',
+                 body_name, obs.data.shape[1], obs.data.shape[0],
+                 extend_fov_u, extend_fov_v, u_min, u_max, v_min, v_max)
     
     # Create a Meshgrid that only covers the extent of the body
+    # We're making the assumption here that calling where_intercepted
+    # on the entire image is more expensive than creating a new smaller
+    # Blackplane.
     restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
                                            origin=(u_min+.5, v_min+.5),
                                            limit =(u_max+.5, v_max+.5),
@@ -257,7 +263,9 @@ def moons_create_model(obs, body_name, lambert=True,
 
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
-    model = np.zeros(obs.data.shape)
-    model[v_min:v_max+1,u_min:u_max+1] = restr_model
+    model = np.zeros((obs.data.shape[0]+extend_fov_v*2,
+                      obs.data.shape[1]+extend_fov_u*2))
+    model[v_min+extend_fov_v:v_max+extend_fov_v+1,
+          u_min+extend_fov_u:u_max+extend_fov_u+1] = restr_model
         
     return model

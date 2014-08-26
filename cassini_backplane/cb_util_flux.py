@@ -658,7 +658,7 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     The spectrum is in photons / cm^2 / s / nm
     """
 
-    logger = logging.getLogger(LOGGING_NAME+'.compute_dn_from_spectrum')
+    logger = logging.getLogger(LOGGING_NAME+'._compute_dn_from_spectrum')
 
     # Read in filter transmission
     systrans_wl, systrans_xmit = cisscal_filter_transmission(obs)

@@ -14,6 +14,8 @@ def correlate2d(image, model, normalize=False, retile=False):
     Inputs:
         image              The image.
         model              The model to correlation against image.
+                           If model is bigger than image, pad image with zeroes
+                           and center it.
         normalize          If True, normalize the correlation to 1.
         retile             If True, the resulting correlation matrix is
                            shifted by 1/2 along each dimension so that
@@ -131,7 +133,9 @@ def find_correlation_and_offset(image, model, search_size_min=0,
 
     Inputs:
         image              The image.
-        model              The model to correlation against image.
+        model              The model to correlate against image.
+                           If model is bigger than image, pad image with zeroes
+                           and center it.
         search_size_min    The number of pixels from an offset of zero to
         search_size_max    search. If either is a single number, the same search
                            size is used in each dimension. Otherwise it is
