@@ -20,15 +20,37 @@ OBJ_TYPE_SUPPL = 7
 OBJ_TYPE_HPM_NOT_MATCHED = 8
 OBJ_TYPE_HPM_DISCREPANT = 9
 
-CATMATCH_TYCHO = 0
-CATMATCH_AC2000 = 1
-CATMATCH_AGK2_BONN = 2
-CATMATCH_AKG2_HAMBURG = 3
-CATMATCH_ZONE_ASTROGRAPH = 14
-CATMATCH_BLACK_BIRCH = 5
-CATMATCH_LICK_ASTROGRAPH = 6
-CATMATCH_NPM_LICK = 7
-CATMATCH_SPM_YSJ1 = 8
+OBJ_TYPE_STRINGS = ['CLEAN', 'NEAR_OVEREXPOSED', 'STREAK', 'HPM', 'EXT_HPM',
+                    'POOR_PM', 'SUBST_ASTROMETRY', 'SUPPL', 'HPM_NOT_MATCHED',
+                    'HPM_DISCREPANT']
+
+#CATMATCH_TYCHO = 0
+#CATMATCH_AC2000 = 1
+#CATMATCH_AGK2_BONN = 2
+#CATMATCH_AGK2_HAMBURG = 3
+#CATMATCH_ZONE_ASTROGRAPH = 4
+#CATMATCH_BLACK_BIRCH = 5
+#CATMATCH_LICK_ASTROGRAPH = 6
+#CATMATCH_NPM_LICK = 7
+#CATMATCH_SPM_YSJ1 = 8
+
+DOUBLE_STAR_FLAG_SINGLE = 0
+DOUBLE_STAR_FLAG_COMP1 = 1
+DOUBLE_STAR_FLAG_COMP2 = 2
+DOUBLE_STAR_FLAG_BLENDED = 3
+
+DOUBLE_STAR_FLAG_STRINGS = ['SINGLE', 'COMP1', 'COMP2', 'BLENDED']
+
+DOUBLE_STAR_TYPE_NONE = 0
+DOUBLE_STAR_TYPE_1PEAK = 1
+DOUBLE_STAR_TYPE_2PEAK = 2
+DOUBLE_STAR_TYPE_SECONDARY_PEAK = 3
+DOUBLE_STAR_TYPE_1PEAK_FIT = 4
+DOUBLE_STAR_TYPE_2PEAK_FIT = 5
+DOUBLE_STAR_TYPE_SECONDARY_PEAK_FIT = 6
+
+DOUBLE_STAR_TYPE_STRINGS = ['NONE', '1PEAK', '2PEAK', 'SECONDARY_PEAK',
+                            '1PEAK_FIT', '2PEAK_FIT', 'SECONDARY_PEAK_FIT']
 
 class UCAC4Star(Star):
     """A holder for star attributes.
@@ -47,10 +69,8 @@ class UCAC4Star(Star):
         self.galaxy_match = None
         self.extended_source = None
         self.pm_rac = None
-        self.pm_ra = None
         self.pm_rac_sigma = None
         self.rac_sigma = None
-        self.ra_sigma = None
         self.num_img_total = None
         self.num_img_used = None
         self.num_cat_pm = None
@@ -76,13 +96,83 @@ class UCAC4Star(Star):
 
     def __str__(self):
         ret = Star.__str__(self)
+
+        ret += 'OBJTYPE ' + OBJ_TYPE_STRINGS[self.obj_type] + ' | '
+        if self.vmag_model is None:
+            ret += 'APER VMAG NONE'
+        else:
+            ret += 'APER VMAG %6.3f' % self.vmag_model
+        ret += ' | '
+        
         if self.temperature is None:
             ret += 'TEMP NONE'
         else:
             ret += 'TEMP %5d' % (self.temperature)
         ret += ' | SCLASS %2s' % (self.spectral_class)
         ret += '\n'
+
+        ret += 'DBL STAR FLAG '
+        ret += DOUBLE_STAR_FLAG_STRINGS[self.double_star_flag]
+        ret += ' TYPE '
+        ret += DOUBLE_STAR_TYPE_STRINGS[self.double_star_type]
+        ret += ' | GALAXY '
+        if self.galaxy_match:
+            ret += 'YES'
+        else:
+            ret += 'NO'
+        ret += ' | EXT SOURCE '
+        if self.extended_source:
+            ret += 'YES'
+        else:
+            ret += 'NO'
+        ret += '\n'
+        
+        ret += 'APASS '
+        if self.apass_mag_b is None:
+            ret += 'B NONE '
+        else:
+            ret += 'B %6.3f +/- %6.3f ' % (self.apass_mag_b,
+                                           self.apass_mag_b_sigma)
+        if self.apass_mag_v is None:
+            ret += 'V NONE '
+        else:
+            ret += 'V %6.3f +/- %6.3f ' % (self.apass_mag_v,
+                                           self.apass_mag_v_sigma)
+        if self.apass_mag_g is None:
+            ret += 'G NONE '
+        else:
+            ret += 'G %6.3f +/- %6.3f ' % (self.apass_mag_g,
+                                           self.apass_mag_g_sigma)
+        if self.apass_mag_r is None:
+            ret += 'R NONE '
+        else:
+            ret += 'R %6.3f +/- %6.3f ' % (self.apass_mag_r,
+                                           self.apass_mag_r_sigma)
+        if self.apass_mag_i is None:
+            ret += 'I NONE'
+        else:
+            ret += 'I %6.3f +/- %6.3f' % (self.apass_mag_i,
+                                           self.apass_mag_i_sigma)
+        ret += '\n'
+        
+        if self.johnson_mag_b is None or self.johnson_mag_v is None:
+            ret += 'JOHNSON B NONE V NONE'
+        else:
+            ret += 'JOHNSON B %6.3f V %6.3f' % (self.johnson_mag_b,
+                                                self.johnson_mag_v)
+        ret += '\n'
+        
         return ret
+
+#        TODO
+#        self.cat_match = None
+#        self.num_img_total = None
+#        self.num_img_used = None
+#        self.num_cat_pm = None
+#        self.ra_mean_epoch = None
+#        self.dec_mean_epoch = None
+#        self.id_str = None
+#        self.id_str_ucac2 = None
     
 
 #col byte item   fmt unit       explanation                            notes
@@ -304,7 +394,7 @@ class UCAC4StarCatalog(StarCatalog):
                 if star.vmag is None or star.vmag > vmag_max:
                     if self.debug_level > 1:
                         print 'ID', parsed[42], 'SKIPPED MODEL MAG',
-                        print star.vmag_model,
+                        print star.vmag_model
                     continue
             
             ###############
@@ -790,7 +880,7 @@ class UCAC4StarCatalog(StarCatalog):
 #     6 =  ... same, but involving a flagged double star
 #     7 = maybe o.k. smallest sep. match in both directions, no double
 #     8 =  ... same, but involving a flagged double star
-            star.cat_match = [int(x) for x in str(parsed[39])]
+            star.cat_match = [int(x) for x in ('%010d' % parsed[39])]
 
             ###################
             # UCAC4 UNIQUE ID #
@@ -844,6 +934,7 @@ class UCAC4StarCatalog(StarCatalog):
                                     
             if self.debug_level:
                 print 'ID', parsed[42], 'OK!'
+                print star
             yield star            
 
 #############################################################################
