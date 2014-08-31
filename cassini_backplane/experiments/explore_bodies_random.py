@@ -19,7 +19,7 @@ import scipy.ndimage.filters as filt
 from psfmodel.gaussian import GaussianPSF
 from cb_correlate import *
 from cb_stars import *
-from cb_util_filters import *
+from cb_util_image import *
 from cb_offset import *
 import os
 
@@ -68,7 +68,7 @@ def process_random_file(root_path):
         process_random_file(new_dir)
 
 # Star field through filters - stars visible that we think shouldn't be
-#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\1683279174_1683355540\N1683354649_1_CALIB.IMG')
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\1683279174_1683355540\N1683354649_1_CALIB.IMG')
 
 # Star field long exposure - star matching doesn't work
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2051\data\1608970573_1609104344\N1608970573_1_CALIB.IMG')

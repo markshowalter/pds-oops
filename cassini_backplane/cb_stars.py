@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 import numpy.ma as ma
+from polymath import *
 import scipy.ndimage.filters as filt
 
 import oops
@@ -34,6 +35,22 @@ DEFAULT_STAR_CLASS = 'G0'
 # this brightness can actually be seen.
 MIN_DETECTABLE_DN = {'NAC': 20, 'WAC': 150}
 
+def _aberrate_star(obs, star):
+    x = 1e30 * np.cos(star.ra) * np.cos(star.dec)
+    y = 1e30 * np.sin(star.ra) * np.cos(star.dec) 
+    z = 1e30 * np.sin(star.dec)
+    pos = Vector3((x,y,z))
+
+    path = oops.path.LinearPath((pos, Vector3.ZERO), obs.midtime, 'SSB')  
+                      
+    event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
+                  obs.path, obs.frame)
+    _, event = path.photon_to_event(event)
+    abb_ra, abb_dec = event.ra_and_dec(apparent=True)
+
+    star.ra = abb_ra.vals
+    star.dec = abb_dec.vals
+    
 def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
                        mag_min, mag_max, extend_fov_u, extend_fov_v,
                        **kwargs):
@@ -61,6 +78,7 @@ def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
         
     star_list = []
     for star in orig_star_list:
+        _aberrate_star(obs, star)
         star.use_for_model = True
         star.temperature_faked = False
         if star.temperature is None:
@@ -627,14 +645,15 @@ def star_find_offset(obs, ext_data=None, min_stars=3, psf_size=9,
                                              offset_u=offset_u,
                                              offset_v=offset_v)
         logger.debug('Photometry found %d good stars', good_stars)
-        if good_stars < min_stars:
-            logger.debug('Insufficient good stars')
-            offset_u = None
-            if len(new_star_list) == len(star_list):
-                # No point in trying smaller DNs if we already are looking at
-                # all stars
-                break
-            continue
+        if good_stars >= min_stars:
+            break
+        logger.debug('Insufficient good stars')
+        offset_u = None
+        if len(new_star_list) == len(star_list):
+            # No point in trying smaller DNs if we already are looking at
+            # all stars
+            break
+
     if offset_u is None:
         good_stars = 0
         for star in new_star_list:
