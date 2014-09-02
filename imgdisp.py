@@ -293,6 +293,8 @@ class ImageDisp(Frame):
                 overlay_list = [overlay_list]
             new_overlay_list = []
             for overlay in overlay_list:
+                if issubclass(overlay.dtype.type, np.integer):
+                    overlay = overlay.astype('float') / 255.
                 if len(overlay.shape) == 2:
                     new_overlay = np.zeros(overlay.shape + (3,))
                     new_overlay[:,:,0] = overlay
