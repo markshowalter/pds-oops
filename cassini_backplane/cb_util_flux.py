@@ -297,19 +297,23 @@ def calibrate_iof_image_as_flux(obs):
 
 IOF_DN_CONVERSION_FACTOR_CACHE = {}
 
-def calibrate_iof_image_as_dn(obs):
+def calibrate_iof_image_as_dn(obs, data=None):
     """Convert an image currently in I/F to post-LUT raw DN.
     
     The input observation data is in I/F.
     """
     logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_dn')
 
+    if data is None:
+        # Can be overriden if we want to calibrate some other data block
+        data = obs.data
+        
     key = (obs.detector, obs.filter1, obs.filter2, obs.texp)
     if key in IOF_DN_CONVERSION_FACTOR_CACHE:
         factor = IOF_DN_CONVERSION_FACTOR_CACHE[key]
         logger.debug('Calibration for %s %s %s %.2f cached; factor = %f',
                      obs.detector, obs.filter1, obs.filter2, obs.texp, factor)
-        return obs.data * factor
+        return data * factor
 
     logger.debug('Calibrating %s %s %s', 
                  obs.detector, obs.filter1, obs.filter2)
@@ -324,6 +328,8 @@ def calibrate_iof_image_as_dn(obs):
     # 3) dividebyareapixel.pro
     #        SUM_FACTOR = (SAMPLES/1024) * (LINES/1024)
     #        DATA = DATA * SUM_FACTOR / (SOLID_ANGLE * OPTICS_AREA)
+    # Use obs.data not data here because we want the real size of the original
+    # image.
     sum_factor = obs.data.shape[0] / 1024. * obs.data.shape[1] / 1024.
     
     factor = (factor / sum_factor *
@@ -346,7 +352,7 @@ def calibrate_iof_image_as_dn(obs):
 
     logger.debug('Final adjustment factor = %e', factor)
             
-    return obs.data * factor
+    return data * factor
 
 #===============================================================================
 # 

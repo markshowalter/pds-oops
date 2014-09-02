@@ -6,6 +6,8 @@ import solar
 import numpy as np
 from polymath import *
 
+from cb_util_image import *
+
 LOGGING_NAME = 'cb.' + __name__
 
 
@@ -15,36 +17,66 @@ LOGGING_NAME = 'cb.' + __name__
 #
 #===============================================================================
 
-def make_corner_meshgrid(obs, extend_fov_u=0, extend_fov_v=0, padding=0):
+def make_corner_meshgrid(obs, extend_fov=(0,0)):
     mg = oops.Meshgrid.for_fov(obs.fov,
-             origin     =(-extend_fov_u-padding+0.5,-extend_fov_v-padding+0.5),
-             limit      =(obs.data.shape[1]+extend_fov_u+padding-0.5,
-                          obs.data.shape[0]+extend_fov_v+padding-0.5),
-             undersample=(obs.data.shape[1]+extend_fov_u*2+padding*2-1,
-                          obs.data.shape[0]+extend_fov_v*2+padding*2-1),
+             origin     =(-extend_fov[0]+0.5,-extend_fov[1]+0.5),
+             limit      =(obs.data.shape[1]+extend_fov[0]-0.5,
+                          obs.data.shape[0]+extend_fov[1]-0.5),
+             undersample=(obs.data.shape[1]+extend_fov[0]*2-1,
+                          obs.data.shape[0]+extend_fov[1]*2-1),
              swap       =True)
     return mg
 
-def make_oversize_meshgrid(obs, extend_fov_u=0, extend_fov_v=0):
+def make_ext_meshgrid(obs, extend_fov=(0,0)):
     mg = oops.Meshgrid.for_fov(obs.fov,
-              origin=(-extend_fov_u+.5, -extend_fov_v+.5),
-              limit =(obs.data.shape[1]+extend_fov_u-.5,
-                      obs.data.shape[0]+extend_fov_v-.5),
+              origin=(-extend_fov[0]+.5, -extend_fov[1]+.5),
+              limit =(obs.data.shape[1]+extend_fov[0]-.5,
+                      obs.data.shape[0]+extend_fov[1]-.5),
               swap  =True)
     return mg
+
+def set_obs_corner_bp(obs):
+    # The non-extended FOV
+    if not hasattr(obs, 'corner_bp'):
+        obs.corner_meshgrid = make_corner_meshgrid(obs)
+        obs.corner_bp = oops.Backplane(obs, meshgrid=obs.corner_meshgrid)
+
+def set_obs_ext_corner_bp(obs, extend_fov):
+    # The extended FOV
+    if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
+        not hasattr(obs, 'ext_corner_bp')):
+        obs.extend_fov = extend_fov
+        obs.ext_corner_meshgrid = make_corner_meshgrid(obs, extend_fov)
+        obs.ext_corner_bp = oops.Backplane(obs, meshgrid=obs.ext_corner_meshgrid)
+
+def set_obs_bp(obs):
+    # The non-extended FOV
+    if not hasattr(obs, 'bp'):
+        obs.bp = oops.Backplane(obs)
+
+def set_obs_ext_bp(obs, extend_fov):
+    # The extended FOV
+    if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
+        not hasattr(obs, 'ext_bp')):
+        obs.extend_fov = extend_fov
+        obs.ext_meshgrid = make_ext_meshgrid(obs, extend_fov)
+        obs.ext_bp = oops.Backplane(obs, meshgrid=obs.ext_meshgrid)
+
+def set_obs_ext_data(obs, extend_fov):
+    # The extended FOV
+    if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
+        not hasattr(obs, 'ext_data')):
+        obs.extend_fov = extend_fov
+        obs.ext_data = pad_image(obs.data, extend_fov)
         
-def compute_ra_dec_limits(obs, extend_fov_u=0, extend_fov_v=0,
-                          padding=5):
+def compute_ra_dec_limits(obs, extend_fov=(0,0)):
     """Find the RA and DEC limits of an observation.
-    
-    
+        
     Inputs:
         obs            The observation, which isassumed to cover less than
                        half the sky. If either RA or DEC wraps around, the min
                        value will be greater than the max value.
-        extend_fov_u   The amount of padding to add in the U dimension
-        extend_fov_v   The amount of padding to add in the V dimension
-        padding        Extra padding to add on each edge just to be safe
+        extend_fov     The amount of padding to add in the (U,V) dimension
        
     Returns:
         ra_min, ra_max, dec_min, dec_max (radians)
@@ -52,8 +84,7 @@ def compute_ra_dec_limits(obs, extend_fov_u=0, extend_fov_v=0,
     logger = logging.getLogger(LOGGING_NAME+'.ra_dec_limits')
     
     # Create a meshgrid for the four corners of the image
-    corner_meshgrid = make_corner_meshgrid(obs, extend_fov_u, extend_fov_v,
-                                           padding)
+    corner_meshgrid = make_corner_meshgrid(obs, extend_fov)
     
     # Compute the RA and DEC for the corners
     backplane = oops.Backplane(obs, corner_meshgrid)

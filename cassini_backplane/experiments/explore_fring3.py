@@ -39,7 +39,7 @@ def process_image(filename, interactive=False):
 
     print filename, 'DATA SIZE', data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-    offset_u, offset_v, star_list, good_stars = star_find_offset(obs, extend_fov_u=45, extend_fov_v=45)
+    offset_u, offset_v, star_list, good_stars = star_find_offset(obs, extend_fov=(45,45))
 
     if offset_u is None:
         offset_u = 0

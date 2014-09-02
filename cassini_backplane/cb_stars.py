@@ -11,7 +11,7 @@ from psfmodel.gaussian import GaussianPSF
 from imgdisp import draw_circle
 from starcat import (UCAC4StarCatalog,
                      SCLASS_TO_B_MINUS_V, SCLASS_TO_SURFACE_TEMP)
-from cb_config import (STAR_CATALOG_FILENAME, ISS_PSF_SIGMA,
+from cb_config import (STAR_CATALOG_ROOT, ISS_PSF_SIGMA,
                        MAX_POINTING_ERROR, LARGE_BODY_LIST)
 from cb_correlate import *
 from cb_util_image import *
@@ -19,7 +19,7 @@ from cb_util_flux import *
 from cb_util_oops import *
 
 
-STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_FILENAME)
+STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
 #STAR_CATALOG.debug_level = 100
 
 LOGGING_NAME = 'cb.' + __name__
@@ -52,7 +52,7 @@ def _aberrate_star(obs, star):
     star.dec = abb_dec.vals
     
 def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
-                       mag_min, mag_max, extend_fov_u, extend_fov_v,
+                       mag_min, mag_max, extend_fov,
                        **kwargs):
     logger = logging.getLogger(LOGGING_NAME+'._star_list_for_obs')
 
@@ -115,8 +115,8 @@ def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
 
     discard_uv = 0        
     for star, u, v in zip(star_list, u_list, v_list):
-        if (u < -extend_fov_u or u > obs.data.shape[1]+extend_fov_u-1 or
-            v < -extend_fov_v or v > obs.data.shape[0]+extend_fov_v-1):
+        if (u < -extend_fov[0] or u > obs.data.shape[1]+extend_fov[0]-1 or
+            v < -extend_fov[1] or v > obs.data.shape[0]+extend_fov[1]-1):
             discard_uv += 1
             continue
         
@@ -130,8 +130,8 @@ def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
 
     return new_star_list
 
-def star_list_for_obs(obs, max_stars=30, psf_size=9, 
-                      extend_fov_u=0, extend_fov_v=0, **kwargs):
+def star_list_for_obs(obs, max_stars=30, psf_size=9, extend_fov=(0,0),
+                      **kwargs):
     """Return a list of stars in the FOV of the obs.
 
     Inputs:
@@ -141,12 +141,9 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9,
                            a star. Must be odd. This is just used to restrict
                            the list of stars to ones not too close to the edge
                            of the image.
-        extend_fov_u       The amount beyond the image in the U dimension to
-                           return stars (U value will be negative or greater
-                           than the FOV shape)
-        extend_fov_v       The amount beyond the image in the V dimension to
-                           return stars (V value will be negative or greater
-                           than the FOV shape)
+        extend_fov         The amount beyond the image in the (U,V) dimension
+                           to return stars (U/V value will be negative or
+                           greater than the FOV shape)
         **kwargs           Passed to find_stars to restrict the types of stars
                            returned.
                            
@@ -161,8 +158,7 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9,
     margin = psf_size//2
     
     ra_min, ra_max, dec_min, dec_max = compute_ra_dec_limits(obs,
-                                             extend_fov_u=extend_fov_u,
-                                             extend_fov_v=extend_fov_v)
+                                             extend_fov=extend_fov)
 
     # XXX THIS COULD BE MADE MUCH MORE EFFICIENT
     # PAY ATTENTION TO WHERE RA/DEC IS POINTING - SGR? OUT OF PLANE?
@@ -176,8 +172,7 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9,
         star_list = _star_list_for_obs(obs,
                                        ra_min, ra_max, dec_min, dec_max,
                                        mag_min, mag_max,
-                                       extend_fov_u, extend_fov_v,
-                                       **kwargs)
+                                       extend_fov, **kwargs)
 #        if len(star_list) == 0:
 #            # Didn't find anything so just give up on finding anything dimmer
 #            break
@@ -209,7 +204,7 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9,
     return full_star_list
     
 def star_create_model(obs, star_list, psf_size=9, offset_u=0., offset_v=0.,
-                      extend_fov_u=0, extend_fov_v=0):
+                      extend_fov=(0,0)):
     """Create a model containing nothing but stars.
     
     Inputs:
@@ -219,16 +214,16 @@ def star_create_model(obs, star_list, psf_size=9, offset_u=0., offset_v=0.,
                            a star. Must be odd.
         offset_u           The amount to offset a star's position in the U,V
         offset_v           directions.
-        extend_fov_u       The amount to extend the model beyond the limits of
-        extend_fov_v       the obs FOV. The returned model will be the shape of
+        extend_fov         The amount to extend the model beyond the limits of
+                           the obs FOV. The returned model will be the shape of
                            the obs FOV plus two times the extend value in each
                            dimension.
         
     Returns:
         model              The model.
     """
-    model = np.zeros((obs.data.shape[0]+extend_fov_v*2,
-                      obs.data.shape[1]+extend_fov_u*2))
+    model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
+                      obs.data.shape[1]+extend_fov[0]*2))
     
     gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector])
     
@@ -239,8 +234,8 @@ def star_create_model(obs, star_list, psf_size=9, offset_u=0., offset_v=0.,
     margin = psf_size//2
     
     for star in star_list:
-        u_idx = star.u+offset_u+extend_fov_u
-        v_idx = star.v+offset_v+extend_fov_v
+        u_idx = star.u+offset_u+extend_fov[0]
+        v_idx = star.v+offset_v+extend_fov[1]
         u_int = int(u_idx)
         v_int = int(v_idx)
 
@@ -257,9 +252,11 @@ def star_create_model(obs, star_list, psf_size=9, offset_u=0., offset_v=0.,
         
     return model
 
-def _star_perform_photometry(obs, star, offset_u=0, offset_v=0):
-    u = int(np.round(star.u)) + offset_u
-    v = int(np.round(star.v)) + offset_v
+def _star_perform_photometry(obs, calib_data, star, offset_u, offset_v,
+                             extend_fov):
+    # Data is calibrated, non-extended
+    u = int(np.round(star.u)) + offset_u + extend_fov[0]
+    v = int(np.round(star.v)) + offset_v + extend_fov[1]
     
     if star.dn > 100:
         boxsize = 7
@@ -269,13 +266,13 @@ def _star_perform_photometry(obs, star, offset_u=0, offset_v=0):
     box_halfsize = boxsize // 2
 
     if (u < box_halfsize or
-        u > obs.data.shape[1]-box_halfsize-1 or
+        u > calib_data.shape[1]-box_halfsize-1 or
         v < box_halfsize or
-        v > obs.data.shape[0]-box_halfsize-1):
+        v > calib_data.shape[0]-box_halfsize-1):
         return None
         
-    subimage = obs.data[v-box_halfsize:v+box_halfsize+1,
-                        u-box_halfsize:u+box_halfsize+1]
+    subimage = calib_data[v-box_halfsize:v+box_halfsize+1,
+                          u-box_halfsize:u+box_halfsize+1]
     subimage = subimage.view(ma.MaskedArray)
     subimage[1:-1, 1:-1] = ma.masked # Mask out the center
     
@@ -287,7 +284,8 @@ def _star_perform_photometry(obs, star, offset_u=0, offset_v=0):
 
     return integrated_dn, bkgnd, bkgnd_std
     
-def star_perform_photometry(obs, star_list, offset_u=0, offset_v=0):
+def star_perform_photometry(obs, calib_data, star_list, offset_u=0, offset_v=0,
+                            extend_fov=(0,0)):
     """Perform photometry on a list of stars.
     
     Inputs:
@@ -328,7 +326,8 @@ def star_perform_photometry(obs, star_list, offset_u=0, offset_v=0):
                          star.unique_number, star.spectral_class,
                          u, v, star.bad_reason)
             continue
-        ret = _star_perform_photometry(obs, star, offset_u, offset_v)
+        ret = _star_perform_photometry(obs, calib_data, star,
+                                       offset_u, offset_v, extend_fov)
         if ret is None:
             integrated_dn = 0.
             confidence = 0.
@@ -358,7 +357,7 @@ def star_perform_photometry(obs, star_list, offset_u=0, offset_v=0):
     return good_stars
 
 def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
-                               extend_fov_u=0, extend_fov_v=0):
+                               extend_fov=(0,0)):
     """Create an overlay with high and low confidence stars marked.
     
     Inputs:
@@ -370,20 +369,21 @@ def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
     Returns:
         overlay            The overlay.
     """
-    overlay = np.zeros((obs.data.shape[0]+extend_fov_v*2,
-                        obs.data.shape[1]+extend_fov_u*2, 3))
+    overlay = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
+                        obs.data.shape[1]+extend_fov[0]*2, 3),
+                       dtype='uint8')
     
     for star in star_list:
-        u_idx = int(np.round(star.u+offset_u+extend_fov_u))
-        v_idx = int(np.round(star.v+offset_v+extend_fov_v))
+        u_idx = int(np.round(star.u+offset_u+extend_fov[0]))
+        v_idx = int(np.round(star.v+offset_v+extend_fov[1]))
         
         if not star.use_for_model:
-            color = (1,0,0)
+            color = (255,0,0)
         else:
             if star.photometry_confidence:
-                color = (1,1,0)
+                color = (255,255,0)
             else:
-                color = (.5,.5,1)
+                color = (128,128,255)
         draw_circle(overlay, u_idx, v_idx, 1, color, 3)
 
     return overlay
@@ -392,88 +392,84 @@ def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
 # 
 #===============================================================================
 
-def _star_mark_conflicts(obs, star, offset_u, offset_v, margin,
-                         extend_fov_u, extend_fov_v):
+def _star_mark_conflicts(obs, star, offset_u, offset_v, margin):
     logger = logging.getLogger(LOGGING_NAME+'._star_mark_conflicts')
 
     # Check for off the edge
-    if (not (margin-extend_fov_u < star.u+offset_u <
-             obs.data.shape[1]+extend_fov_u-margin) or
-        not (margin-extend_fov_v < star.v+offset_v <
-             obs.data.shape[0]+extend_fov_v-margin)):
-        logger.debug('Star %9d U %8.3f V %8.f is off the edge',
+    if (not (margin-obs.extend_fov[0] < star.u+offset_u <
+             obs.data.shape[1]+obs.extend_fov[0]-margin) or
+        not (margin-obs.extend_fov[1] < star.v+offset_v <
+             obs.data.shape[0]+obs.extend_fov[1]-margin)):
+        logger.debug('Star %9d U %8.3f V %8.3f is off the edge',
                      star.unique_number, star.u, star.v)
         star.use_for_model = False
         star.bad_reason = 'EDGE'
         return True
-        
+
+#    # Check for planet and moons
+#    for body_name in LARGE_BODY_LIST:
+#        intercepted = obs.ext_bp.where_intercepted(body_name)
+#        if intercepted.vals[star.v+obs.extend_fov[1],
+#                            star.u+obs.extend_fov[0]]:
+#            logger.debug('Star %9d U %8.3f V %8.3f conflicts with %s',
+#                         star.unique_number, star.u, star.v, body_name)
+#            star.use_for_model = False
+#            star.bad_reason = 'BODY:' + body_name
+#            return True
+
     # Give 3 pixels of slop on each side - we don't want a star to
     # even be close to a large object.
     star_slop = 3
     meshgrid = oops.Meshgrid.for_fov(obs.fov,
                                      origin=(star.u+offset_u-star_slop,
                                              star.v+offset_v-star_slop),
-                                     limit=(star.u+offset_u+star_slop,
-                                            star.v+offset_v+star_slop))
+                                     limit =(star.u+offset_u+star_slop,
+                                             star.v+offset_v+star_slop))
     backplane = oops.Backplane(obs, meshgrid)
 
     # Check for planet and moons
     for body_name in LARGE_BODY_LIST:
         intercepted = backplane.where_intercepted(body_name)
-        if np.any(intercepted.vals):
+        if np.any(intercepted):
             logger.debug('Star %9d U %8.3f V %8.3f conflicts with %s',
                          star.unique_number, star.u, star.v, body_name)
             star.use_for_model = False
             star.bad_reason = 'BODY:' + body_name
             return True
-    
+
     # Check for rings
-    ring_radius = backplane.ring_radius('saturn:ring').vals.astype('float')
-    min_rad = np.min(ring_radius)
-    max_rad = np.max(ring_radius)
-    if ((min_rad < 136775 and max_rad > 74658) or # C to A rings
-        (min_rad < 140550 and max_rad > 139890)): # F ring
-        logger.debug('Star %9d U %8.3f V %8.3f conflicts with rings radii '
-                     '%.1f to %.1f',
-                     star.unique_number, star.u, star.v, min_rad, max_rad)
+    ring_radius = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
+    if ((oops.SATURN_C_RING[0] <= rad <= oops.SATURN_A_RING[1]) or # C to A rings
+        (139890 <= rad <= 140550)): # F ring
+        logger.debug('Star %9d U %8.3f V %8.3f conflicts with rings radius '
+                     '%.1f',
+                     star.unique_number, star.u, star.v, rad)
         star.use_for_model = False
         star.bad_reason = 'RINGS'
         return True
     
-#    # Check for bad photometry
-#    ret = _star_perform_photometry(obs, star, offset_u, offset_v)
-#    if ret is not None:
-#        integrated_dn, bkgnd, bkgnd_std = ret
-#        min_dn = MIN_DETECTABLE_DN[obs.detector]
-#    if ((star.temperature_faked and integrated_dn < min_dn) or
-#        (not star.temperature_faked and
-#         integrated_dn < star.dn/2)):
-#        logger.debug('Star %9d U %8.3f V %8.3f INTDN %.2f less than minimum',
-#                     star.unique_number, star.u, star.v, integrated_dn)
-#        star.use_for_model = False
-#        star.bad_reason = 'PHOTOMETRY:LOW BRIGHTNESS'
-#        something_conflicted = True
-#    if integrated_dn < bkgnd_std*3:
-#        logger.debug('Star %9d U %8.3f V %8.3f INTDN %.2f BKGNDSTD %.2f '
-#                     'background too noisy',
-#                     star.unique_number, star.u, star.v, integrated_dn,
-#                     bkgnd_std)
-#        star.use_for_model = False
-#        star.bad_reason = 'PHOTOMETRY:BKGNDSTD'
-#        something_conflicted = True
-#        if bkgnd_std > min_dn/2:
-#            logger.debug('Star %9d U %8.3f V %8.3f INTDN %.2f BKGNDSTD %.2f '
-#                         'background too noisy',
-#                         star.unique_number, star.u, star.v, integrated_dn,
-#                         bkgnd_std)
-#            star.use_for_model = False
-#            star.bad_reason = 'PHOTOMETRY:BKGNDSTD'
-#            return True
-
     return False
 
-def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
-                      extend_fov_u, extend_fov_v):
+
+#    XXX THIS DOESN'T WORK because fov.sphere_falls_inside doesn't work with Subarray!
+#
+#            sub_fov = oops.fov.Subarray(obs.fov, (star.u, star.v), (7,7))
+#            inv = obs.inventory(LARGE_BODY_LIST, fov=sub_fov)
+#            if len(inv) > 0:
+#                for body_name in inv:
+#                    if star.use_for_model is False:
+#                        logger.warn('YIKES Star %9d U %8.3f V %8.3f'
+#                                    'DOUBLE CONFLICT',
+#                                    star.unique_number, star.u, star.v)
+#                    logger.debug('Star %9d U %8.3f V %8.3f conflicts with %s',
+#                                 star.unique_number, star.u, star.v, body_name)
+#                    star.use_for_model = False
+#                    star.bad_reason = 'BODY:' + body_name
+#                something_conflicted = True
+        
+
+def _star_find_offset(obs, filtered_data, star_list, margin, min_stars):
     # 1) Find an offset
     # 2) Remove any stars that are on top of a moon, planet, or opaque part of
     #    the rings
@@ -502,9 +498,7 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
                          len(new_star_list))
             return None
         
-        model = star_create_model(obs, new_star_list,
-                                  extend_fov_u=extend_fov_u,
-                                  extend_fov_v=extend_fov_v)
+        model = star_create_model(obs, new_star_list, extend_fov=obs.extend_fov)
 
         # Find the best offset using the current star list.
         # Then look to see if any of the stars correspond to known
@@ -515,13 +509,16 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
                         filtered_data, model, search_size_min=0,
                         search_size_max=(search_size_max_u, search_size_max_v))
         
+        if offset_u is None:
+            logger.debug('Correlation FAILED')
+            return None
+        
         logger.debug('Trial offset U,V %d %d', offset_u, offset_v)
         
         something_conflicted = False
         
         for star in new_star_list:
-            res = _star_mark_conflicts(obs, star, offset_u, offset_v, margin,
-                                       extend_fov_u, extend_fov_v)
+            res = _star_mark_conflicts(obs, star, offset_u, offset_v, margin)
             something_conflicted = something_conflicted or res
 
         if not something_conflicted:
@@ -529,76 +526,50 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
 
         pass_number += 1
 
-#    if pass_number == 1:
-        # If we exited on pass 1, then there were no conflicts at all
     new_offset_u = offset_u
     new_offset_v = offset_v
     logger.debug('No conflicts - final offset U,V %d %d',
                  offset_u, offset_v)
-#    else:
-#        # Otherwise we have to redo everything to be safe
-#        logger.debug('No conflicts - last trial offset U,V %d %d - '
-#                     'starting final pass', offset_u, offset_v)
-#    
-#        # Now reset everything, get rid of stars that conflict with objects,
-#        # and recompute the offset. It had better be about the same!
-#            
-#        for star in star_list:
-#            star.use_for_model = True
-#            star.bad_reason = None
-#        
-#        new_star_list = []
-#        for star in star_list:
-#            _star_mark_conflicts(obs, star, offset_u, offset_v, margin)
-#            if star.use_for_model:
-#                new_star_list.append(star)
-#            
-#        if len(new_star_list) < min_stars:
-#            logger.warn('Somehow the reset list has fewer than %d stars! (%d)',
-#                        min_stars, len(new_star_list))
-#            return None
-#    
-#        model = star_create_model(obs, new_star_list,
-#                                  extend_fov_u=search_size_max_u,
-#                                  extend_fov_v=search_size_max_v)
-#    
-#        new_offset_u, new_offset_v, peak = find_correlation_and_offset(
-#                        data, model, search_size_min=0,
-#                        search_size_max=(search_size_max_u, search_size_max_v))
-#    
-#        logger.debug('Revised offset U,V %d %d', new_offset_u, new_offset_v)
-#        
-#        if abs(offset_u-new_offset_u) > 1 or abs(offset_v-new_offset_v) > 1:
-#            # Unstable result
-#            logger.warn('The reset list has an offset that differs by more than 1')
-#            return None
 
     return new_offset_u, new_offset_v
 
-def star_find_offset(obs, ext_data=None, min_stars=3, psf_size=9,
-                     extend_fov_u=0, extend_fov_v=0):
+def star_find_offset(obs, min_stars=3, psf_size=9, extend_fov=(0,0)):
     logger = logging.getLogger(LOGGING_NAME+'._star_find_offset')
 
+    metadata = {}
+
+    set_obs_ext_bp(obs, extend_fov)
+    set_obs_ext_data(obs, extend_fov)
+
     orig_star_list = star_list_for_obs(obs, max_stars=30, 
-                                       extend_fov_u=extend_fov_u,
-                                       extend_fov_v=extend_fov_v)
+                                       extend_fov=obs.extend_fov)
+    for star in orig_star_list:
+        star.photometry_confidence = 0.
+    metadata['full_star_list'] = orig_star_list
+    metadata['used_star_list'] = orig_star_list
+    metadata['num_good_stars'] = 0
+    
     if len(orig_star_list) < min_stars:
         # There's no point in continuing if there aren't enough stars
-        return None, None, orig_star_list, 0
+        logger.debug('FAILED to find a valid offset - too few stars')
+        return None, None, metadata
 
     if orig_star_list[0].dn < MIN_DETECTABLE_DN[obs.detector]:
         # There's no point in continuing if the brightest star is below the
         # detection threshold
-        return None, None, [], 0
+        logger.debug('FAILED to find a valid offset - brightest star is too dim')
+        return None, None, metadata
  
-    if ext_data is None:
-        ext_data = pad_image(obs.data, extend_fov_u, extend_fov_v)
+    set_obs_ext_data(obs, extend_fov)
+
+    # For star use only, need data in DN for photometry
+    calib_ext_data = calibrate_iof_image_as_dn(obs, data=obs.ext_data)
 
     margin = psf_size // 2
     
     star_list = orig_star_list[:] # Copy
     
-    filtered_data = filter_local_maximum(ext_data, area_size=7)
+    filtered_data = filter_local_maximum(calib_ext_data, area_size=7)
 
     filtered_data[filtered_data < 0.] = 0.
     
@@ -632,7 +603,7 @@ def star_find_offset(obs, ext_data=None, min_stars=3, psf_size=9,
             continue
         
         ret = _star_find_offset(obs, filtered_data, new_star_list, margin, 
-                                min_stars, extend_fov_u, extend_fov_v) 
+                                min_stars) 
 
         if ret is None:
             logger.debug('No valid offset found - iterating')
@@ -641,9 +612,11 @@ def star_find_offset(obs, ext_data=None, min_stars=3, psf_size=9,
         offset_u, offset_v = ret
         logger.debug('Found valid offset U,V %d %d', offset_u, offset_v)
         good_stars = star_perform_photometry(obs,
+                                             calib_ext_data,
                                              new_star_list,
                                              offset_u=offset_u,
-                                             offset_v=offset_v)
+                                             offset_v=offset_v,
+                                             extend_fov=extend_fov)
         logger.debug('Photometry found %d good stars', good_stars)
         if good_stars >= min_stars:
             break
@@ -656,29 +629,13 @@ def star_find_offset(obs, ext_data=None, min_stars=3, psf_size=9,
 
     if offset_u is None:
         good_stars = 0
-        for star in new_star_list:
-            star.photometry_confidence = 0.
         logger.debug('FAILED to find a valid offset')
     else:
         logger.debug('Returning final offset U,V %d %d / Good stars %d',
                      offset_u, offset_v, good_stars)
             
-    return offset_u, offset_v, new_star_list, good_stars
+    metadata['used_star_list'] = new_star_list
+    metadata['num_good_stars'] = good_stars
+    
+    return offset_u, offset_v, metadata
 
-
-#    XXX THIS DOESN'T WORK because fov.sphere_falls_inside doesn't work with Subarray!
-#
-#            sub_fov = oops.fov.Subarray(obs.fov, (star.u, star.v), (7,7))
-#            inv = obs.inventory(LARGE_BODY_LIST, fov=sub_fov)
-#            if len(inv) > 0:
-#                for body_name in inv:
-#                    if star.use_for_model is False:
-#                        logger.warn('YIKES Star %9d U %8.3f V %8.3f'
-#                                    'DOUBLE CONFLICT',
-#                                    star.unique_number, star.u, star.v)
-#                    logger.debug('Star %9d U %8.3f V %8.3f conflicts with %s',
-#                                 star.unique_number, star.u, star.v, body_name)
-#                    star.use_for_model = False
-#                    star.bad_reason = 'BODY:' + body_name
-#                something_conflicted = True
-        

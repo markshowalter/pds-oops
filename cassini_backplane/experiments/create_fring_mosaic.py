@@ -64,17 +64,14 @@ def create_offset_one_file(filename):
     print 'Finding offset for', filename,
 
     obs = iss.from_file(filename)
-    data = calibrate_iof_image_as_dn(obs)
-    obs.data = data
-#     med = filt.median_filter(obs.data, 11)
-#     perc = 50
-#     mask = med > perc
-#     obs.data[mask] = 0.
 
     print 'DATA SIZE', data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-    offset_u, offset_v, ext_data, overlay = find_offset(obs, create_overlay=INTERACTIVE_OFFSET)
+    offset_u, offset_v, metadata = find_offset(obs, create_overlay=INTERACTIVE_OFFSET)
 
+    ext_data = metadata['ext_data']
+    overlay = metadata['overlay']
+    
     print 'OFFSET', offset_u, offset_v
     
     write_offset(offset_filename(filename), offset_u, offset_v)

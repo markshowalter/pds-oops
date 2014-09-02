@@ -30,7 +30,11 @@ def process_image(filename, interactive=True):
     obs.data = calibrate_iof_image_as_dn(obs)
     print filename, 'DATA SIZE', obs.data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-    offset_u, offset_v, ext_data, overlay = find_offset(obs, create_overlay=True)
+    offset_u, offset_v, metadata = master_find_offset(obs, create_overlay=True)
+#                                                      allow_stars=False, allow_rings=False)
+    
+    ext_data = metadata['ext_data']
+    overlay = metadata['overlay']
     
     if interactive and ext_data is not None:
         ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
@@ -68,7 +72,7 @@ def process_random_file(root_path):
         process_random_file(new_dir)
 
 # Star field through filters - stars visible that we think shouldn't be
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\1683279174_1683355540\N1683354649_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\1683279174_1683355540\N1683354649_1_CALIB.IMG')
 
 # Star field long exposure - star matching doesn't work
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2051\data\1608970573_1609104344\N1608970573_1_CALIB.IMG')
@@ -87,7 +91,7 @@ process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\168327917
 
 # All rings but bad correlation
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2080\data\1738387955_1738409545\N1738395265_1_CALIB.IMG')
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2028\data\1546797712_1546867749\N1546863063_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2028\data\1546797712_1546867749\N1546863063_1_CALIB.IMG')
 
 # Dione
 process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2027\data\1544835042_1544908839\N1544892287_1_CALIB.IMG')

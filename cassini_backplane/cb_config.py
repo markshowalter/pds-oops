@@ -1,6 +1,7 @@
 import oops
 
-STAR_CATALOG_FILENAME = 't:/external/ucac4'
+STAR_CATALOG_ROOT = 't:/external/ucac4'
+SUPPORT_FILES_ROOT = 't:/external/cb_support'
 
 COISS_2XXX_DERIVED_ROOT = 't:/external/cassini/derived/COISS_2xxx'
 COISS_3XXX_ROOT = 't:/external/cassini/volumes/COISS_3xxx'
