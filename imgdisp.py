@@ -1179,6 +1179,32 @@ def draw_line(img, x0, y0, x1, y1, color, thickness=1):
             err = err + dx
             y0 = y0 + sy 
     
+def draw_rect(img, xctr, yctr, xhalfwidth, yhalfwidth, color, thickness=1):
+    """Draw a rectangle with the given line thickness.
+    
+    Input:
+    
+        img        The 2-D (or higher) image to draw on.
+        xctr, yctr The center of the rectangle.
+        xhalfwidth The width of the rectangle on each side of the center.
+        yhalfwidth This is the inner border of the rectangle.
+        color      The scalar (or higher) color to draw.
+        thickness  The thickness (total width) of the line.
+    """
+    
+    # Top
+    img[yctr-yhalfwidth-thickness+1:yctr-yhalfwidth+1,
+        xctr-xhalfwidth-thickness+1:xctr+xhalfwidth+thickness] = color
+    # Bottom
+    img[yctr+yhalfwidth:yctr+yhalfwidth+thickness,
+        xctr-xhalfwidth-thickness+1:xctr+xhalfwidth+thickness] = color
+    # Left
+    img[yctr-yhalfwidth-thickness+1:yctr+yhalfwidth+thickness,
+        xctr-xhalfwidth-thickness+1:xctr-xhalfwidth+1] = color
+    # Right
+    img[yctr-yhalfwidth-thickness+1:yctr+yhalfwidth+thickness,
+        xctr+xhalfwidth:xctr+xhalfwidth+thickness] = color
+
 def draw_circle(img, x0, y0, r, color, thickness=1):
     """Draw a circle using Bresenham's algorithm with the given thickness.
     
