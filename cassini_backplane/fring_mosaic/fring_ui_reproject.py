@@ -18,6 +18,7 @@ from Tkinter import *
 from PIL import Image
 import oops.inst.cassini.iss as iss
 from cb_offset import *
+from cb_rings import *
 
 python_filename = sys.argv[0]
 
@@ -28,8 +29,8 @@ if len(cmd_line) == 0:
                 'ISS_029RF_FMOVIE002_VIMS',
                 '--allow-exception',
 #                '--recompute-reproject',
-#                '--recompute-auto-offset',
-                '--no-reproject',
+#                 '--recompute-auto-offset',
+#                 '--no-reproject',
                 '--display-offset-reproject',
                  '--verbose']
 #    cmd_line = ['-a', '--verbose']
@@ -95,16 +96,25 @@ options, args = parser.parse_args(cmd_line)
 
 class OffRepDispData:
     def __init__(self):
+        self.obs = None
         self.toplevel = None
         self.imdisp_offset = None
-        self.imdisp_repro = None
         self.entry_x_offset = None
         self.entry_y_offset = None
+        self.off_longitudes = None
+        self.off_radii = None
+        self.label_off_inertial_longitude = None
+        self.label_off_corot_longitude = None
+        self.label_off_radius = None
+        self.imdisp_repro = None
         self.repro_overlay = None
+        self.label_inertial_longitude = None
+        self.label_corot_longitude = None
+        self.label_radius = None
         self.repro_longitudes = None
-        self.repro_phase_angle = None
-        self.repro_incidence_angle = None
-        self.repro_emission_angle = None
+        self.repro_phase_angles = None
+        self.repro_incidence_angles = None
+        self.repro_emission_angles = None
         self.repro_resolutions = None
         
 
@@ -150,11 +160,16 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
 
     # Recompute the automatic offset
     obs = iss.from_file(offrepdata.image_path)
+    offrepdata.obs = obs
     if options.allow_exception:
-        offset_u, offset_v, offrepdata.off_metadata = master_find_offset(obs, create_overlay=True)
+        offset_u, offset_v, offrepdata.off_metadata = master_find_offset(obs, create_overlay=True,
+                                                                         star_overlay_box_width=5,
+                                                                         star_overlay_box_thickness=2)
     else:
         try:
-            offset_u, offset_v, offrepdata.off_metadata = master_find_offset(obs, create_overlay=True)
+            offset_u, offset_v, offrepdata.off_metadata = master_find_offset(obs, create_overlay=True,
+                                                                         star_overlay_box_width=5,
+                                                                         star_overlay_box_thickness=2)                                                                             
         except Exception as exc:
             if options.verbose:
                 print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
@@ -216,39 +231,52 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
             print 'OFFSET IS INVALID - ABORTING'
         return
 
-    assert False # XXX        
-    offrepdata.vicar_data = vicar.VicarImage.FromFile(offrepdata.image_path)
-    offrepdata.ringim = fitreproj.VicarToRingImage(offrepdata.vicar_data)
-#    if offrepdata.manual_offset is not None: XXX
-#        offrepdata.ringim.SetOffset(offrepdata.manual_offset)
-#    else:
-#        offrepdata.ringim.SetOffset(offrepdata.the_offset)
+    if offrepdata.obs is None:
+        offrepdata.obs = iss.from_file(offrepdata.image_path)
+
+    obs = offrepdata.obs
+
+    offset_u = 0
+    offset_v = 0
+    
+    if offrepdata.manual_offset is not None:
+        offset_u, offset_v = offrepdata.manual_offset
+    elif offrepdata.the_offset is not None:
+        offset_u, offset_v = offrepdata.the_offset
 
     if options.allow_exception:
-        offrepdata.repro_img = fitreproj.Reproject(offrepdata.vicar_data, offrepdata.ringim,
-                                                   options.radius_start, options.radius_end,
-                                                   options.radius_resolution, options.longitude_resolution)
-        # Save new vicar image
-        offrepdata.vicar_data.ToFile(offrepdata.repro_path)
+        ret = rings_fring_reproject(obs, offset_u, offset_v)
     else:
         try:
-            offrepdata.repro_img = fitreproj.Reproject(offrepdata.vicar_data, offrepdata.ringim,
-                                                       options.radius_start, options.radius_end,
-                                                       options.radius_resolution, options.longitude_resolution)
-            # Save new vicar image
-            offrepdata.vicar_data.ToFile(offrepdata.repro_path)
+            ret = rings_fring_reproject(obs, offset_u, offset_v)
         except Exception as exc:
             if options.verbose:
                 print 'REPROJECTION FAILED'
                 print exc
-            offrepdata.vicar_data = None  # vicar_data was mutated to be the repro image - we want the original
-            return None
+            return
+
+    (good_long_mask, good_longitudes, repro_img, repro_mean_res,
+     repro_mean_phase, repro_mean_emission, repro_mean_incidence) = ret
+     
+    offrepdata.repro_long_mask = good_long_mask
+    offrepdata.repro_img = repro_img
+    offrepdata.repro_longitudes = good_longitudes
+    offrepdata.repro_resolutions = repro_mean_res
+    offrepdata.repro_phase_angles = repro_mean_phase
+    offrepdata.repro_emission_angles = repro_mean_emission
+    offrepdata.repro_incidence_angles = repro_mean_incidence
+
+    fring_util.write_repro(offrepdata.repro_path, offrepdata.repro_img,
+                           offrepdata.repro_long_mask,
+                           offrepdata.repro_longitudes,
+                           offrepdata.repro_resolutions,
+                           offrepdata.repro_phase_angles,
+                           offrepdata.repro_emission_angles,
+                           offrepdata.repro_incidence_angles)
     
     if options.verbose:
         print 'OK'
-    
-    offrepdata.vicar_data = None  # vicar_data was mutated to be the repro image - we want the original
-    return
+
 
 #####################################################################################
 #
@@ -272,7 +300,6 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
     # Blue - 0,0 offset
     # Yellow - auto offset
     # Green - manual offset
-    # Red - manual offset backgrounds
     try:
         offset_overlay = offrepdata.off_metadata['overlay'].copy()
         if offset_overlay.shape[:2] != offrepdata.obs.data.shape:
@@ -283,7 +310,31 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
                                             diff_x:diff_x+offrepdata.obs.data.shape[1],:]
     except:
         offset_overlay = np.zeros((offrepdata.obs.data.shape + (3,)))
-   
+
+    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
+    x_pixels = x_pixels.astype('int')
+    y_pixels = y_pixels.astype('int')
+    offset_overlay[y_pixels, x_pixels, 2] = 255
+
+    if offrepdata.the_offset is not None:
+        # Auto offset - red
+        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+                                        offset_u=offrepdata.the_offset[0],
+                                        offset_v=offrepdata.the_offset[1])
+        x_pixels = x_pixels.astype('int')
+        y_pixels = y_pixels.astype('int')
+        offset_overlay[y_pixels, x_pixels, 0] = 255
+
+    if offrepdata.manual_offset is not None:
+        # Auto offset - green
+        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+                                        offset_u=offrepdata.manual_offset[0],
+                                        offset_v=offrepdata.manual_offset[1])
+        x_pixels = x_pixels.astype('int')
+        y_pixels = y_pixels.astype('int')
+        offset_overlay[y_pixels, x_pixels, 1] = 255
+
+
 #    # Find where the ring is with the original Cassini offset
 #    offrepdata.ringim.SetOffset((0,0))
 #    fring = fitreproj.MakeFRing(FRINGS[offrepdata.fring_number], offrepdata.ringim.et)
@@ -317,6 +368,26 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
 #        fring_util.draw_lines(offset_overlay, (0,.8,0), p) # Green
     offrepdispdata.imdisp_offset.set_overlay(0, offset_overlay)
     offrepdispdata.imdisp_offset.pack(side=LEFT)
+
+# The callback for mouse move events on the offset image
+def callback_offset(x, y, offrepdata, offrepdispdata):
+    if offrepdata.manual_offset is not None:
+        x -= offrepdata.manual_offset[0]
+        y -= offrepdata.manual_offset[1]
+    elif offrepdata.the_offset is not None:
+        x -= offrepdata.the_offset[0]
+        y -= offrepdata.the_offset[1]
+    if (x < 0 or x > offrepdata.obs.data.shape[1]-1 or
+        y < 0 or y > offrepdata.obs.data.shape[0]-1):
+        return
+    
+    if offrepdispdata.off_longitudes is not None:
+        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%offrepdispdata.off_longitudes[y,x]))
+        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%rings_fring_inertial_to_corotating(offrepdispdata.off_longitudes[y,x],
+                                                                                            offrepdata.obs.midtime)))
+    if offrepdispdata.off_radii is not None:
+        offrepdispdata.label_off_radius.config(text=('%7.3f'%offrepdispdata.off_radii[y,x]))
+
 
 # "Manual from auto" button pressed 
 def command_man_from_auto(offrepdata, offrepdispdata):
@@ -400,6 +471,11 @@ def command_commit_changes(offrepdata, offrepdispdata):
 
 # Setup the offset/reproject window with no data
 def setup_offset_reproject_window(offrepdata, offrepdispdata):
+    set_obs_bp(offrepdata.obs)
+    
+    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
+    offrepdispdata.off_radii = offrepdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
+    
     offrepdispdata.toplevel = Tk()
     offrepdispdata.toplevel.title(offrepdata.obsid + ' / ' + offrepdata.image_name)
     frame_toplevel = Frame(offrepdispdata.toplevel)
@@ -506,6 +582,30 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     button_commit_changes = Button(img_addon_control_frame, text='Commit Changes',
                                    command=button_commit_changes_command)
     button_commit_changes.grid(row=gridrow, column=gridcolumn+1)
+    gridrow += 1
+    
+    # Display for longitude and radius
+    label = Label(img_addon_control_frame, text='Inertial Long:')
+    label.grid(row=gridrow, column=gridcolumn, sticky=W)
+    offrepdispdata.label_off_inertial_longitude = Label(img_addon_control_frame, text='')
+    offrepdispdata.label_off_inertial_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    gridrow += 1
+
+    label = Label(img_addon_control_frame, text='Co-Rot Long:')
+    label.grid(row=gridrow, column=gridcolumn, sticky=W)
+    offrepdispdata.label_off_corot_longitude = Label(img_addon_control_frame, text='')
+    offrepdispdata.label_off_corot_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    gridrow += 1
+
+    label = Label(img_addon_control_frame, text='Radius:')
+    label.grid(row=gridrow, column=gridcolumn, sticky=W)
+    offrepdispdata.label_off_radius = Label(img_addon_control_frame, text='')
+    offrepdispdata.label_off_radius.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    gridrow += 1
+
+    callback_offset_command = lambda x, y, offrepdata=offrepdata, offrepdispdata=offrepdispdata: callback_offset(x, y, offrepdata, offrepdispdata)
+    offrepdispdata.imdisp_offset.bind_mousemove(0, callback_offset_command)
+
 
     ##################################################
     # The control/data pane of the reprojected image #
@@ -579,7 +679,7 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
                              option_invalid_reproject):
     if options.verbose:
         print '** Display', offrepdata.obsid, '/', offrepdata.image_name
-    if offrepdata.the_offset is None:
+    if offrepdata.off_metadata is None:
         (offrepdata.the_offset, offrepdata.manual_offset,
          offrepdata.off_metadata) = fring_util.read_offset(offrepdata.offset_path)
 
@@ -588,44 +688,35 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
             print 'Skipping because not invalid'
         return
 
-    # The original image and overlaid ring curves
+    # The original image
     
     if offrepdata.obs is None:
         offrepdata.obs = iss.from_file(offrepdata.image_path)
-    try:
-        offrepdata.fring_overlay = None #XXX
-    except RuntimeError as exc:
-        if options.verbose:
-            print "CAN'T DISPLAY - PROBABLY SPICE ERROR"
-            print exc
-        return
-        
-#    if offrepdata.manual_offset is None: XXX
-#        offrepdata.ringim.SetOffset(offrepdata.the_offset)
-#    else:
-#        offrepdata.ringim.SetOffset(offrepdata.manual_offset)
+
     img_max_y = offrepdata.obs.data.shape[1]-1
 
-    # The reprojected image XXX
-#    try:
-#        repro_vicar_data = vicar.VicarImage.FromFile(offrepdata.repro_path)
-#        repro_ringim = fitreproj.VicarToRingImage(repro_vicar_data)
-#        repro_ringim.SetOffset((0,0))
-#        offrepdata.repro_img = repro_vicar_data.Get2dArray()[::-1,:] # Flip it upside down for display - Saturn at bottom
-#     
-#        offrepdispdata.repro_overlay = np.zeros((offrepdata.repro_img.shape[0], offrepdata.repro_img.shape[1], 3))
-#        fring_140220_y = offrepdata.repro_img.shape[0]-1-int((140220-options.radius_start)/
-#                                                           (options.radius_end-options.radius_start)*
-#                                                           offrepdata.repro_img.shape[0])
-#        fring_util.draw_line(offrepdispdata.repro_overlay, (1,0,0), 0, fring_140220_y,
-#                           offrepdata.repro_img.shape[1]-1, fring_140220_y)
-#        offrepdispdata.repro_longitudes = np.array([float(x) for x in repro_vicar_data['LONGITUDES_SAVED']])
-#        offrepdispdata.repro_phase_angle = float(repro_vicar_data['PHASE_ANGLE'])
-#        offrepdispdata.repro_incidence_angle = float(repro_vicar_data['INCIDENCE_ANGLE'])
-#        offrepdispdata.repro_emission_angle = float(repro_vicar_data['EMISSION_ANGLE'])
-#        offrepdispdata.repro_resolutions = np.array([float(x) for x in repro_vicar_data['RADIAL_RESOLUTION']])
-#    except IOError: # File not found
-#        pass
+    if offrepdata.repro_img is None:
+        (offrepdata.repro_img, offrepdata.good_long_mask,
+         offrepdata.repro_longitudes,
+         offrepdata.repro_resolutions,
+         offrepdata.repro_phase_angles,
+         offrepdata.repro_emission_angles,
+         offrepdata.repro_incidence_angles) = fring_util.read_repro(offrepdata.repro_path)
+        
+    # The reprojected image
+#     offrepdata.repro_img = repro_vicar_data.Get2dArray()[::-1,:] # Flip it upside down for display - Saturn at bottom
+ 
+    offrepdispdata.repro_overlay = np.zeros(offrepdata.repro_img.shape + (3,))
+#     fring_140220_y = offrepdata.repro_img.shape[0]-1-int((140220-options.radius_start)/
+#                                                        (options.radius_end-options.radius_start)*
+#                                                        offrepdata.repro_img.shape[0])
+#     fring_util.draw_line(offrepdispdata.repro_overlay, (1,0,0), 0, fring_140220_y,
+#                        offrepdata.repro_img.shape[1]-1, fring_140220_y)
+    offrepdispdata.repro_longitudes = offrepdata.repro_longitudes
+    offrepdispdata.repro_resolutions = offrepdata.repro_resolutions
+    offrepdispdata.repro_phase_angles = offrepdata.repro_phase_angles
+    offrepdispdata.repro_emission_angles = offrepdata.repro_emission_angles
+    offrepdispdata.repro_incidence_angles = offrepdata.repro_incidence_angles
     
     setup_offset_reproject_window(offrepdata, offrepdispdata)
     
@@ -638,13 +729,13 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     if x < 0 or x >= len(offrepdispdata.repro_longitudes): return
     offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%offrepdispdata.repro_longitudes[x]))
     offrepdispdata.label_corot_longitude.config(text=('%7.3f'%fring_util.InertialToCorotating(offrepdispdata.repro_longitudes[x],
-                                                                                        offrepdata.ringim.et)))
-    radius = mosaic.IndexToRadius(offrepdata.repro_img.shape[0]-1-y, options.radius_resolution)
-    offrepdispdata.label_radius.config(text = '%7.3f'%radius)
-    offrepdispdata.label_phase.config(text=('%7.3f'%offrepdispdata.repro_phase_angle))
-    offrepdispdata.label_incidence.config(text=('%7.3f'%offrepdispdata.repro_incidence_angle))
-    offrepdispdata.label_emission.config(text=('%7.3f'%offrepdispdata.repro_emission_angle))
+                                                                                              offrepdata.obs.midtime)))
+#     radius = mosaic.IndexToRadius(offrepdata.repro_img.shape[0]-1-y, options.radius_resolution)
+#     offrepdispdata.label_radius.config(text = '%7.3f'%radius)
     offrepdispdata.label_resolution.config(text=('%7.3f'%offrepdispdata.repro_resolutions[x]))
+    offrepdispdata.label_phase.config(text=('%7.3f'%offrepdispdata.repro_phase_angles[x]))
+    offrepdispdata.label_emission.config(text=('%7.3f'%offrepdispdata.repro_emission_angles[x]))
+    offrepdispdata.label_incidence.config(text=('%7.3f'%offrepdispdata.repro_incidence_angles[x]))
 
 
 #####################################################################################

@@ -6,6 +6,8 @@ import cspice
 import pickle
 import numpy as np
 
+oops.spice.load_leap_seconds()
+
 if os.getcwd()[1] == ':':
     # Windows
     PYTHON_EXE = 'c:/Users/rfrench/AppData/Local/Enthought/Canopy/User/python.exe'
@@ -27,6 +29,8 @@ class OffRepData(object):
         self.obsid = None
         self.image_name = None
         self.image_path = None
+        self.obs = None
+
         self.offset_path = None
         self.the_offset = None
         self.manual_offset = None
@@ -34,8 +38,13 @@ class OffRepData(object):
         
         self.repro_path = None
         self.repro_img = None
-        self.obs = None
-        self.fring_overlay = None
+
+        self.repro_longitudes = None
+        self.repro_phase_angles = None
+        self.repro_incidence_angles = None
+        self.repro_emission_angles = None
+        self.repro_resolutions = None
+
         
 class MosaicData(object):
     """Mosaic metadata."""
@@ -106,7 +115,7 @@ def repro_path_spec(radius_start, radius_end, radius_resolution, longitude_resol
     repro_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (radius_start, radius_end,
                                                          radius_resolution,
                                                          longitude_resolution))
-    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_REPRO.IMG')
+    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO.IMG')
 
 def mosaic_paths(options, obsid):
     mosaic_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
@@ -177,7 +186,7 @@ def ew_paths(options, obsid):
                                     '_%06d_%06d' % (options.core_radius_start, options.core_radius_end))
     return (ew_data_filename, ew_mask_filename)
 
-#ROTATING_ET = cspice.utc2et("2007-1-1")
+ROTATING_ET = cspice.utc2et("2007-1-1")
 FRING_MEAN_MOTION = 581.964
 
 def ComputeLongitudeShift(img_ET): 
@@ -212,10 +221,47 @@ def write_offset(offset_path, the_offset, manual_offset, metadata):
     offset_pickle_fp = open(offset_path, 'wb')
     pickle.dump(OFFSET_FILE_VERSION, offset_pickle_fp)
     pickle.dump(the_offset, offset_pickle_fp)
-    pickle.dump(manual_offset, offset_pickle_fp)    
-    pickle.dump(metadata, offset_pickle_fp)    
+    pickle.dump(manual_offset, offset_pickle_fp)
+    
+    new_metadata = metadata.copy()
+    if 'ext_data' in new_metadata:
+        del new_metadata['ext_data']
+    if 'ext_overlay' in new_metadata:
+        del new_metadata['ext_overlay'] 
+    pickle.dump(new_metadata, offset_pickle_fp)    
     offset_pickle_fp.close()
 
+def read_repro(repro_path):
+    if not os.path.exists(repro_path):
+        return None, None, None, None, None
+    repro_pickle_fp = open(repro_path, 'rb')
+    repro_data = pickle.load(repro_pickle_fp)
+    repro_good_long_mask = pickle.load(repro_pickle_fp)
+    repro_longitudes = pickle.load(repro_pickle_fp)
+    repro_resolutions = pickle.load(repro_pickle_fp)
+    repro_phase_angles = pickle.load(repro_pickle_fp)
+    repro_emission_angles = pickle.load(repro_pickle_fp)
+    repro_incidence_angles = pickle.load(repro_pickle_fp)
+    repro_pickle_fp.close()
+        
+    return (repro_data, repro_good_long_mask, repro_longitudes,
+            repro_resolutions, repro_phase_angles, 
+            repro_emission_angles, repro_incidence_angles)
+    
+def write_repro(repro_path, repro_data, repro_good_long_mask,
+                repro_longitudes, repro_resolutions, repro_phase_angles, 
+                repro_emission_angles, repro_incidence_angles):
+    repro_pickle_fp = open(repro_path, 'wb')
+    pickle.dump(repro_data, repro_pickle_fp)
+    pickle.dump(repro_good_long_mask, repro_pickle_fp)
+    pickle.dump(repro_longitudes, repro_pickle_fp)
+    pickle.dump(repro_resolutions, repro_pickle_fp)
+    pickle.dump(repro_phase_angles, repro_pickle_fp) 
+    pickle.dump(repro_emission_angles, repro_pickle_fp)
+    pickle.dump(repro_incidence_angles, repro_pickle_fp)
+    repro_pickle_fp.close()
+    
+    
 #def prometheus_close_approach(min_et, min_et_long):
 #    def compute_r(a, e, arg): # Takes argument of pericenter
 #        return a*(1-e**2.) / (1+e*np.cos(arg))

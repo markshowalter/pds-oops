@@ -8,7 +8,7 @@ import scipy.ndimage.filters as filt
 
 import oops
 from psfmodel.gaussian import GaussianPSF
-from imgdisp import draw_circle
+from imgdisp import draw_circle, draw_rect
 from starcat import (UCAC4StarCatalog,
                      SCLASS_TO_B_MINUS_V, SCLASS_TO_SURFACE_TEMP)
 from cb_config import (STAR_CATALOG_ROOT, ISS_PSF_SIGMA,
@@ -357,6 +357,8 @@ def star_perform_photometry(obs, calib_data, star_list, offset_u=0, offset_v=0,
     return good_stars
 
 def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
+                               overlay_box_width=None,
+                               overlay_box_thickness=None,
                                extend_fov=(0,0)):
     """Create an overlay with high and low confidence stars marked.
     
@@ -384,7 +386,12 @@ def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
                 color = (255,255,0)
             else:
                 color = (128,128,255)
-        draw_circle(overlay, u_idx, v_idx, 1, color, 3)
+        if overlay_box_width:
+            draw_rect(overlay, u_idx, v_idx, 
+                      overlay_box_width, overlay_box_width,
+                      color, overlay_box_thickness)
+        else:
+            draw_circle(overlay, u_idx, v_idx, 1, color, 3)
 
     return overlay
 

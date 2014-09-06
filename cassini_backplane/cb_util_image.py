@@ -35,8 +35,11 @@ def shift_image(image, offset_u, offset_v):
 def pad_image(image, margin):
     new_image = np.zeros((image.shape[0]+margin[1]*2,image.shape[1]+margin[0]*2))
     new_image[margin[1]:margin[1]+image.shape[0],
-              margin[0]:margin[0]+image.shape[1]] = image
+              margin[0]:margin[0]+image.shape[1], ...] = image
     return new_image
+
+def unpad_image(image, margin):
+    return image[margin[1]:-margin[1]+1, margin[0]:-margin[0]+1, ...]
 
 #===============================================================================
 # 

@@ -32,8 +32,13 @@ def _combine_models(model_list):
 
     return _normalize(new_model)
     
-def master_find_offset(obs, create_overlay=False, allow_stars=True,
-                       allow_saturn=True, allow_moons=True, allow_rings=True):
+def master_find_offset(obs, create_overlay=False,
+                       star_overlay_box_width=None,
+                       star_overlay_box_thickness=None, 
+                       allow_stars=True,
+                       allow_saturn=True,
+                       allow_moons=True,
+                       allow_rings=True):
 #    allow_saturn = False
 #    allow_moons = False
 #    allow_rings = False
@@ -60,7 +65,8 @@ def master_find_offset(obs, create_overlay=False, allow_stars=True,
     offset_v = None
     metadata = {}
     metadata['ext_data'] = obs.ext_data
-    metadata['overlay'] = overlay
+    metadata['ext_overlay'] = overlay
+    metadata['overlay'] = unpad_image(overlay, extend_fov)
     
     #
     # FIGURE OUT WHAT KINDS OF THINGS ARE IN THIS IMAGE
@@ -122,6 +128,8 @@ def master_find_offset(obs, create_overlay=False, allow_stars=True,
             if create_overlay:
                 star_overlay = star_make_good_bad_overlay(obs,
                                   star_metadata['used_star_list'], 0, 0,
+                                  star_overlay_box_width,
+                                  star_overlay_box_thickness,
                                   extend_fov=extend_fov)
 
     # If stars failed (or we need to force the creation of an image overlay for
@@ -195,6 +203,7 @@ def master_find_offset(obs, create_overlay=False, allow_stars=True,
         if offset_u is not None:
             overlay = shift_image(overlay, -offset_u, -offset_v)
     
-    metadata['overlay'] = overlay
+    metadata['ext_overlay'] = overlay
+    metadata['overlay'] = unpad_image(overlay, extend_fov)
     
     return offset_u, offset_v, metadata

@@ -37,27 +37,30 @@ def make_ext_meshgrid(obs, extend_fov=(0,0)):
 
 def set_obs_corner_bp(obs):
     # The non-extended FOV
-    if not hasattr(obs, 'corner_bp'):
+    if (not hasattr(obs, 'corner_bp') or obs.corner_meshgrid is None or
+        obs.corner_bp is None):
         obs.corner_meshgrid = make_corner_meshgrid(obs)
         obs.corner_bp = oops.Backplane(obs, meshgrid=obs.corner_meshgrid)
 
 def set_obs_ext_corner_bp(obs, extend_fov):
     # The extended FOV
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
-        not hasattr(obs, 'ext_corner_bp')):
+        not hasattr(obs, 'ext_corner_bp') or obs.extend_fov is None or
+        obs.ext_corner_meshgrid is None or obs.ext_corner_bp is None):
         obs.extend_fov = extend_fov
         obs.ext_corner_meshgrid = make_corner_meshgrid(obs, extend_fov)
         obs.ext_corner_bp = oops.Backplane(obs, meshgrid=obs.ext_corner_meshgrid)
 
 def set_obs_bp(obs):
     # The non-extended FOV
-    if not hasattr(obs, 'bp'):
+    if not hasattr(obs, 'bp') or obs.bp is None:
         obs.bp = oops.Backplane(obs)
 
 def set_obs_ext_bp(obs, extend_fov):
     # The extended FOV
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
-        not hasattr(obs, 'ext_bp')):
+        not hasattr(obs, 'ext_bp') or obs.extend_fov is None or
+        obs.ext_meshgrid is None or obs.ext_bp is None):
         obs.extend_fov = extend_fov
         obs.ext_meshgrid = make_ext_meshgrid(obs, extend_fov)
         obs.ext_bp = oops.Backplane(obs, meshgrid=obs.ext_meshgrid)
@@ -65,7 +68,8 @@ def set_obs_ext_bp(obs, extend_fov):
 def set_obs_ext_data(obs, extend_fov):
     # The extended FOV
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
-        not hasattr(obs, 'ext_data')):
+        not hasattr(obs, 'ext_data') or obs.extend_fov is None or
+        obs.ext_data is None):
         obs.extend_fov = extend_fov
         obs.ext_data = pad_image(obs.data, extend_fov)
         
