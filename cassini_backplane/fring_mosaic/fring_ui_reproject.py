@@ -19,6 +19,7 @@ from PIL import Image
 import oops.inst.cassini.iss as iss
 from cb_offset import *
 from cb_rings import *
+import cProfile, pstats, StringIO
 
 python_filename = sys.argv[0]
 
@@ -32,6 +33,7 @@ if len(cmd_line) == 0:
 #                 '--recompute-auto-offset',
 #                 '--no-reproject',
                 '--display-offset-reproject',
+                '--profile',
                  '--verbose']
 #    cmd_line = ['-a', '--verbose']
     pass
@@ -54,6 +56,9 @@ parser = OptionParser()
 parser.add_option('--allow-exception', dest='allow_exception',
                   action='store_true', default=False,
                   help="Allow exceptions to be thrown")
+parser.add_option('--profile', dest='profile',
+                  action='store_true', default=False,
+                  help="Do performance profiling")
 
 ##
 ## Options for finding the pointing offset
@@ -676,7 +681,7 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     
 # Display the original and reproject images (if any)
 def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
-                             option_invalid_reproject):
+                             option_invalid_reproject, do_mainloop=True):
     if options.verbose:
         print '** Display', offrepdata.obsid, '/', offrepdata.image_name
     if offrepdata.off_metadata is None:
@@ -720,7 +725,8 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
     
     setup_offset_reproject_window(offrepdata, offrepdispdata)
     
-    mainloop()
+    if do_mainloop:
+        mainloop()
 
 # The callback for mouse move events on the reprojected image
 def callback_repro(x, y, offrepdata, offrepdispdata):
@@ -761,6 +767,10 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '
     offrepdata.offset_path = fring_util.offset_path(options, image_path, image_name)
     offrepdata.repro_path = fring_util.repro_path(options, image_path, image_name)
 
+    if options.profile:
+        pr = cProfile.Profile()
+        pr.enable()
+
     # Pointing offset
     offset_one_image(offrepdata, options.no_auto_offset, options.no_update_auto_offset,
                      options.recompute_auto_offset)
@@ -772,8 +782,18 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '
     # Display offset and reprojection
     if options.display_offset_reproject or options.display_invalid_offset or options.display_invalid_reproject:
         display_offset_reproject(offrepdata, offrepdispdata, options.display_invalid_offset,
-                                 options.display_invalid_reproject)
+                                 options.display_invalid_reproject, do_mainloop=not options.profile)
     
     del offrepdata
     offrepdata = None
     
+    if options.profile:
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        ps.print_callers()
+        print s.getvalue()
+        assert False
+        

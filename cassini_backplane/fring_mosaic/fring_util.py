@@ -105,7 +105,7 @@ def offset_path(options, image_path, image_name):
     return image_path + '.FOFFSET'
 
 def repro_path(options, image_path, image_name):
-    repro_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
+    repro_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
                                                          options.radius_resolution,
                                                          options.longitude_resolution))
     return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO.IMG')
