@@ -120,8 +120,8 @@ class ImageDisp(Frame):
             # Register the mouse motion callback
             canvas.bind("<Motion>",
                         lambda event, img_num=i:
-                        self._mousemove_internal_callback_handler(event,
-                                                                 img_num))
+                        self._mousemove_callback_handler(event,
+                                                         img_num, None))
 
         canvases_frame.pack(side=TOP)
         
@@ -293,6 +293,9 @@ class ImageDisp(Frame):
                 overlay_list = [overlay_list]
             new_overlay_list = []
             for overlay in overlay_list:
+                if overlay is None:
+                    new_overlay_list.append(overlay)
+                    continue
                 if issubclass(overlay.dtype.type, np.integer):
                     overlay = overlay.astype('float') / 255.
                 if len(overlay.shape) == 2:
@@ -449,7 +452,7 @@ class ImageDisp(Frame):
         return greyscale_img
 
     def _get_zoom_factors(self):
-        """Internal - Get the X and Y zoom factors accounding for single or
+        """Internal - Get the X and Y zoom factors accounting for single or
         double scale bars.
         """
         if self.one_zoom:
@@ -562,14 +565,17 @@ class ImageDisp(Frame):
                                      cur_overlay[:,:,:3]*
                                      self.scaled_alpha3d_list[i])
 
-                combined_data = np.cast['int8'](combined_data)
+                combined_data = np.cast['uint8'](combined_data)
 
                 if self.flip_y:
                     combined_data = combined_data[::-1,:,:]+0
                     # +0 forces a copy, necessary for PIL
             else:
                 mode = 'L'
-                combined_data = np.cast['int8'](greyscale_img)
+                # This copying also makes it contiguous, which is necessary for
+                # PIL
+                combined_data = np.zeros(greyscale_img.shape, dtype=np.uint8)
+                combined_data[:,:] = greyscale_img
                 if self.flip_y:
                     combined_data = combined_data[::-1,:]+0
                     # +0 forces a copy, necessary for PIL
@@ -725,44 +731,24 @@ class ImageDisp(Frame):
         for canvas in self.canvas_list:
             canvas.yview(*args)
 
-    def _mousemove_internal_callback_handler(self, event, img_num):
-        """Internal - callback for mouse move."""
-        canvas = self.canvas_list[img_num]
-        xzoom, yzoom = self._get_zoom_factors()
-        x = (canvas.canvasx(event.x) * xzoom /
-             self.overlay_scale_x_list[img_num])
-        y = (canvas.canvasy(event.y) * yzoom /
-             self.overlay_scale_y_list[img_num])
-        if (x < 0 or y < 0 or
-            x >= self.imgdata_list[img_num].shape[1] or
-            y >= self.imgdata_list[img_num].shape[0]):
-            return
-        if self.flip_y:
-            y = self.imgdata_list[img_num].shape[0] - y - 1
-        self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
-                             (x-self.origin[0], y-self.origin[1]))
-        val = self.imgdata_list[img_num][y,x]
-        if val > 10000:
-            self.label_val.config(text='Mouse val: %e' % val)
-        else:
-            self.label_val.config(text='Mouse val: %12.7f' % val)
-
     def _mousemove_callback_handler(self, event, img_num, callback_func):
-        """Internal - callback for mouse move once the user has registered
-        a separate callback."""
+        """Internal - callback for mouse move."""
+        if self.imgdata_list[img_num] is None:
+            return
         canvas = self.canvas_list[img_num]
+        y = canvas.canvasy(event.y)
         xzoom, yzoom = self._get_zoom_factors()
+        if self.flip_y:
+            y = (self.imgdata_list[img_num].shape[0] /
+                 yzoom * self.overlay_scale_y_list[img_num]) - 1 - y
         x = (canvas.canvasx(event.x) * xzoom /
              self.overlay_scale_x_list[img_num])
-        y = (canvas.canvasy(event.y) * yzoom /
+        y = (y * yzoom /
              self.overlay_scale_y_list[img_num])
         if (x < 0 or y < 0 or
             x >= self.imgdata_list[img_num].shape[1] or
             y >= self.imgdata_list[img_num].shape[0]):
             return
-        if self.flip_y:
-            y = self.imgdata_list[img_num].shape[0] - y -1
-        # We can only bind one event handler, so this one has to do both parts
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
                              (x-self.origin[0], y-self.origin[1]))
         val = self.imgdata_list[img_num][y,x]
@@ -770,7 +756,8 @@ class ImageDisp(Frame):
             self.label_val.config(text='Mouse val: %e' % val)
         else:
             self.label_val.config(text='Mouse val: %12.7f' % val)
-        callback_func(x, y)
+        if callback_func is not None:
+            callback_func(x, y)
         
     def _b1press_callback_handler(self, event, img_num, callback_func):
         """Internal - callback for button-one press."""
