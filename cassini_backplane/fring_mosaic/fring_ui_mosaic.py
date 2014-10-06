@@ -4,22 +4,11 @@ Created on Sep 19, 2011
 @author: rfrench
 '''
 
-###
-### BUGS:
-### - Need a better way to specify X and Y offset with sliders
-### - Every time you reproject the image, it appends more metadata onto vicar_data and saves it all
-###   to the output file
-###
-
 from optparse import OptionParser
-import ringutil
-import mosaic
-import ringimage
+import fring_util
 import pickle
 import os
 import os.path
-import fitreproj
-import vicar
 import numpy as np
 import sys
 import cspice
@@ -29,18 +18,21 @@ import colorsys
 from imgdisp import ImageDisp, FloatEntry
 from Tkinter import *
 from PIL import Image
-
-#Tk().withdraw()
+from cb_rings import *
 
 python_dir = os.path.split(sys.argv[0])[0]
-python_reproject_program = os.path.join(python_dir, ringutil.PYTHON_RING_REPROJECT)
+python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
 
 cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
-    cmd_line = ['--verbose', 'ISS_081RI_SPKMVLFLP001_PRIME', '--ignore-bad-obsids']
-#    cmd_line = ['--verbose', '--display-mosaic', 'ISS_029RF_FMOVIE001_VIMS']
-#    cmd_line = ['--verbose', 'test_059RF', '--display-mosaic']
+    cmd_line = ['--verbose',
+                'ISS_036RF_FMOVIE001_VIMS',
+#                'ISS_041RF_FMOVIE002_VIMS',
+#                'ISS_106RF_FMOVIE002_PRIME',
+#                'ISS_132RI_FMOVIE001_VIMS',
+#                'ISS_029RF_FMOVIE002_VIMS',
+                '--display-mosaic']
 
 parser = OptionParser()
 
@@ -77,7 +69,7 @@ parser.add_option('--display-mosaic', dest='display_mosaic',
                   action='store_true', default=False,
                   help='Display the mosaic')
 
-ringutil.add_parser_options(parser)
+fring_util.add_parser_options(parser)
 
 options, args = parser.parse_args(cmd_line)
 
@@ -94,6 +86,19 @@ class MosaicDispData:
 #
 #####################################################################################
 
+def _update_mosaicdata(mosaicdata, metadata):
+    mosaicdata.img = metadata['img']
+    mosaicdata.long_mask = metadata['long_mask']
+    mosaicdata.resolutions = metadata['mean_resolution']
+    mosaicdata.image_numbers = metadata['image_number']
+    mosaicdata.ETs = metadata['time'] 
+    mosaicdata.emission_angles = metadata['mean_emission']
+    mosaicdata.incidence_angle = metadata['mean_incidence']
+    mosaicdata.phase_angles = metadata['mean_phase']
+    full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
+    full_longitudes[np.logical_not(mosaicdata.long_mask)] = -10
+    mosaicdata.longitudes = full_longitudes
+
 def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     # Input files: image_path_list (includes repro suffix)
     # Output files:
@@ -102,7 +107,7 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     #  large_png_filename (full size mosaic graphic)
     #  small_png_filename (reduced size mosaic graphic)
     (mosaicdata.data_path, mosaicdata.metadata_path,
-     mosaicdata.large_png_path, mosaicdata.small_png_path) = ringutil.mosaic_paths(options, mosaicdata.obsid)
+     mosaicdata.png_path) = fring_util.mosaic_paths(options, mosaicdata.obsid)
     
     if options.verbose:
         print 'Make_mosaic:', mosaicdata.obsid
@@ -115,8 +120,7 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     if not option_recompute:
         if (os.path.exists(mosaicdata.data_path+'.npy') and
             os.path.exists(mosaicdata.metadata_path) and
-            os.path.exists(mosaicdata.large_png_path) and
-            os.path.exists(mosaicdata.small_png_path)):
+            os.path.exists(mosaicdata.png_path)):
             if option_no_update:
                 if options.verbose:
                     print 'Not doing anything because output files already exist and --no-update-mosaic'
@@ -125,13 +129,12 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
             # Find the latest repro time
             max_repro_mtime = 0
             for repro_path in mosaicdata.repro_path_list:    
-                time_repro = os.stat(repro_path).st_mtime
+                time_repro = os.stat(repro_path+'.pickle').st_mtime
                 max_repro_mtime = max(max_repro_mtime, time_repro)
         
             if (os.stat(mosaicdata.data_path+'.npy').st_mtime > max_repro_mtime and
                 os.stat(mosaicdata.metadata_path).st_mtime > max_repro_mtime and
-                os.stat(mosaicdata.large_png_path).st_mtime > max_repro_mtime and
-                os.stat(mosaicdata.small_png_path).st_mtime > max_repro_mtime):
+                os.stat(mosaicdata.png_path).st_mtime > max_repro_mtime):
                 # The mosaic file exists and is more recent than the reprojected images, and we're not forcing a recompute
                 if options.verbose:
                     print 'Not doing anything because output files already exist and are current'
@@ -139,18 +142,24 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     print 'Making mosaic for', mosaicdata.obsid
     
-    result = mosaic.MakeMosaic(mosaicdata.repro_path_list, options.radius_start, options.radius_end,
-                               options.radius_resolution, options.longitude_resolution)
-    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
-     mosaicdata.image_numbers, mosaicdata.ETs, 
-     mosaicdata.emission_angles, mosaicdata.incidence_angles,
-     mosaicdata.phase_angles) = result
+    mosaic_metadata = rings_fring_mosaic_init(options.longitude_resolution,
+                                              options.radius_inner, options.radius_outer,
+                               options.radius_resolution)
+    for i, repro_path in enumerate(mosaicdata.repro_path_list):
+        repro_metadata = fring_util.read_repro(repro_path)
+        if repro_metadata is not None:
+            if options.verbose:
+                print 'Adding mosaic data for', repro_path
+            rings_fring_mosaic_add(mosaic_metadata, repro_metadata, i)
+
+    _update_mosaicdata(mosaicdata, mosaic_metadata)
 
     # Save mosaic image array in binary
     np.save(mosaicdata.data_path, mosaicdata.img)
     
     # Save metadata
-    metadata = result[1:] # Everything except img
+    metadata = mosaic_metadata.copy() # Everything except img
+    del metadata['img']
     mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
     pickle.dump(metadata, mosaic_metadata_fp)
     pickle.dump(mosaicdata.obsid_list, mosaic_metadata_fp)
@@ -161,21 +170,19 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     blackpoint = max(np.min(mosaicdata.img), 0)
     whitepoint = np.max(mosaicdata.img)
+    img = mosaicdata.img
+    
+    blackpoint = 0. # XXX
+    whitepoint = whitepoint / 3. # XXX
+    img = img[75:326,::15].copy()
+    
     gamma = 0.5
     # The +0 forces a copy - necessary for PIL
-    scaled_mosaic = np.cast['int8'](ImageDisp.ScaleImage(mosaicdata.img, blackpoint,
+    scaled_mosaic = np.cast['int8'](ImageDisp.scale_image(img, blackpoint,
                                                          whitepoint, gamma))[::-1,:]+0
     img = Image.frombuffer('L', (scaled_mosaic.shape[1], scaled_mosaic.shape[0]),
                            scaled_mosaic, 'raw', 'L', 0, 1)
-    img.save(mosaicdata.large_png_path, 'PNG')
-    reduced_scaled_mosaic = scaled_mosaic[:,::options.mosaic_reduction_factor]+0
-    del scaled_mosaic
-    scaled_mosaic = None
-    img = Image.frombuffer('L', (reduced_scaled_mosaic.shape[1], reduced_scaled_mosaic.shape[0]),
-                           reduced_scaled_mosaic, 'raw', 'L', 0, 1)
-    img.save(mosaicdata.small_png_path, 'PNG')
-    del reduced_scaled_mosaic
-    reduced_scaled_mosaic = None
+    img.save(mosaicdata.png_path, 'PNG')
 
 
 #####################################################################################
@@ -190,7 +197,7 @@ def command_refresh_color(mosaicdata, mosaicdispdata):
     color_sel = mosaicdispdata.var_color_by.get()
     
     if color_sel == 'none':
-        mosaicdispdata.imdisp.set_overlay(0, None)
+        mosaicdispdata.imdisp.set_color_column(0, None)
         return
     
     minval = None
@@ -345,18 +352,16 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
     
     
 def display_mosaic(mosaicdata, mosaicdispdata):
-    if mosaicdata.img == None:
+    if mosaicdata.img is None:
         (mosaicdata.data_path, mosaicdata.metadata_path,
-         mosaicdata.large_png_path, mosaicdata.small_png_path) = ringutil.mosaic_paths(options, mosaicdata.obsid)
+         mosaicdata.png_path) = fring_util.mosaic_paths(options, mosaicdata.obsid)
         
-        mosaicdata.img = np.load(mosaicdata.data_path+'.npy')
+        img = np.load(mosaicdata.data_path+'.npy')
         
         mosaic_metadata_fp = open(mosaicdata.metadata_path, 'rb')
         metadata = pickle.load(mosaic_metadata_fp)
-        (mosaicdata.longitudes, mosaicdata.resolutions,
-         mosaicdata.image_numbers, mosaicdata.ETs, 
-         mosaicdata.emission_angles, mosaicdata.incidence_angles,
-         mosaicdata.phase_angles) = metadata
+        metadata['img'] = img
+        _update_mosaicdata(mosaicdata, metadata)
         mosaicdata.obsid_list = pickle.load(mosaic_metadata_fp)
         mosaicdata.image_name_list = pickle.load(mosaic_metadata_fp)
         mosaicdata.image_path_list = pickle.load(mosaic_metadata_fp)
@@ -369,6 +374,7 @@ def display_mosaic(mosaicdata, mosaicdispdata):
 
 # The callback for mouse move events on the mosaic image
 def callback_move_mosaic(x, y, mosaicdata):
+    x = int(x)
     if x < 0: return
     if mosaicdata.longitudes[x] < 0:  # Invalid longitude
         mosaicdispdata.label_inertial_longitude.config(text='')
@@ -381,18 +387,23 @@ def callback_move_mosaic(x, y, mosaicdata):
         mosaicdispdata.label_obsid.config(text='')
         mosaicdispdata.label_date.config(text='')
     else:
-        mosaicdispdata.label_inertial_longitude.config(text=('%7.3f'%ringutil.CorotatingToInertial(mosaicdata.longitudes[x],
+        mosaicdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(mosaicdata.longitudes[x],
                                                                                                    mosaicdata.ETs[x])))
         mosaicdispdata.label_longitude.config(text=('%7.3f'%mosaicdata.longitudes[x]))
-        radius = mosaic.IndexToRadius(y, options.radius_resolution)
-        mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
+#        radius = mosaic.IndexToRadius(y, options.radius_resolution)
+#        mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
         mosaicdispdata.label_phase.config(text=('%7.3f'%mosaicdata.phase_angles[x]))
-        mosaicdispdata.label_incidence.config(text=('%7.3f'%mosaicdata.incidence_angles[x]))
+        mosaicdispdata.label_incidence.config(text=('%7.3f'%mosaicdata.incidence_angle))
         mosaicdispdata.label_emission.config(text=('%7.3f'%mosaicdata.emission_angles[x]))
         mosaicdispdata.label_resolution.config(text=('%7.3f'%mosaicdata.resolutions[x]))
         mosaicdispdata.label_image.config(text=mosaicdata.image_name_list[mosaicdata.image_numbers[x]])
         mosaicdispdata.label_obsid.config(text=mosaicdata.obsid_list[mosaicdata.image_numbers[x]])
-        mosaicdispdata.label_date.config(text=cspice.et2utc(mosaicdata.ETs[x], 'C', 0))
+        mosaicdispdata.label_date.config(text=cspice.et2utc(float(mosaicdata.ETs[x]), 'C', 0))
+    
+    y = int(y)
+    if y < 0: return
+    radius = y*options.radius_resolution+options.radius_inner
+    mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
 
 # The command for Mosaic button press - rerun offset/reproject
 def callback_b1press_mosaic(x, y, mosaicdata):
@@ -400,7 +411,7 @@ def callback_b1press_mosaic(x, y, mosaicdata):
     if mosaicdata.longitudes[x] < 0:  # Invalid longitude - nothing to do
         return
     image_number = mosaicdata.image_numbers[x]
-    subprocess.Popen([ringutil.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
+    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
                       mosaicdata.obsid_list[image_number] + '/' + mosaicdata.image_name_list[image_number]])
 
 #####################################################################################
@@ -417,8 +428,8 @@ obsid_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in ringutil.enumerate_files(options, args, '_CALIB.IMG'):
-    repro_path = ringutil.repro_path(options, image_path, image_name)
+for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+    repro_path = fring_util.repro_path(options, image_path, image_name)
     
     if cur_obsid == None:
         cur_obsid = obsid
@@ -432,7 +443,7 @@ for obsid, image_name, image_path in ringutil.enumerate_files(options, args, '_C
         image_path_list = []
         repro_path_list = []
         cur_obsid = obsid
-    if os.path.exists(repro_path):
+    if os.path.exists(repro_path+'.pickle'):
         obsid_list.append(obsid)
         image_name_list.append(image_name)
         image_path_list.append(image_path)
@@ -449,7 +460,7 @@ if len(obsid_list) != 0:
     repro_path_list = []
 
 for mosaic_info in mosaic_list:
-    mosaicdata = ringutil.MosaicData()
+    mosaicdata = fring_util.MosaicData()
     (mosaicdata.obsid_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
      mosaicdata.repro_path_list) = mosaic_info
     mosaicdata.obsid = mosaicdata.obsid_list[0]
@@ -458,7 +469,7 @@ for mosaic_info in mosaic_list:
 
 if options.display_mosaic:
     for mosaic_info in mosaic_list:
-        mosaicdata = ringutil.MosaicData()
+        mosaicdata = fring_util.MosaicData()
         (mosaicdata.obsid_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
          mosaicdata.repro_path_list) = mosaic_info
         mosaicdata.obsid = mosaicdata.obsid_list[0]

@@ -6,6 +6,8 @@ import cspice
 import pickle
 import numpy as np
 
+from cb_util_image import *
+
 oops.spice.load_leap_seconds()
 
 if os.getcwd()[1] == ':':
@@ -17,9 +19,9 @@ else:
     # Linux
     assert False
     
-PYTHON_RING_REPROJECT = 'fring_reproject.py'
-PYTHON_RING_MOSAIC = 'fring_mosaic.py'
-PYTHON_RING_BKGND = 'fring_bkgnd.py'
+PYTHON_RING_REPROJECT = 'fring_ui_reproject.py'
+PYTHON_RING_MOSAIC = 'fring_ui_mosaic.py'
+PYTHON_RING_BKGND = 'fring_ui_bkgnd.py'
 
 SUFFIX_CALIB = '_CALIB.IMG'
 
@@ -48,7 +50,8 @@ class OffRepData(object):
         
 class MosaicData(object):
     """Mosaic metadata."""
-    pass
+    def __init__(self):
+        self.img = None
 
 class BkgndData(object):
     """Background metadata."""
@@ -57,8 +60,8 @@ class BkgndData(object):
 def add_parser_options(parser):
     # For file selection
     parser.add_option('-a', '--all_obs', dest='all_obs', action='store_true', default=False)
-    parser.add_option('--radius_start', dest='radius_start', type='int', default=-2200)
-    parser.add_option('--radius_end', dest='radius_end', type='int', default=2200)
+    parser.add_option('--radius_inner', dest='radius_inner', type='int', default=-1000)
+    parser.add_option('--radius_outer', dest='radius_outer', type='int', default=1000)
     parser.add_option('-r', '--radius_resolution', type='float', dest='radius_resolution', default=5.0)
     parser.add_option('-l', '--longitude_resolution', type='float', dest='longitude_resolution',
                       default=0.02)
@@ -105,41 +108,39 @@ def offset_path(options, image_path, image_name):
     return image_path + '.FOFFSET'
 
 def repro_path(options, image_path, image_name):
-    repro_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
+    repro_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
                                                          options.radius_resolution,
                                                          options.longitude_resolution))
-    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO.IMG')
+    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO')
 
-def repro_path_spec(radius_start, radius_end, radius_resolution, longitude_resolution,
+def repro_path_spec(radius_inner, radius_outer, radius_resolution, longitude_resolution,
                     image_path, image_name):
-    repro_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (radius_start, radius_end,
+    repro_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (radius_inner, radius_outer,
                                                          radius_resolution,
                                                          longitude_resolution))
-    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO.IMG')
+    return os.path.join(os.path.dirname(image_path), image_name + repro_res_data + '_FREPRO')
 
 def mosaic_paths(options, obsid):
-    mosaic_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
+    mosaic_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
                                                           options.radius_resolution,
                                                           options.longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', obsid+mosaic_res_data+'-data')
     metadata_path = os.path.join(ROOT, 'mosaic-data', obsid+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+obsid+mosaic_res_data+'.png')
-    small_png_path = os.path.join(ROOT, 'png', 'small-'+obsid+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path, small_png_path)
+    return (data_path, metadata_path, large_png_path)
 
-def mosaic_paths_spec(radius_start, radius_end, radius_resolution, longitude_resolution,
+def mosaic_paths_spec(radius_inner, radius_outer, radius_resolution, longitude_resolution,
                       obsid):
-    mosaic_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (radius_start, radius_end,
+    mosaic_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (radius_inner, radius_outer,
                                                           radius_resolution,
                                                           longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', obsid+mosaic_res_data+'-data')
     metadata_path = os.path.join(ROOT, 'mosaic-data', obsid+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+obsid+mosaic_res_data+'.png')
-    small_png_path = os.path.join(ROOT, 'png', 'small-'+obsid+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path, small_png_path)
+    return (data_path, metadata_path, large_png_path)
 
 def bkgnd_paths(options, obsid):
-    bkgnd_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
+    bkgnd_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
                                                               options.radius_resolution,
                                                               options.longitude_resolution))
     reduced_mosaic_data_filename = os.path.join(ROOT, 'bkgnd-data',
@@ -155,9 +156,9 @@ def bkgnd_paths(options, obsid):
     data_path, metadata_path, large_png_path,small_png_path = mosaic_paths(options, obsid)
     return(data_path, metadata_path, bkgnd_mask_filename, bkgnd_model_filename, bkgnd_metadata_filename) 
     
-def bkgnd_paths_spec(radius_start, radius_end, radius_resolution, longitude_resolution,
+def bkgnd_paths_spec(radius_inner, radius_outer, radius_resolution, longitude_resolution,
                      obsid):
-    bkgnd_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (radius_start, radius_end,
+    bkgnd_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (radius_inner, radius_outer,
                                                               radius_resolution,
                                                               longitude_resolution))
     reduced_mosaic_data_filename = os.path.join(ROOT, 'bkgnd-data',
@@ -175,15 +176,15 @@ def bkgnd_paths_spec(radius_start, radius_end, radius_resolution, longitude_reso
             bkgnd_mask_filename, bkgnd_model_filename, bkgnd_metadata_filename)
     
 def ew_paths(options, obsid):
-    ew_res_data = ('_%06d_%06d_%06.3f_%05.3f' % (options.radius_start, options.radius_end,
+    ew_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
                                                            options.radius_resolution,
                                                            options.longitude_resolution))
     ew_data_filename = os.path.join(ROOT, 'ew-data',
                                     obsid+ew_res_data+'-data' + 
-                                    '_%06d_%06d' % (options.core_radius_start, options.core_radius_end))
+                                    '_%06d_%06d' % (options.core_radius_inner, options.core_radius_outer))
     ew_mask_filename = os.path.join(ROOT, 'ew-data',
                                     obsid+ew_res_data+'-mask' +
-                                    '_%06d_%06d' % (options.core_radius_start, options.core_radius_end))
+                                    '_%06d_%06d' % (options.core_radius_inner, options.core_radius_outer))
     return (ew_data_filename, ew_mask_filename)
 
 ROTATING_ET = cspice.utc2et("2007-1-1")
@@ -204,9 +205,9 @@ def CorotatingToTrueAnomaly(co_long, ET):
 OFFSET_FILE_VERSION = 0
 
 def read_offset(offset_path):
-    if not os.path.exists(offset_path):
-        return None, None, None, None  
-    offset_pickle_fp = open(offset_path, 'rb')
+    if not os.path.exists(offset_path+'.pickle'):
+        return None, None, None
+    offset_pickle_fp = open(offset_path+'.pickle', 'rb')
     offset_file_version = pickle.load(offset_pickle_fp)
     
     assert offset_file_version == OFFSET_FILE_VERSION
@@ -214,11 +215,17 @@ def read_offset(offset_path):
     manual_offset = pickle.load(offset_pickle_fp)
     metadata = pickle.load(offset_pickle_fp)
     offset_pickle_fp.close()
+
+    overlay = np.load(offset_path+'OVER.npy')
+    if overlay.shape[0] == 0:
+        metadata['overlay'] = None
+    else:   
+        metadata['overlay'] = uncompress_saturated_overlay(overlay) 
         
     return the_offset, manual_offset, metadata
 
 def write_offset(offset_path, the_offset, manual_offset, metadata):
-    offset_pickle_fp = open(offset_path, 'wb')
+    offset_pickle_fp = open(offset_path+'.pickle', 'wb')
     pickle.dump(OFFSET_FILE_VERSION, offset_pickle_fp)
     pickle.dump(the_offset, offset_pickle_fp)
     pickle.dump(manual_offset, offset_pickle_fp)
@@ -227,41 +234,51 @@ def write_offset(offset_path, the_offset, manual_offset, metadata):
     if 'ext_data' in new_metadata:
         del new_metadata['ext_data']
     if 'ext_overlay' in new_metadata:
-        del new_metadata['ext_overlay'] 
+        del new_metadata['ext_overlay']
+    overlay = np.array([])
+    if 'overlay' in new_metadata and new_metadata['overlay'] is not None:
+        overlay = compress_saturated_overlay(new_metadata['overlay'])
+        del new_metadata['overlay']
     pickle.dump(new_metadata, offset_pickle_fp)    
     offset_pickle_fp.close()
+    np.save(offset_path+'OVER', overlay)
 
 def read_repro(repro_path):
-    if not os.path.exists(repro_path):
-        return None, None, None, None, None
-    repro_pickle_fp = open(repro_path, 'rb')
+    if not os.path.exists(repro_path+'.pickle'):
+        return None
+    repro_pickle_fp = open(repro_path+'.pickle', 'rb')
     repro_data = pickle.load(repro_pickle_fp)
-    repro_good_long_mask = pickle.load(repro_pickle_fp)
-    repro_longitudes = pickle.load(repro_pickle_fp)
-    repro_resolutions = pickle.load(repro_pickle_fp)
-    repro_phase_angles = pickle.load(repro_pickle_fp)
-    repro_emission_angles = pickle.load(repro_pickle_fp)
-    repro_incidence_angles = pickle.load(repro_pickle_fp)
     repro_pickle_fp.close()
         
-    return (repro_data, repro_good_long_mask, repro_longitudes,
-            repro_resolutions, repro_phase_angles, 
-            repro_emission_angles, repro_incidence_angles)
+    return repro_data
     
-def write_repro(repro_path, repro_data, repro_good_long_mask,
-                repro_longitudes, repro_resolutions, repro_phase_angles, 
-                repro_emission_angles, repro_incidence_angles):
-    repro_pickle_fp = open(repro_path, 'wb')
+def write_repro(repro_path, repro_data):
+    repro_pickle_fp = open(repro_path+'.pickle', 'wb')
     pickle.dump(repro_data, repro_pickle_fp)
-    pickle.dump(repro_good_long_mask, repro_pickle_fp)
-    pickle.dump(repro_longitudes, repro_pickle_fp)
-    pickle.dump(repro_resolutions, repro_pickle_fp)
-    pickle.dump(repro_phase_angles, repro_pickle_fp) 
-    pickle.dump(repro_emission_angles, repro_pickle_fp)
-    pickle.dump(repro_incidence_angles, repro_pickle_fp)
     repro_pickle_fp.close()
-    
-    
+
+def read_mosaic_metadata(metadata_path):
+    if not os.path.exists(metadata_path):
+        return None, None, None, None, None, None
+    metadata_pickle_fp = open(metadata_path, 'rb')
+#    metadata_
+
+    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
+     mosaicdata.image_numbers, mosaicdata.ETs, 
+     mosaicdata.emission_angles, mosaicdata.incidence_angles,
+     mosaicdata.phase_angles) = result
+
+    # Save metadata
+    metadata = result[1:] # Everything except img
+    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
+    pickle.dump(metadata, mosaic_metadata_fp)
+    pickle.dump(mosaicdata.obsid_list, mosaic_metadata_fp)
+    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
+    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
+    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
+    mosaic_metadata_fp.close()
+
+
 #def prometheus_close_approach(min_et, min_et_long):
 #    def compute_r(a, e, arg): # Takes argument of pericenter
 #        return a*(1-e**2.) / (1+e*np.cos(arg))

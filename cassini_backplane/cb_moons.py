@@ -109,7 +109,7 @@ def mask_to_array(mask, shape):
     if np.shape(mask) == shape:
         return mask
     
-    new_mask = np.empty(shape)
+    new_mask = np.empty(shape) #XXX dtype
     new_mask[:,:] = mask
     return new_mask
 
@@ -229,14 +229,19 @@ def moons_create_model(obs, body_name, lambert=True,
     set_obs_ext_bp(obs, extend_fov)
     set_obs_ext_data(obs, extend_fov)
     
-    u_min = np.clip(u_min, -extend_fov[0], obs.data.shape[1]-extend_fov[0]-1)
-    u_max = np.clip(u_max, -extend_fov[0], obs.data.shape[1]-extend_fov[0]-1)
-    v_min = np.clip(v_min, -extend_fov[1], obs.data.shape[0]-extend_fov[1]-1)
-    v_max = np.clip(v_max, -extend_fov[1], obs.data.shape[0]-extend_fov[1]-1)
+    u_min -= 1
+    u_max += 1
+    v_min -= 1
+    v_max += 1
+    
+    u_min = np.clip(u_min, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
+    u_max = np.clip(u_max, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
+    v_min = np.clip(v_min, -extend_fov[1], obs.data.shape[0]+extend_fov[1]-1)
+    v_max = np.clip(v_max, -extend_fov[1], obs.data.shape[0]+extend_fov[1]-1)
            
     logger.debug('"%s" image size %d %d extend %d %d subrect U %d to %d '
                  'V %d to %d',
-                 body_name, obs.ext_data.shape[1], obs.data.shape[0],
+                 body_name, obs.data.shape[1], obs.data.shape[0],
                  extend_fov[0], extend_fov[1], u_min, u_max, v_min, v_max)
     
     # Create a Meshgrid that only covers the extent of the body
@@ -267,7 +272,8 @@ def moons_create_model(obs, body_name, lambert=True,
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
-                      obs.data.shape[1]+extend_fov[0]*2))
+                      obs.data.shape[1]+extend_fov[0]*2),
+                     dtype=np.float32)
     model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
           u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
         

@@ -20,13 +20,13 @@ def _normalize(data):
     data_min = np.min(data)
     data_max = np.max(data)
     if data_min == data_max:
-        return np.zeros(data.shape)
+        return np.zeros(data.shape, dtype=np.float32)
     new_data = (data-data_min) / (data_max-data_min)
     new_data[data == 0.] = 0.
     return new_data
 
 def _combine_models(model_list):
-    new_model = np.zeros(model_list[0].shape)
+    new_model = np.zeros(model_list[0].shape, dtype=np.float32)
     for model in model_list:
         new_model += _normalize(model)
 
@@ -43,8 +43,17 @@ def master_find_offset(obs, create_overlay=False,
 #    allow_moons = False
 #    allow_rings = False
     
-    logger = logging.getLogger(LOGGING_NAME+'.find_offset')
-
+    logger = logging.getLogger(LOGGING_NAME+'.master_find_offset')
+    
+    logger.debug('Date %s X %d Y %d TEXP %.3f %s+%s %s SAMPLING %s GAIN %d',
+                 cspice.et2utc(obs.midtime, 'C', 0),
+                 obs.data.shape[1], obs.data.shape[0], obs.texp,
+                 obs.filter1, obs.filter2, obs.detector, obs.sampling,
+                 obs.gain_mode)
+    logger.debug('create_overlay %d, allow_stars %d, allow_saturn %d, allow_moons %d, allow_rings %d',
+                 create_overlay, allow_stars, allow_saturn, allow_moons,
+                 allow_rings)
+    
     extend_fov = MAX_POINTING_ERROR[obs.detector]
     search_size_max_u, search_size_max_v = extend_fov
     
@@ -84,6 +93,16 @@ def master_find_offset(obs, create_overlay=False,
 
     set_obs_ext_corner_bp(obs, extend_fov)
     
+    large_bodies_meta = []
+    for body_name in large_body_dict:
+        large_bodies_meta.append(body_name)
+    metadata['large_bodies'] = large_bodies_meta
+    metadata['body_only'] = False
+    metadata['rings_only'] = False
+    metadata['used_objects_type'] = None
+    metadata['model_contents'] = []
+    metadata['model_overrides_stars'] = False
+    
     entirely_body = False
     if len(large_body_dict) > 0:
         # See if any of the bodies take up the entire image    
@@ -92,6 +111,7 @@ def master_find_offset(obs, create_overlay=False,
             if np.all(body_mask):
                 logger.debug('Image appears to be entirely %s - aborting', body_name) # XXX
                 entirely_body = True
+                metadata['body_only'] = body_name
                 return None, None, metadata
 
         # Now remove the fuzzy bodies - they aren't good to model on
@@ -108,6 +128,8 @@ def master_find_offset(obs, create_overlay=False,
         logger.debug('Image appears to be entirely rings')
         entirely_rings = True
         
+    metadata['rings_only'] = entirely_rings
+    
     #
     # TRY TO FIND THE OFFSET USING STARS ONLY. STARS ARE ALWAYS OUR BEST
     # CHOICE.
@@ -115,81 +137,157 @@ def master_find_offset(obs, create_overlay=False,
     # If the image is entirely a single body or rings then by definition we
     # can't see any stars.
     #
-    
+
+    star_offset_u = None
+    star_offset_v = None
+        
     if allow_stars and not entirely_rings and not entirely_body:
-        offset_u, offset_v, star_metadata = star_find_offset(obs,
-                                                 extend_fov=extend_fov)
+        star_offset_u, star_offset_v, star_metadata = star_find_offset(obs,
+                                                       extend_fov=extend_fov)
         metadata.update(star_metadata)
-        if offset_u is None:
+        if star_offset_u is None:
             logger.debug('Final star offset N/A')
         else:
             logger.debug('Final star offset U,V %d %d good stars %d', 
-                         offset_u, offset_v, star_metadata['num_good_stars'])
-            if create_overlay:
+                         star_offset_u, star_offset_v,
+                         star_metadata['num_good_stars'])
+        if create_overlay:
+            # Make the overlay with no offset because we shift the overlay
+            # later
+            star_overlay = star_make_good_bad_overlay(obs,
+                              star_metadata['full_star_list'], 0, 0,
+                              star_overlay_box_width,
+                              star_overlay_box_thickness,
+                              extend_fov=extend_fov)
+
+    metadata['star_offset_u'] = star_offset_u
+    metadata['star_offset_v'] = star_offset_v
+    
+    set_obs_ext_bp(obs, extend_fov)
+    model_offset_u = None
+    model_offset_v = None
+    
+    #
+    # TRY TO MAKE A MODEL FROM THE MOONS IN THE IMAGE
+    #
+    if (allow_saturn or allow_moons) and not entirely_rings:
+        for body_name in large_body_dict:
+            if body_name == 'SATURN' and not allow_saturn:
+                continue
+            if body_name != 'SATURN' and not allow_moons:
+                continue
+            body = large_body_dict[body_name]
+            
+            model = moons_create_model(obs, body_name, lambert=True,
+                                       u_min=body['u_min'], u_max=body['u_max'],
+                                       v_min=body['v_min'], v_max=body['v_max'],
+                                       extend_fov=extend_fov,
+                                       force_spherical=True,
+                                       use_cartographic=False)
+            if body_name == 'SATURN':
+                saturn_model = model
+            else:
+                moons_model_list.append(model)
+    
+    #
+    # TRY TO MAKE A MODEL FROM THE RINGS IN THE IMAGE
+    #
+    if allow_rings and not entirely_body:
+        rings_model = rings_create_model(obs, extend_fov=extend_fov)
+
+    #
+    # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET
+    #
+    model_list = moons_model_list
+    used_model_str_list = []
+    if len(moons_model_list) > 0:
+        used_model_str_list.append('moons')
+    if saturn_model is not None:
+        model_list = model_list + [saturn_model]
+        used_model_str_list.append('saturn')
+    if rings_model is not None:
+        model_list = model_list + [rings_model]
+        used_model_str_list.append('rings')
+    metadata['model_contents'] = used_model_str_list
+    if len(model_list) == 0:
+        logger.debug('Nothing to model - no offset found')
+    else:
+        final_model = _combine_models(model_list)
+
+        if (rings_model is None and len(moons_model_list) < 3 and
+            float(np.count_nonzero(final_model)) / final_model.size < 0.0005): #XXX FRAC
+            logger.debug('Too few moons, no rings, model has too little coverage')
+            model_offset_u = None
+            model_offset_v = None
+            peak = None
+        else:
+            model_offset_u_list, model_offset_v_list, peak_list = find_correlation_and_offset(
+                                       obs.ext_data,
+                                       final_model, search_size_min=0,
+                                       search_size_max=(search_size_max_u, 
+                                                        search_size_max_v))    
+            model_offset_u = model_offset_u_list[0]
+            model_offset_v = model_offset_v_list[0]
+            peak = peak_list[0]
+        
+        if model_offset_u is None:
+            logger.debug('Final model offset FAILED')
+        else:
+            logger.debug('Final model offset U,V %d %d', model_offset_u, model_offset_v)
+    
+            shifted_model = shift_image(final_model, -model_offset_u, -model_offset_v)
+            shifted_model = unpad_image(shifted_model, extend_fov)
+
+            if (float(np.count_nonzero(shifted_model)) / shifted_model.size < 0.0005): #XXX FRAC
+                logger.debug('Final shifted model has too little coverage - FAILED')
+                model_offset_u = None
+                model_offset_v = None
+                peak = None
+
+    metadata['model_offset_u'] = model_offset_u
+    metadata['model_offset_v'] = model_offset_v
+    
+    # 
+    # FIGURE OUT WHICH RESULT WE BELIEVE
+    #
+    
+    offset_u = star_offset_u
+    offset_v = star_offset_v
+    metadata['used_objects_type'] = 'stars'
+    metadata['model_overrides_stars'] = False
+    if model_offset_u is not None:
+        if star_offset_u is not None:
+            if ((abs(star_offset_u-model_offset_u) > 5 or    # XXX CONSTS
+                 abs(star_offset_v-model_offset_v) > 5) and
+                metadata['num_good_stars'] < 6):
+                logger.debug('Star and model offsets disagree by too much - ignoring star result')
+                star_list = star_metadata['full_star_list']
+                for star in star_list:
+                    star.photometry_confidence = 0. # We changed the offset
+                    star.use_for_correlation = False
                 star_overlay = star_make_good_bad_overlay(obs,
-                                  star_metadata['used_star_list'], 0, 0,
+                                  star_list, 0, 0,
                                   star_overlay_box_width,
                                   star_overlay_box_thickness,
                                   extend_fov=extend_fov)
+                offset_u = model_offset_u
+                offset_v = model_offset_v
+                metadata['model_overrides_stars'] = True
+                metadata['used_objects_type'] = 'model'
+                metadata['num_good_stars'] = 0
+        else:
+            offset_u = model_offset_u
+            offset_v = model_offset_v
+            metadata['used_objects_type'] = 'model'
 
-    # If stars failed (or we need to force the creation of an image overlay for
-    # debugging)...
-    
-    if offset_u is None or create_overlay:
-        set_obs_ext_bp(obs, extend_fov)
+    if offset_u is None:
+        logger.debug('Final combined offset FAILED')
+    else:
+        logger.debug('Final combined offset U,V %d %d', offset_u, offset_v)
 
-        #
-        # TRY TO MAKE A MODEL FROM THE MOONS IN THE IMAGE
-        #
-        if (allow_saturn or allow_moons) and not entirely_rings:
-            for body_name in large_body_dict:
-                if body_name == 'SATURN' and not allow_saturn:
-                    continue
-                if body_name != 'SATURN' and not allow_moons:
-                    continue
-                body = large_body_dict[body_name]
+    metadata['final_offset_u'] = offset_u
+    metadata['final_offset_v'] = offset_v
                 
-                model = moons_create_model(obs, body_name, lambert=True,
-                                           u_min=body['u_min'], u_max=body['u_max'],
-                                           v_min=body['v_min'], v_max=body['v_max'],
-                                           extend_fov=extend_fov,
-                                           force_spherical=True,
-                                           use_cartographic=False)
-                if body_name == 'SATURN':
-                    saturn_model = model
-                else:
-                    moons_model_list.append(model)
-        
-        #
-        # TRY TO MAKE A MODEL FROM THE RINGS IN THE IMAGE
-        #
-        if allow_rings and not entirely_body:
-            rings_model = rings_create_model(obs, extend_fov=extend_fov)
-    
-        #
-        # ONLY TRY TO FIND A NEW OFFSET IF STAR MATCHING FAILED
-        #
-        if offset_u is None:
-            model_list = moons_model_list
-            if saturn_model is not None:
-                model_list = model_list + [saturn_model]
-            if rings_model is not None:
-                model_list = model_list + [rings_model]
-            if len(model_list) == 0:
-                logger.debug('Nothing to model - no offset found')
-            else:
-                final_model = _combine_models(model_list)
-    
-                offset_u, offset_v, peak = find_correlation_and_offset(obs.ext_data,
-                                           final_model, search_size_min=0,
-                                           search_size_max=(search_size_max_u, 
-                                                            search_size_max_v))
-    
-                if offset_u is None:
-                    logger.debug('Final model offset FAILED')
-                else:
-                    logger.debug('Final model offset U,V %d %d', offset_u, offset_v)
-
     if create_overlay:        
         if saturn_model is not None:
             overlay[...,0] = _normalize(saturn_model) * 255

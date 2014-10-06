@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import numpy.ma as ma
 import scipy.interpolate as interp
+import scipy.ndimage.interpolation as ndinterp
 
 import os
 
@@ -25,10 +26,11 @@ RING_OCCULTATION_DATA = Tabulation(RING_OCCULTATION_TABLE.column_dict['RING_INTE
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
 
-DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02
-DEFAULT_REPRO_RADIUS_INNER = 139500.
-DEFAULT_REPRO_RADIUS_OUTER = 141000.
-DEFAULT_REPRO_RADIUS_RESOLUTION = 5.
+FRING_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02
+FRING_DEFAULT_REPRO_RADIUS_INNER = 139500. - 140220.
+FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
+FRING_DEFAULT_REPRO_RADIUS_RESOLUTION = 5.
+FRING_DEFAULT_ZOOM = 5
 
 #===============================================================================
 # 
@@ -108,7 +110,11 @@ def rings_restrict_longitude_radius_to_obs(obs, longitude, radius):
 #===========================================================================
 
 FRING_ROTATING_ET = cspice.utc2et("2007-1-1")
-FRING_MEAN_MOTION = 581.964
+FRING_MEAN_MOTION = 581.964 # deg/day
+FRING_A = 140221.3
+FRING_E = 0.00235
+FRING_W0 = 24.2             # deg
+FRING_DW = 2.70025          # deg/day                
 
 def _compute_longitude_shift(et): 
     return - (FRING_MEAN_MOTION * ((et - FRING_ROTATING_ET) / 86400.)) % 360.
@@ -119,48 +125,47 @@ def rings_fring_inertial_to_corotating(longitude, et):
 def rings_fring_corotating_to_inertial(co_long, et):
     return (co_long - _compute_longitude_shift(et)) % 360.
 
-
 def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
     assert corotating in (None, 'F')
     longitude = np.asarray(longitude)
     radius = np.asarray(radius)
     
-    set_obs_bp(obs)
-    bp = obs.bp
-    data = obs.data
-    
-    bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
-    bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
     if corotating == 'F':
-        bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, obs.midtime)
-        
-    flat_radius = bp_radius.flatten()
-    flat_longitude = bp_longitude.flatten()
-
-    flat_u = np.tile(np.arange(data.shape[1]), data.shape[0])
-    flat_v = np.repeat(np.arange(data.shape[0]), data.shape[1])
-
-    radlon_points = np.empty((longitude.shape[0], 2))
-    radlon_points[:,0] = radius
-    radlon_points[:,1] = longitude
+        longitude = rings_fring_corotating_to_inertial(longitude, obs.midtime)
     
-    interp_u = interp.griddata((flat_radius, flat_longitude), flat_u,
-                               radlon_points, fill_value=1e300)
-    interp_v = interp.griddata((flat_radius, flat_longitude), flat_v,
-                               radlon_points, fill_value=1e300)
+    if len(longitude) == 0:
+        return np.array([]), np.array([])
     
-    return interp_u, interp_v
+    ring_surface = oops.Body.lookup('SATURN_RING_PLANE').surface
+    obs_event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
+                           obs.path, obs.frame)
+    _, obs_event = ring_surface.photon_to_event_by_coords(obs_event, (radius, longitude*oops.RPD))
 
-def rings_generate_longitudes(start_num, end_num,
+    uv = obs.fov.uv_from_los(-obs_event.arr)
+    u, v = uv.to_scalars()
+    
+    return u.vals, v.vals
+
+def rings_generate_longitudes(start_num=0,
+                              end_num=None,
                               longitude_resolution=
-                                    DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+                                    FRING_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+    if end_num is None:
+        end_num = int(360. / longitude_resolution)-1
     return np.arange(start_num, end_num+1) * longitude_resolution
-        
+
+def rings_fring_radius_at_longitude(obs, longitude):        
+    curly_w = FRING_W0 + FRING_DW*obs.midtime/86400.
+
+    radius = (FRING_A * (1-FRING_E**2) /
+              (1 + FRING_E * np.cos((longitude-curly_w)*oops.RPD)))
+
+    return radius
+    
 def rings_fring_longitude_radius(obs, longitude_step=0.01, corotating=False):
     num_longitudes = int(360. / longitude_step)
     longitudes = np.arange(num_longitudes) * longitude_step
-    radius = np.empty(num_longitudes)
-    radius[:] = 140220.
+    radius = rings_fring_radius_at_longitude(obs, longitudes)
     
     return longitudes, radius
 
@@ -176,9 +181,9 @@ def rings_fring_pixels(obs, offset_u=0, offset_v=0):
     
     # This really shouldn't catch much since we already restricted
     # the longitude and radius
-    goodu = np.logical_and(u_pixels >= 0, u_pixels <= obs.data.shape[1]-1)
-    goodv = np.logical_and(v_pixels >= 0, v_pixels <= obs.data.shape[0]-1)
-    good = np.logical_and(goodu, goodv)
+    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= obs.data.shape[1]-1)
+    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= obs.data.shape[0]-1)
+    good = np.logical_and(goodumask, goodvmask)
     
     u_pixels = u_pixels[good]
     v_pixels = v_pixels[good]
@@ -186,10 +191,11 @@ def rings_fring_pixels(obs, offset_u=0, offset_v=0):
     return u_pixels, v_pixels
 
 def rings_fring_reproject(obs, offset_u=0, offset_v=0,
-                  longitude_resolution=DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-                  radius_inner=DEFAULT_REPRO_RADIUS_INNER,
-                  radius_outer=DEFAULT_REPRO_RADIUS_OUTER,
-                  radius_resolution=DEFAULT_REPRO_RADIUS_RESOLUTION):
+                  longitude_resolution=FRING_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+                  radius_inner=FRING_DEFAULT_REPRO_RADIUS_INNER,
+                  radius_outer=FRING_DEFAULT_REPRO_RADIUS_OUTER,
+                  radius_resolution=FRING_DEFAULT_REPRO_RADIUS_RESOLUTION,
+                  zoom=FRING_DEFAULT_ZOOM):
 
     logger = logging.getLogger(LOGGING_NAME+'.rings_fring_reproject')
     
@@ -211,14 +217,14 @@ def rings_fring_reproject(obs, offset_u=0, offset_v=0,
     bp_incidence = (bp.incidence_angle('saturn:ring').vals.astype('float') * 
                     oops.DPR)
     
-    # Convert longitude to co-rotating
-    bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
-                                                      obs.midtime)
-
     # The number of pixels in the final mosaic 
     radius_pixels = int((radius_outer-radius_inner) / radius_resolution)
     longitude_pixels = int(360. / longitude_resolution)
 
+    # Convert longitude to co-rotating
+    bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
+                                                      obs.midtime)
+    
     # Restrict the longitude range for some attempt at efficiency
     min_longitude_pixel = (np.floor(np.min(bp_longitude) / 
                                     longitude_resolution)).astype('int')
@@ -236,60 +242,66 @@ def rings_fring_reproject(obs, offset_u=0, offset_v=0,
     flat_emission = bp_emission.flatten()
     flat_incidence = bp_incidence.flatten()
 
-    # Radius bin numbers
-    rad_bins = np.repeat(np.arange(radius_pixels), num_longitude_pixel)
-    # Actual radius
-    rad_bins_act = rad_bins * radius_resolution + radius_inner
-
     # Longitude bin numbers
     long_bins = np.tile(np.arange(min_longitude_pixel, max_longitude_pixel+1), 
                         radius_pixels)
-    # Actual longitude
+    # Actual longitude (deg)
     long_bins_act = long_bins * longitude_resolution
 
+    # Radius bin numbers
+    rad_bins = np.repeat(np.arange(radius_pixels), num_longitude_pixel)
+    # Actual radius (km)
+    rad_bins_offset = rings_fring_radius_at_longitude(obs,
+                          rings_fring_corotating_to_inertial(long_bins_act, obs.midtime))        
+    rad_bins_act = rad_bins * radius_resolution + radius_inner + rad_bins_offset
+
+    logger.debug('Radius offset range %8.2f %8.2f', np.min(rad_bins_offset),
+                 np.max(rad_bins_offset))
     logger.debug('Radius range %8.2f %8.2f', np.min(flat_radius), 
                  np.max(flat_radius))
     logger.debug('Radius bin range %8.2f %8.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))
-    logger.debug('Longitude range %6.2f %6.2f', np.min(flat_longitude), 
+    logger.debug('Co-rot Longitude range %6.2f %6.2f', np.min(flat_longitude), 
                  np.max(flat_longitude))
-    logger.debug('Longitude bin range %6.2f %6.2f', np.min(long_bins_act),
+    logger.debug('Co-rot Longitude bin range %6.2f %6.2f', np.min(long_bins_act),
                  np.max(long_bins_act))
     logger.debug('Resolution range %7.2f %7.2f', np.min(flat_resolution),
                  np.max(flat_resolution))
     logger.debug('Data range %f %f', np.min(flat_data), np.max(flat_data))
-    
+
     # The flat list of radius/longitude pairs covering the entire image
-    radlon_points = np.empty((rad_bins.shape[0], 2))
-    radlon_points[:,0] = rad_bins_act
-    radlon_points[:,1] = long_bins_act
+#    radlon_points = np.empty((rad_bins.shape[0], 2))
+#    radlon_points[:,0] = rad_bins_act
+#    radlon_points[:,1] = long_bins_act
 
-    # Interpolate data for each radius/longitude bin
-    interp_data = interp.griddata((flat_radius, flat_longitude),
-                                  flat_data,
-                                  radlon_points, fill_value=1e300, method='nearest')
-    interp_res = interp.griddata((flat_radius, flat_longitude), 
-                                 flat_resolution,
-                                 radlon_points, fill_value=1e300)
-    interp_phase = interp.griddata((flat_radius, flat_longitude),
-                                   flat_phase,
-                                   radlon_points, fill_value=1e300)
-    interp_emission = interp.griddata((flat_radius, flat_longitude), 
-                                      flat_emission,
-                                      radlon_points, fill_value=1e300)
-    interp_incidence = interp.griddata((flat_radius, flat_longitude), 
-                                       flat_incidence,
-                                       radlon_points, fill_value=1e300)
+    u_pixels, v_pixels = rings_longitude_radius_to_pixels(obs, long_bins_act,
+                                                          rad_bins_act,
+                                                          corotating='F')
 
-    repro_mosaic = ma.zeros((radius_pixels, longitude_pixels))
+    zoom_data = ndinterp.zoom(obs.data, zoom)
+
+    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= obs.data.shape[1]-1)
+    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= obs.data.shape[0]-1)
+    goodmask = np.logical_and(goodumask, goodvmask)
+    
+    good_u = u_pixels[goodmask]
+    good_v = v_pixels[goodmask]
+    
+    good_rad = rad_bins[goodmask]
+    good_long = long_bins[goodmask]
+    
+    interp_data = zoom_data[(good_v*zoom).astype('int'), (good_u*zoom).astype('int')]
+    
+    repro_mosaic = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
     repro_mosaic.mask = True
-    repro_mosaic[rad_bins,long_bins] = interp_data
-    repro_mosaic = ma.masked_greater(repro_mosaic, 1e100)
+    repro_mosaic[good_rad,good_long] = interp_data
 
-    repro_res = ma.zeros((radius_pixels, longitude_pixels))
+    good_u = good_u.astype('int')
+    good_v = good_v.astype('int')
+    
+    repro_res = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
     repro_res.mask = True
-    repro_res[rad_bins,long_bins] = interp_res
-    repro_res = ma.masked_greater(repro_res, 1e100)
+    repro_res[good_rad,good_long] = bp_resolution[good_v,good_u]
     repro_mean_res = ma.mean(repro_res, axis=0)
     # Mean will mask if ALL radii are masked are a particular longitude
 
@@ -297,33 +309,106 @@ def rings_fring_reproject(obs, offset_u=0, offset_v=0,
     # take one we've already computed.
     good_long_mask = np.logical_not(ma.getmaskarray(repro_mean_res))
 
-    repro_phase = ma.zeros((radius_pixels, longitude_pixels))
-    repro_phase[rad_bins,long_bins] = interp_phase
-    repro_phase = ma.masked_greater(repro_phase, 1e100)
+    repro_phase = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
+    repro_phase.mask = True
+    repro_phase[good_rad,good_long] = bp_phase[good_v,good_u]
     repro_mean_phase = ma.mean(repro_phase, axis=0)
 
-    repro_emission = ma.zeros((radius_pixels, longitude_pixels))
-    repro_emission[rad_bins,long_bins] = interp_emission
-    repro_emission = ma.masked_greater(repro_emission, 1e100)
+    repro_emission = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
+    repro_emission.mask = True
+    repro_emission[good_rad,good_long] = bp_emission[good_v,good_u]
     repro_mean_emission = ma.mean(repro_emission, axis=0)
 
-    repro_incidence = ma.zeros((radius_pixels, longitude_pixels))
-    repro_incidence[rad_bins,long_bins] = interp_incidence
-    repro_incidence = ma.masked_greater(repro_incidence, 1e100)
-    repro_mean_incidence = ma.mean(repro_incidence, axis=0)
+    repro_incidence = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
+    repro_incidence.mask = True
+    repro_incidence[good_rad,good_long] = bp_incidence[good_v,good_u]
+    repro_mean_incidence = ma.mean(repro_incidence) # scalar
 
-    repro_mosaic = repro_mosaic[:,good_long_mask]
+    repro_mosaic = ma.filled(repro_mosaic[:,good_long_mask], 0.)
     repro_mean_res = repro_mean_res[good_long_mask]
     repro_mean_phase = repro_mean_phase[good_long_mask]
     repro_mean_emission = repro_mean_emission[good_long_mask]
-    repro_mean_incidence = repro_mean_incidence[good_long_mask]
 
-    full_longitudes = rings_generate_longitudes(0, longitude_pixels-1,
-                                    longitude_resolution=longitude_resolution)
-    full_longitudes = full_longitudes[good_long_mask]
+    assert ma.count_masked(repro_mean_res) == 0
+    assert ma.count_masked(repro_mean_phase) == 0
+    assert ma.count_masked(repro_mean_emission) == 0
     
     obs.fov = orig_fov
     obs.bp = None
-        
-    return (good_long_mask, full_longitudes, repro_mosaic, repro_mean_res,
-            repro_mean_phase, repro_mean_emission, repro_mean_incidence)
+
+    ret = {}
+    
+    ret['long_mask'] = good_long_mask
+    ret['img'] = repro_mosaic
+    ret['mean_resolution'] = repro_mean_res
+    ret['mean_phase'] = repro_mean_phase
+    ret['mean_emission'] = repro_mean_emission
+    ret['mean_incidence'] = repro_mean_incidence
+    ret['time'] = obs.midtime
+    
+    return ret
+
+def rings_fring_mosaic_init(longitude_resolution=FRING_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+                            radius_inner=FRING_DEFAULT_REPRO_RADIUS_INNER,
+                            radius_outer=FRING_DEFAULT_REPRO_RADIUS_OUTER,
+                            radius_resolution=FRING_DEFAULT_REPRO_RADIUS_RESOLUTION):
+
+    radius_pixels = int((radius_outer-radius_inner) / radius_resolution)
+    longitude_pixels = int(360. / longitude_resolution)
+    
+    ret = {}
+    ret['img'] = np.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
+    ret['long_mask'] = np.zeros(longitude_pixels, dtype=np.bool)
+    ret['mean_resolution'] = np.zeros(longitude_pixels, dtype=np.float32)
+    ret['mean_phase'] = np.zeros(longitude_pixels, dtype=np.float32)
+    ret['mean_emission'] = np.zeros(longitude_pixels, dtype=np.float32)
+    ret['mean_incidence'] = 0.
+    ret['image_number'] = np.zeros(longitude_pixels, dtype=np.int32)
+    ret['time'] = np.zeros(longitude_pixels, dtype=np.float32)
+    
+    return ret
+
+def rings_fring_mosaic_add(mosaic_metadata, repro_metadata, image_number):
+    mosaic_metadata['mean_incidence'] = repro_metadata['mean_incidence']
+    
+    radius_pixels = mosaic_metadata['img'].shape[0]
+    mosaic_good_long = mosaic_metadata['long_mask']
+    
+    repro_good_long = repro_metadata['long_mask']
+    mosaic_good_long = mosaic_metadata['long_mask']
+    
+    mosaic_img = mosaic_metadata['img']
+    repro_img = np.zeros(mosaic_img.shape) 
+    repro_img[:,repro_good_long] = repro_metadata['img']
+    mosaic_res = mosaic_metadata['mean_resolution']
+    repro_res = np.zeros(mosaic_res.shape) + 1e300
+    repro_res[repro_good_long] = repro_metadata['mean_resolution']
+    mosaic_phase = mosaic_metadata['mean_phase']
+    repro_phase = np.zeros(mosaic_phase.shape)
+    repro_phase[repro_good_long] = repro_metadata['mean_phase']
+    mosaic_emission = mosaic_metadata['mean_emission']
+    repro_emission = np.zeros(mosaic_emission.shape)
+    repro_emission[repro_good_long] = repro_metadata['mean_emission']
+    mosaic_image_number = mosaic_metadata['image_number']
+    mosaic_time = mosaic_metadata['time']
+    
+    # Calculate number of good entries and where number is larger than before
+    mosaic_valid_radius_count = radius_pixels-np.sum(mosaic_img == 0., axis=0)
+    new_valid_radius_count = radius_pixels-np.sum(repro_img == 0., axis=0)
+    valid_radius_count_better_mask = new_valid_radius_count > mosaic_valid_radius_count
+    valid_radius_count_equal_mask = new_valid_radius_count == mosaic_valid_radius_count
+    # Calculate where the new resolution is better
+    better_resolution_mask = repro_res < mosaic_res
+    # Final mask for which columns to replace mosaic values
+    good_longitude_mask = np.logical_or(valid_radius_count_better_mask,
+                np.logical_and(valid_radius_count_equal_mask, better_resolution_mask))
+
+    mosaic_good_long[:] = np.logical_or(mosaic_good_long, good_longitude_mask)
+    mosaic_img[:,good_longitude_mask] = repro_img[:,good_longitude_mask]
+    mosaic_res[good_longitude_mask] = repro_res[good_longitude_mask] 
+    mosaic_phase[good_longitude_mask] = repro_phase[good_longitude_mask] 
+    mosaic_emission[good_longitude_mask] = repro_emission[good_longitude_mask] 
+    mosaic_image_number[good_longitude_mask] = image_number 
+    if 'time' in repro_metadata:
+        mosaic_time[good_longitude_mask] = repro_metadata['time']
+     

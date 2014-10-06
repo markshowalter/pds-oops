@@ -2,8 +2,11 @@ import cb_logging
 import logging
 
 import oops
+from starcat.starcatalog import (Star, SCLASS_TO_SURFACE_TEMP, 
+                                 SCLASS_TO_B_MINUS_V)
 
 from cb_util_oops import *
+from cb_config import MIN_DETECTABLE_DN
 
 import numpy as np
 import scipy.constants as const
@@ -727,3 +730,17 @@ def compute_dn_from_star(obs, star):
     dn = _compute_dn_from_spectrum(obs, spectrum_wl, spectrum)
 
     return dn
+
+
+def compute_dimmest_visible_star_vmag(obs):
+    min_dn = MIN_DETECTABLE_DN[obs.detector] # photons / pixel
+    fake_star = Star()
+    fake_star.temperature = SCLASS_TO_SURFACE_TEMP['G0']
+    for mag in np.arange(5., 15., 0.5):
+        fake_star.unique_number = 0
+        fake_star.johnson_mag_v = mag
+        fake_star.johnson_mag_b = mag+SCLASS_TO_B_MINUS_V['G0']
+        dn = compute_dn_from_star(obs, fake_star)
+        if dn < min_dn:
+            return mag # This is conservative
+    return mag

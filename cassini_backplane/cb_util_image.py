@@ -16,6 +16,9 @@ LOGGING_NAME = 'cb.' + __name__
 
 def shift_image(image, offset_u, offset_v):
     """Shift an image by an offset."""
+    if offset_u == 0 and offset_v == 0:
+        return image
+    
     image = np.roll(image, -offset_u, 1)
     image = np.roll(image, -offset_v, 0)
 
@@ -33,13 +36,41 @@ def shift_image(image, offset_u, offset_v):
     return image
 
 def pad_image(image, margin):
-    new_image = np.zeros((image.shape[0]+margin[1]*2,image.shape[1]+margin[0]*2))
+    if margin[0] == 0 and margin[1] == 0:
+        return image
+    new_image = np.zeros((image.shape[0]+margin[1]*2,image.shape[1]+margin[0]*2),
+                         dtype=image.dtype)
     new_image[margin[1]:margin[1]+image.shape[0],
               margin[0]:margin[0]+image.shape[1], ...] = image
     return new_image
 
 def unpad_image(image, margin):
-    return image[margin[1]:-margin[1]+1, margin[0]:-margin[0]+1, ...]
+    if margin[0] == 0 and margin[1] == 0:
+        return image
+    return image[margin[1]:image.shape[0]-margin[1],
+                 margin[0]:image.shape[1]-margin[0], ...]
+
+def compress_saturated_overlay(overlay):
+    # Compress an RGB overlay assuming everything is either 0 or 255
+    ret = np.empty((overlay.shape[0]/2, overlay.shape[1]), dtype=np.uint8)
+    ret[:,:] = ( (overlay[ ::2,:,0] > 127) |
+                ((overlay[ ::2,:,1] > 127) << 1) |
+                ((overlay[ ::2,:,2] > 127) << 2) |
+                ((overlay[1::2,:,0] > 127) << 3) |
+                ((overlay[1::2,:,1] > 127) << 4) |
+                ((overlay[1::2,:,2] > 127) << 5))
+    return ret
+
+def uncompress_saturated_overlay(overlay):
+    ret = np.empty((overlay.shape[0]*2, overlay.shape[1], 3), dtype=np.uint8)
+    ret[ ::2,:,0] =  overlay & 1
+    ret[ ::2,:,1] = (overlay & 2) >> 1
+    ret[ ::2,:,2] = (overlay & 4) >> 2
+    ret[1::2,:,0] = (overlay & 8) >> 3
+    ret[1::2,:,1] = (overlay & 16) >> 4
+    ret[1::2,:,2] = (overlay & 32) >> 5
+    ret *= 255
+    return ret
 
 #===============================================================================
 # 
@@ -47,36 +78,40 @@ def unpad_image(image, margin):
 #
 #===============================================================================
 
-def filter_local_maximum(data, boxsize=11, area_size=3, gaussian_blur=0.):
-    mask = (data == filt.maximum_filter(data, boxsize))
+def filter_local_maximum(data, maximum_boxsize=3, median_boxsize=11,
+                         maximum_blur=0, maximum_tolerance=1.,
+                         minimum_boxsize=0, gaussian_blur=0.):
+    if median_boxsize:
+        flat = data - filt.median_filter(data, median_boxsize)
+    else:
+        flat = data
     
-    flat = data - filt.median_filter(data, boxsize)
+    assert maximum_boxsize > 0
+    max_filter = filt.maximum_filter(data, maximum_boxsize)
+    mask = data == max_filter
     
-    mask = filt.maximum_filter(mask, area_size)
-    
-    filtered = np.zeros(data.shape)
-    
+    if minimum_boxsize:
+        min_filter = filt.minimum_filter(data, minimum_boxsize)
+        tol_mask = data >= min_filter * maximum_tolerance
+        mask = np.logical_and(mask, tol_mask)
+        
+    if maximum_blur:
+        mask = filt.maximum_filter(mask, maximum_blur)
+        
+    filtered = np.zeros(data.shape, dtype=data.dtype)
     filtered[mask] = flat[mask]
     
-#    for x in xrange(area_halfsize+1):
-#        for y in xrange(area_halfsize+1):
-#            nx = data.shape[1]-x
-#            if nx == 0:
-#                nx = data.shape[1]
-#            ny = data.shape[0]-y
-#            if ny == 0:
-#                ny = data.shape[0]
-#            
-#            filtered[y:,x:][mask[:ny,:nx]] = flat[y:,x:][mask[:ny,:nx]]
-#            filtered[y:,:nx][mask[:ny,x:]] = flat[y:,:nx][mask[:ny,x:]]
-#            filtered[:ny,x:][mask[y:,:nx]] = flat[:ny,x:][mask[y:,:nx]]
-#            filtered[:ny,:nx][mask[y:,x:]] = flat[:ny,:nx][mask[y:,x:]]
-            
     if gaussian_blur:
         filtered = filt.gaussian_filter(filtered, gaussian_blur)
 
-    filtered = flat
+    return filtered
+
+def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
+    filtered = data - filt.median_filter(data, median_boxsize)
     
+    if gaussian_blur:
+        filtered = filt.gaussian_filter(filtered, gaussian_blur)
+
     return filtered
 
 

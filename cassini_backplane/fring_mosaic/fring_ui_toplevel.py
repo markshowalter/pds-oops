@@ -41,10 +41,8 @@ class OffRepStatus:
         self.repro_path = None
         # 'X' = No offset file, 'A' = auto offset, 'M' = manual offset, 'AM' = both
         self.offset_status = None 
-        self.offset_version = None
         self.auto_offset = None
         self.manual_offset = None
-        self.fring_version = None
         self.offset_mtime = None
         # 'X' = No repro file, 'R' = OK repro file
         self.repro_status = None
@@ -55,8 +53,8 @@ class GUIData:
         self.obsid_db = None
         self.obsid_selection = None
         self.img_selection = None
-        self.entry_radius_start = None
-        self.entry_radius_end = None
+        self.entry_radius_inner = None
+        self.entry_radius_outer = None
         self.entry_radius_resolution = None
         self.entry_longitude_resolution = None
         
@@ -71,8 +69,8 @@ class GUIData:
 # Returns a database of observation IDs, each entry of which is a list of OffRepStatus
 #
 def get_file_status(guidata):
-    radius_start = guidata.entry_radius_start.value()
-    radius_end = guidata.entry_radius_end.value()
+    radius_inner = guidata.entry_radius_inner.value()
+    radius_outer = guidata.entry_radius_outer.value()
     radius_resolution = guidata.entry_radius_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
     
@@ -89,19 +87,20 @@ def get_file_status(guidata):
         offrepstatus.image_path = image_path
         
         offrepstatus.offset_path = fring_util.offset_path(options, image_path, image_name)
-        offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)
+        offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)+'.pickle'
         
         offrepstatus.offset_status = ''
-        offrepstatus.offset_version = 0
-        if os.path.exists(offrepstatus.offset_path):
-            offrepstatus.offset_mtime = os.stat(offrepstatus.offset_path).st_mtime
+        if (os.path.exists(offrepstatus.offset_path+'.pickle') and
+            os.path.exists(offrepstatus.offset_path+'OVER.npy')):
+            offrepstatus.offset_mtime = os.stat(offrepstatus.offset_path+'.pickle').st_mtime
         else:
             offrepstatus.offset_status = '--'
             offrepstatus.offset_mtime = 1e38
 
         if os.path.exists(offrepstatus.repro_path):
             offrepstatus.repro_mtime = os.stat(offrepstatus.repro_path).st_mtime
-            if not os.path.exists(offrepstatus.offset_path):
+            if (not os.path.exists(offrepstatus.offset_path+'.pickle') or
+                not os.path.exists(offrepstatus.offset_path+'OVER.npy')):
                 offrepstatus.repro_status = 'r'
             elif offrepstatus.offset_mtime > offrepstatus.repro_mtime:
                 offrepstatus.repro_status = 'D'
@@ -143,9 +142,9 @@ def read_one_offset_status(offrepstatus):
     if offrepstatus.offset_status != '':
         return
     
-    (offrepstatus.offset_version, offrepstatus.auto_offset,
-     offrepstatus.manual_offset, offrepstatus.fring_version) = fring_util.read_offset(offrepstatus.offset_path)
-    if offrepstatus.auto_offset != None:
+    (offrepstatus.auto_offset,
+     offrepstatus.manual_offset, offrepstatus.offset_metadata) = fring_util.read_offset(offrepstatus.offset_path)
+    if offrepstatus.auto_offset is not None:
         offrepstatus.offset_status += 'A'
     if offrepstatus.manual_offset != None:
         offrepstatus.offset_status += 'M'
@@ -157,55 +156,51 @@ def read_one_offset_status(offrepstatus):
         offrepstatus.offset_status = ' M'
     
 def get_mosaic_status(cur_obsid, max_repro_mtime):
-    radius_start = guidata.entry_radius_start.value()
-    radius_end = guidata.entry_radius_end.value()
+    radius_inner = guidata.entry_radius_inner.value()
+    radius_outer = guidata.entry_radius_outer.value()
     radius_resolution = guidata.entry_radius_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
     (data_path, metadata_path,
-     large_png_path, small_png_path) = fring_util.mosaic_paths_spec(radius_start, radius_end,
+     png_path) = fring_util.mosaic_paths_spec(radius_inner, radius_outer,
                                                                   radius_resolution,
                                                                   longitude_resolution,
                                                                   cur_obsid)
     if (not os.path.exists(data_path+'.npy') or
         not os.path.exists(metadata_path) or
-        not os.path.exists(large_png_path) or
-        not os.path.exists(small_png_path)):
+        not os.path.exists(png_path)):
         prefix = 'X'
     elif (os.stat(data_path+'.npy').st_mtime < max_repro_mtime or
           os.stat(metadata_path).st_mtime < max_repro_mtime or
-          os.stat(large_png_path).st_mtime < max_repro_mtime or
-          os.stat(small_png_path).st_mtime < max_repro_mtime):
+          os.stat(png_path).st_mtime < max_repro_mtime):
         prefix = 'D'
     else:
         prefix = 'M'
     return prefix
 
 def get_bkgnd_status(cur_obsid):
-    radius_start = guidata.entry_radius_start.value()
-    radius_end = guidata.entry_radius_end.value()
+    radius_inner = guidata.entry_radius_inner.value()
+    radius_outer = guidata.entry_radius_outer.value()
     radius_resolution = guidata.entry_radius_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
 
     (data_path, metadata_path,
-     large_png_path, small_png_path) = fring_util.mosaic_paths_spec(radius_start, radius_end,
+     png_path) = fring_util.mosaic_paths_spec(radius_inner, radius_outer,
                                                                   radius_resolution,
                                                                   longitude_resolution,
                                                                   cur_obsid)
 
     if (not os.path.exists(data_path+'.npy') or
         not os.path.exists(metadata_path) or
-        not os.path.exists(large_png_path) or
-        not os.path.exists(small_png_path)):
+        not os.path.exists(png_path)):
         max_mosaic_mtime = 0
     else:
         max_mosaic_mtime = max(os.stat(data_path+'.npy').st_mtime,
                                os.stat(metadata_path).st_mtime,
-                               os.stat(large_png_path).st_mtime,
-                               os.stat(small_png_path).st_mtime)
+                               os.stat(png_path).st_mtime)
     
     (reduced_mosaic_data_filename, reduced_mosaic_metadata_filename,
      bkgnd_mask_filename, bkgnd_model_filename,
-     bkgnd_metadata_filename) = fring_util.bkgnd_paths_spec(radius_start, radius_end,
+     bkgnd_metadata_filename) = fring_util.bkgnd_paths_spec(radius_inner, radius_outer,
                                                           radius_resolution,
                                                           longitude_resolution,
                                                           cur_obsid)
@@ -275,12 +270,12 @@ def update_one_list(listbox, new_list_entries, char_skip=0):
 # Make command-line arguments 
 #
 def cmdline_arguments(guidata):
-    radius_start = guidata.entry_radius_start.value()
-    radius_end = guidata.entry_radius_end.value()
+    radius_inner = guidata.entry_radius_inner.value()
+    radius_outer = guidata.entry_radius_outer.value()
     radius_resolution = guidata.entry_radius_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
 
-    return ['--radius_start', str(radius_start), '--radius_end', str(radius_end),
+    return ['--radius_inner', str(radius_inner), '--radius_outer', str(radius_outer),
             '--radius_resolution', '%.3f'%radius_resolution,
             '--longitude_resolution', '%.3f'%longitude_resolution]
 
@@ -304,17 +299,9 @@ def offrep_update_img_list(guidata):
     if guidata.obsid_selection != None:
         for data in guidata.obsid_db[guidata.obsid_selection][2]:
             if data.offset_status == '--': # Offset file doesn't exist
-                img_string = '[---------] [%s] %s' % (data.repro_status, data.image_name)
+                img_string = '[--] [%s] %s' % (data.repro_status, data.image_name)
             else:
-                if data.fring_version == 0:
-                    fring_str = 'CTR'
-                elif data.fring_version == 1:
-                    fring_str = 'INN'
-                elif data.fring_version == 2:
-                    fring_str = 'OUT'
-                else:
-                    fring_str = 'XXX'
-                img_string = '[V%d %2s %s] [%s] %s' % (data.offset_version, data.offset_status, fring_str,
+                img_string = '[%2s] [%s] %s' % (data.offset_status, 
                                                        data.repro_status, data.image_name)
             guidata.cur_img_list.append(img_string)
     update_one_list(guidata.listbox_img, guidata.cur_img_list, 16)
@@ -565,14 +552,14 @@ def offrep_setup_obs_lists(guidata, imglist=False):
     
     # Specs for reprojection
     frame_reprojection = Frame(frame_controls)
-    label = Label(frame_reprojection, text='Radius start:')
+    label = Label(frame_reprojection, text='Radius inner:')
     label.pack(side=LEFT)
-    guidata.entry_radius_start = IntegerEntry(frame_reprojection, value=options.radius_start)
-    guidata.entry_radius_start.pack(side=LEFT)
-    label = Label(frame_reprojection, text='Radius end:')
+    guidata.entry_radius_inner = IntegerEntry(frame_reprojection, value=options.radius_inner)
+    guidata.entry_radius_inner.pack(side=LEFT)
+    label = Label(frame_reprojection, text='Radius outer:')
     label.pack(side=LEFT)
-    guidata.entry_radius_end = IntegerEntry(frame_reprojection, value=options.radius_end)
-    guidata.entry_radius_end.pack(side=LEFT)
+    guidata.entry_radius_outer = IntegerEntry(frame_reprojection, value=options.radius_outer)
+    guidata.entry_radius_outer.pack(side=LEFT)
     label = Label(frame_reprojection, text='Radial resolution:')
     label.pack(side=LEFT)
     guidata.entry_radius_resolution = FloatEntry(frame_reprojection, value=options.radius_resolution)
