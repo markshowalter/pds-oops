@@ -10,12 +10,14 @@ import numpy.ma as ma
 import oops.inst.cassini.iss as iss
 from imgdisp import *
 import Tkinter as tk
-from cb_correlate import *
+import cb_correlate 
 from cb_util_flux import *
 from cb_util_filters import *
 from cb_offset import *
 import os
 import cProfile, pstats, StringIO
+
+#cb_correlate.DEBUG_CORRELATE_IMGDISP = True
 
 def process_image(filename, interactive=True):
     print filename
@@ -23,15 +25,8 @@ def process_image(filename, interactive=True):
     obs = iss.from_file(filename)
     print filename, 'DATA SIZE', obs.data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-#    obs.data[:,:900] = 1 # XXX
-#    obs.data[:250,:] = 1
-#    obs.data[850:,:] = 1
-#    obs.data[:,1020:] = 0
-#    obs.data[obs.data > 0.02] = 1
-#    obs.data[obs.data <= 0.02] = 0
-    
     offset_u, offset_v, metadata = master_find_offset(obs, allow_saturn=False,
-                                                      allow_moons=False, allow_stars=True,
+                                                      allow_moons=False, allow_stars=False,
                                                       create_overlay=True)
     
     print 'OFFSET', offset_u, offset_v
@@ -72,7 +67,10 @@ def process_random_file(root_path):
 pr = cProfile.Profile()
 pr.enable()
 
-process_image(r't:\clumps\data\ISS_041RF_FMOVIE002_VIMS\N1552839037_1_CALIB.IMG')
+
+#process_image(r't:\clumps\data\ISS_00ARI_SPKMOVPER001_PRIME\N1479246132_1_CALIB.IMG')
+process_image(r't:\clumps\data\ISS_006RI_LPHRLFMOV001_PRIME\N1492102189_1_CALIB.IMG')
+#process_image(r't:\clumps\data\ISS_041RF_FMOVIE002_VIMS\N1552839037_1_CALIB.IMG')
 
 #process_image(r't:\clumps\data\ISS_006RI_LPHRLFMOV001_PRIME/N1492102189_1_CALIB.IMG')
 #process_image(r't:\clumps\data\ISS_080RF_FMOVIE005_PRIME/N1597392780_1_CALIB.IMG')

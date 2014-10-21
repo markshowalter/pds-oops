@@ -257,26 +257,25 @@ def write_repro(repro_path, repro_data):
     pickle.dump(repro_data, repro_pickle_fp)
     repro_pickle_fp.close()
 
-def read_mosaic_metadata(metadata_path):
-    if not os.path.exists(metadata_path):
-        return None, None, None, None, None, None
-    metadata_pickle_fp = open(metadata_path, 'rb')
-#    metadata_
+#def read_mosaic_metadata(metadata_path):
+#    if not os.path.exists(metadata_path):
+#        return None, None, None, None, None, None
+#    metadata_pickle_fp = open(metadata_path, 'rb')
+#
+#    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
+#     mosaicdata.image_numbers, mosaicdata.ETs, 
+#     mosaicdata.emission_angles, mosaicdata.incidence_angles,
+#     mosaicdata.phase_angles) = result
 
-    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
-     mosaicdata.image_numbers, mosaicdata.ETs, 
-     mosaicdata.emission_angles, mosaicdata.incidence_angles,
-     mosaicdata.phase_angles) = result
-
-    # Save metadata
-    metadata = result[1:] # Everything except img
-    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
-    pickle.dump(metadata, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.obsid_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
-    mosaic_metadata_fp.close()
+#XXX    # Save metadata
+#    metadata = result[1:] # Everything except img
+#    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
+#    pickle.dump(metadata, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.obsid_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
+#    mosaic_metadata_fp.close()
 
 
 #def prometheus_close_approach(min_et, min_et_long):

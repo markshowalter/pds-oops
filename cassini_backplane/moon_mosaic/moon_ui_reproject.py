@@ -10,6 +10,7 @@ import os
 import os.path
 import sys
 import numpy as np
+import numpy.ma as ma
 import subprocess
 import time
 import cspice
@@ -17,15 +18,14 @@ from imgdisp import ImageDisp, FloatEntry, draw_line
 from Tkinter import *
 from PIL import Image
 import oops.inst.cassini.iss as iss
-import fring_util
+import moon_util
 from cb_offset import *
-from cb_rings import *
 import cProfile, pstats, StringIO
 
 #oops.LOGGING.all(True)
 
 python_dir = os.path.split(sys.argv[0])[0]
-python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
+python_reproject_program = os.path.join(python_dir, moon_util.PYTHON_MOON_REPROJECT)
 
 python_filename = sys.argv[0]
 
@@ -35,69 +35,15 @@ cmd_line = sys.argv[1:]
 if len(cmd_line) == 0:
     cmd_line = [
 #                '-a',
-                '--max-subprocesses', '3',
+#                '--max-subprocesses', '3',
 
-#                '--start-obsid', 'ISS_036RF_FMOVIE001_VIMS',
-#                '--start-obsid', 'ISS_085RF_FMOVIE003_PRIME_1',
-#                '--start-obsid', 'ISS_106RF_FMOVIE002_PRIME',
-#                '--start-obsid', 'ISS_041RF_FMOVIE001_VIMS',
-#                'ISS_041RF_FMOVIE002_VIMS/N1552810957_1', # Fails - stars in F Ring
-#                'ISS_036RF_FMOVIE001_VIMS/N1545563750_1', # Fails - offset too large
-#                'ISS_036RF_FMOVIE001_VIMS',
-#                'ISS_041RF_FMOVIE002_VIMS',
-#                'ISS_106RF_FMOVIE002_PRIME',
-#                'ISS_132RI_FMOVIE001_VIMS',
-
-'ISS_080RF_FMOVIE005_PRIME',
-#'ISS_098RI_TMAPN30LP001_CIRS',
-#'ISS_072RI_SPKHRLPDF001_PRIME',
-#'ISS_105RI_TDIFS20HP001_CIRS',
-#'ISS_105RI_TMAPN45LP001_CIRS',
-#'ISS_006RI_LPHRLFMOV001_PRIME',
-#'ISS_081RI_FMOVIE106_VIMS',
-#'ISS_091RI_APOMOSL109_VIMS',
-#'ISS_096RF_FMOVIE004_PRIME',
-#'ISS_109RI_TDIFS20HP001_CIRS',
-#'ISS_112RF_FMOVIE002_PRIME',
-#'ISS_132RI_FMOVIE001_VIMS',
-
-#'ISS_080RF_FMOVIE005_PRIME/N1597390953_1',
-
-#'ISS_051RI_LPMRDFMOV001_PRIME',
-#'ISS_059RF_FMOVIE002_VIMS',
-
-#'ISS_000RI_SATSRCHAP001_PRIME',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479252612_1',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479201492_1',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479246132_1',
-#'ISS_006RI_LPHRLFMOV001_PRIME/N1492102189_1',
-#'--no-allow-stars',
-#'--no-allow-moons',
-
-#'ISS_029RF_FMOVIE002_VIMS',
-#'ISS_081RI_FMOVIE106_VIMS',
-#'ISS_075RB_BMOVIE4001_VIMS',
-#'ISS_096RF_FMOVIE004_PRIME',
-#'ISS_112RF_FMOVIE002_PRIME',
-#'ISS_111RF_FMOVIE002_PRIME',
-#'ISS_115RF_FMOVIEEQX001_PRIME',
-
-#'ISS_043RF_FMOVIE001_VIMS/N1555595413_1',
-#'ISS_043RF_FMOVIE001_VIMS/N1555588813_1',
-#'ISS_081RI_FMOVIE106_VIMS/N1597902245_1',
-#'ISS_081RI_FMOVIE106_VIMS/N1597904975_1',
-#'ISS_112RF_FMOVIE002_PRIME/N1623341484_1',
-#'ISS_096RF_FMOVIE004_PRIME/N1607637941_1',
-#'ISS_096RF_FMOVIE004_PRIME/N1607657381_1',
-#'ISS_094RF_FMOVIE001_PRIME/N1606005062_1',
-#'ISS_051RI_LPMRDFMOV001_PRIME/N1571435347_1',
-
+'MIMAS',
                 '--allow-exception',
 #                '--no-auto-offset',
-                 '--recompute-auto-offset',
+#                 '--recompute-auto-offset',
                  '--recompute-reproject',
 #                 '--no-reproject',
-#                '--display-offset-reproject',
+                '--display-offset-reproject',
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
@@ -124,8 +70,8 @@ parser.add_option('--allow-exception', dest='allow_exception',
 parser.add_option('--profile', dest='profile',
                   action='store_true', default=False,
                   help="Do performance profiling")
-parser.add_option('--start-obsid', dest='start_obsid',
-                  default='', help='The first obsid to process')
+parser.add_option('--start-body_name', dest='start_body_name',
+                  default='', help='The first body_name to process')
 parser.add_option('--max-subprocesses', dest='max_subprocesses',
                   type='int', default=0,
                   help="Fork a subprocess for each file")
@@ -172,7 +118,7 @@ parser.add_option('--recompute-reproject', dest='recompute_reproject',
                   action='store_true', default=False,
                   help='Recompute the reprojection even if we already have one that is current')
 
-fring_util.add_parser_options(parser)
+moon_util.add_parser_options(parser)
 
 options, args = parser.parse_args(cmd_line)
 
@@ -186,18 +132,16 @@ class OffRepDispData:
         self.entry_x_offset = None
         self.entry_y_offset = None
         self.off_longitudes = None
-        self.off_radii = None
-        self.label_off_inertial_longitude = None
-        self.label_off_corot_longitude = None
-        self.label_off_radius = None
+        self.off_latitudes = None
+        self.label_off_longitude = None
+        self.label_off_latitude = None
         self.imdisp_repro = None
         self.repro_overlay = None
-        self.label_inertial_longitude = None
-        self.label_corot_longitude = None
-        self.label_radius = None
+        self.label_longitude = None
+        self.label_latitude = None
         self.repro_longitudes = None
         self.repro_phase_angles = None
-        self.repro_incidence_angle = None
+        self.repro_incidence_angles = None
         self.repro_emission_angles = None
         self.repro_resolutions = None
         
@@ -209,9 +153,7 @@ class OffRepDispData:
 #####################################################################################
 
 def collect_cmd_line():
-    ret = ['--radius_inner', str(options.radius_inner)]
-    ret += ['--radius_outer', str(options.radius_outer)]
-    ret += ['--radius_resolution', str(options.radius_resolution)]
+    ret += ['--latitude_resolution', str(options.latitude_resolution)]
     ret += ['--longitude_resolution', str(options.longitude_resolution)]
     if options.verbose:
         ret += ['--verbose']
@@ -265,7 +207,7 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     # Output file: offset_path(<IMAGE>_CALIB.IMG.FOFFSET)
 
     if options.verbose:
-        print '** Find offset', offrepdata.obsid, '/', offrepdata.image_name, '-',
+        print '** Find offset', offrepdata.body_name, '/', offrepdata.image_name, '-',
     
     if option_no:  # Just don't do anything - we hope you know what you're doing!
         if options.verbose:
@@ -278,7 +220,7 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
                 print 'Ignored because offset file already exists'
             return # Offset file already exists, don't update
         # Save the manual offset!
-        trash1, offrepdata.manual_offset, trash2 = fring_util.read_offset(offrepdata.offset_path)
+        trash1, offrepdata.manual_offset, trash2 = moon_util.read_offset(offrepdata.offset_path)
         time_offset = os.stat(offrepdata.offset_path+'.pickle').st_mtime
     else:
         time_offset = 0
@@ -327,7 +269,7 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     if offset_u is not None and options.verbose:
         print 'FOUND %6.2f, %6.2f' % (offrepdata.the_offset[0], offrepdata.the_offset[1])
     if save_results:
-        fring_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
+        moon_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
                               offrepdata.off_metadata)
 
 
@@ -339,39 +281,47 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
 
 def _update_offrepdata_repro(offrepdata, metadata):
     if metadata is None:
-        offrepdata.repro_long_mask = None
+        offrepdata.repro_good_mask = None
+        offrepdata.repro_good_lat_mask = None
+        offrepdata.repro_good_long_mask = None
         offrepdata.repro_img = None
         offrepdata.repro_longitudes = None
         offrepdata.repro_resolutions = None
         offrepdata.repro_phase_angles = None
         offrepdata.repro_emission_angles = None
-        offrepdata.repro_incidence_angle = None
+        offrepdata.repro_incidence_angles = None
         offrepdata.repro_time = None
     else:
-        offrepdata.repro_long_mask = metadata['long_mask']
+        offrepdata.repro_good_mask = metadata['good_mask']
+        offrepdata.repro_good_lat_mask = metadata['good_lat_mask']
+        offrepdata.repro_good_long_mask = metadata['good_long_mask']
         offrepdata.repro_img = metadata['img']
-        offrepdata.repro_resolutions = metadata['mean_resolution']
-        offrepdata.repro_phase_angles = metadata['mean_phase']
-        offrepdata.repro_emission_angles = metadata['mean_emission']
-        offrepdata.repro_incidence_angle = metadata['mean_incidence']
+        offrepdata.repro_resolutions = metadata['resolution']
+        offrepdata.repro_phase_angles = metadata['phase']
+        offrepdata.repro_emission_angles = metadata['emission']
+        offrepdata.repro_incidence_angles = metadata['incidence']
         offrepdata.repro_time = metadata['time']
         
-        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
-        offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_long_mask]
+        full_latitudes = moons_generate_latitudes(latitude_resolution=options.latitude_resolution)
+        offrepdata.repro_latitudes = full_latitudes[offrepdata.repro_good_lat_mask]
+        full_longitudes = moons_generate_longitudes(longitude_resolution=options.longitude_resolution)
+        offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_good_long_mask]
 
 def _write_repro_data(offrepdata):
     metadata = None
     if offrepdata.repro_img is not None:
         metadata = {}
         metadata['img'] = offrepdata.repro_img
-        metadata['long_mask'] = offrepdata.repro_long_mask
-        metadata['mean_resolution'] = offrepdata.repro_resolutions
-        metadata['mean_phase'] = offrepdata.repro_phase_angles
-        metadata['mean_emission'] = offrepdata.repro_emission_angles
-        metadata['mean_incidence'] = offrepdata.repro_incidence_angle
+        metadata['good_lat_mask'] = offrepdata.repro_good_lat_mask
+        metadata['good_long_mask'] = offrepdata.repro_good_long_mask
+        metadata['good_mask'] = offrepdata.repro_good_mask
+        metadata['resolution'] = offrepdata.repro_resolutions
+        metadata['phase'] = offrepdata.repro_phase_angles
+        metadata['emission'] = offrepdata.repro_emission_angles
+        metadata['incidence'] = offrepdata.repro_incidence_angles
         metadata['time'] = offrepdata.repro_time
     
-    fring_util.write_repro(offrepdata.repro_path, metadata)
+    moon_util.write_repro(offrepdata.repro_path, metadata)
     
 def _reproject_one_image(offrepdata):
     if offrepdata.obs is None:
@@ -392,10 +342,10 @@ def _reproject_one_image(offrepdata):
         return
     
     try:
-        ret = rings_fring_reproject(obs, offset_u, offset_v,
-                                    options.longitude_resolution,
-                                    options.radius_inner, options.radius_outer,
-                                    options.radius_resolution)
+        ret = moons_reproject(obs, offrepdata.body_name,
+                              offset_u, offset_v,
+                              options.latitude_resolution,
+                              options.longitude_resolution)
     except:
         if options.verbose:
             print 'REPROJECTION FAILED'
@@ -412,7 +362,7 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
     # Output file: repro_path (<IMAGE>_<RES_DATA>_REPRO.IMG)
 
     if options.verbose:
-        print '** Reproject', offrepdata.obsid, '/', offrepdata.image_name, '-',
+        print '** Reproject', offrepdata.body_name, '/', offrepdata.image_name, '-',
     
     if offrepdata.subprocess_run:
         if options.verbose:
@@ -446,7 +396,7 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
         return
 
     (offrepdata.the_offset, offrepdata.manual_offset,
-     offrepdata.off_metadata) = fring_util.read_offset(offrepdata.offset_path)
+     offrepdata.off_metadata) = moon_util.read_offset(offrepdata.offset_path)
     
     if offrepdata.the_offset is None and offrepdata.manual_offset is None:
         if options.verbose:
@@ -477,10 +427,10 @@ def draw_repro_overlay(offrepdata, offrepdispdata):
     if offrepdata.repro_img is None:
         return
     repro_overlay = np.zeros(offrepdata.repro_img.shape + (3,))
-    y = int(float(options.radius_outer)/(options.radius_outer-options.radius_inner)*
-            offrepdata.repro_img.shape[0])
-    if 0 <= y < repro_overlay.shape[0]:
-        repro_overlay[y, :, 0] = 1
+#    y = int(float(options.radius_outer)/(options.radius_outer-options.radius_inner)*
+#            offrepdata.repro_img.shape[0])
+#    if 0 <= y < repro_overlay.shape[0]:
+#        repro_overlay[y, :, 0] = 1
     
     offrepdispdata.imdisp_repro.set_overlay(0, repro_overlay)
 
@@ -529,28 +479,28 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
             y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
         offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
     
-    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
-    x_pixels = x_pixels.astype('int')
-    y_pixels = y_pixels.astype('int')
-    offset_overlay[y_pixels, x_pixels, 2] = 255
-
-    if offrepdata.the_offset is not None:
-        # Auto offset - red
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.the_offset[0],
-                                        offset_v=offrepdata.the_offset[1])
-        x_pixels = x_pixels.astype('int')
-        y_pixels = y_pixels.astype('int')
-        offset_overlay[y_pixels, x_pixels, 0] = 255
-
-    if offrepdata.manual_offset is not None:
-        # Auto offset - green
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.manual_offset[0],
-                                        offset_v=offrepdata.manual_offset[1])
-        x_pixels = x_pixels.astype('int')
-        y_pixels = y_pixels.astype('int')
-        offset_overlay[y_pixels, x_pixels, 1] = 255
+#XXX    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
+#    x_pixels = x_pixels.astype('int')
+#    y_pixels = y_pixels.astype('int')
+#    offset_overlay[y_pixels, x_pixels, 2] = 255
+#
+#    if offrepdata.the_offset is not None:
+#        # Auto offset - red
+#        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+#                                        offset_u=offrepdata.the_offset[0],
+#                                        offset_v=offrepdata.the_offset[1])
+#        x_pixels = x_pixels.astype('int')
+#        y_pixels = y_pixels.astype('int')
+#        offset_overlay[y_pixels, x_pixels, 0] = 255
+#
+#    if offrepdata.manual_offset is not None:
+#        # Auto offset - green
+#        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+#                                        offset_u=offrepdata.manual_offset[0],
+#                                        offset_v=offrepdata.manual_offset[1])
+#        x_pixels = x_pixels.astype('int')
+#        y_pixels = y_pixels.astype('int')
+#        offset_overlay[y_pixels, x_pixels, 1] = 255
 
     offrepdispdata.imdisp_offset.set_overlay(0, offset_overlay)
     offrepdispdata.imdisp_offset.pack(side=LEFT)
@@ -568,11 +518,15 @@ def callback_offset(x, y, offrepdata, offrepdispdata):
         return
     
     if offrepdispdata.off_longitudes is not None:
-        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%offrepdispdata.off_longitudes[y,x]))
-        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
-                                                                                                            offrepdata.obs.midtime)))
-    if offrepdispdata.off_radii is not None:
-        offrepdispdata.label_off_radius.config(text=('%7.3f'%offrepdispdata.off_radii[y,x]))
+        if offrepdispdata.off_longitudes[y,x] == ma.masked:
+            offrepdispdata.label_off_longitude.config(text=('N/A'))
+        else:
+            offrepdispdata.label_off_longitude.config(text=('%7.3f'%offrepdispdata.off_longitudes.vals[y,x]))
+    if offrepdispdata.off_latitudes is not None:
+        if offrepdispdata.off_latitudes[y,x] == ma.masked:
+            offrepdispdata.label_off_latitude.config(text=('N/A'))
+        else:
+            offrepdispdata.label_off_latitude.config(text=('%7.3f'%offrepdispdata.off_latitudes.vals[y,x]))
 
 
 # "Manual from auto" button pressed 
@@ -625,11 +579,12 @@ def command_recalc_offset(offrepdata, offrepdispdata):
 def refresh_repro_img(offrepdata, offrepdispdata):
     _reproject_one_image(offrepdata)
 
+    offrepdispdata.repro_latitudes = offrepdata.repro_latitudes
     offrepdispdata.repro_longitudes = offrepdata.repro_longitudes
     offrepdispdata.repro_resolutions = offrepdata.repro_resolutions
     offrepdispdata.repro_phase_angles = offrepdata.repro_phase_angles
     offrepdispdata.repro_emission_angles = offrepdata.repro_emission_angles
-    offrepdispdata.repro_incidence_angle = offrepdata.repro_incidence_angle
+    offrepdispdata.repro_incidence_angles = offrepdata.repro_incidence_angles
 
 #    temp_img = None
 #    if offrepdata.repro_img is not None:
@@ -647,7 +602,7 @@ def command_commit_changes(offrepdata, offrepdispdata):
     else:
         offrepdata.manual_offset = (float(offrepdispdata.entry_x_offset.get()),
                                     float(offrepdispdata.entry_y_offset.get()))
-    fring_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
+    moon_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
                           offrepdata.off_metadata)
     _write_repro_data(offrepdata)
 
@@ -655,16 +610,14 @@ def command_commit_changes(offrepdata, offrepdispdata):
 def setup_offset_reproject_window(offrepdata, offrepdispdata):
     set_obs_bp(offrepdata.obs)
     
-    offrepdispdata.off_radii = offrepdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
-    offrepdispdata.off_longitudes = rings_fring_inertial_to_corotating(offrepdispdata.off_longitudes,
-                                                                       offrepdata.obs.midtime)
+    offrepdispdata.off_latitudes = offrepdata.obs.bp.latitude(offrepdata.body_name, lat_type='centric') * oops.DPR
+    offrepdispdata.off_longitudes = offrepdata.obs.bp.longitude(offrepdata.body_name, direction='east') * oops.DPR
     
     offrepdispdata.toplevel = Tk()
-    offrepdispdata.toplevel.title(offrepdata.obsid + ' / ' + offrepdata.image_name)
+    offrepdispdata.toplevel.title(offrepdata.body_name + ' / ' + offrepdata.image_name)
     frame_toplevel = Frame(offrepdispdata.toplevel)
     
-    # The original image and overlaid ring curves
+    # The original image 
     offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(512,512),
                                              allow_enlarge=True, auto_update=True)
 
@@ -770,23 +723,17 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     button_commit_changes.grid(row=gridrow, column=gridcolumn+1)
     gridrow += 1
     
-    # Display for longitude and radius
-    label = Label(img_addon_control_frame, text='Inertial Long:')
+    # Display for longitude and latitude
+    label = Label(img_addon_control_frame, text='Latitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_off_inertial_longitude = Label(img_addon_control_frame, text='')
-    offrepdispdata.label_off_inertial_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    offrepdispdata.label_off_latitude = Label(img_addon_control_frame, text='')
+    offrepdispdata.label_off_latitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
 
-    label = Label(img_addon_control_frame, text='Co-Rot Long:')
+    label = Label(img_addon_control_frame, text='Longitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_off_corot_longitude = Label(img_addon_control_frame, text='')
-    offrepdispdata.label_off_corot_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Radius:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_off_radius = Label(img_addon_control_frame, text='')
-    offrepdispdata.label_off_radius.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    offrepdispdata.label_off_longitude = Label(img_addon_control_frame, text='')
+    offrepdispdata.label_off_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
 
     callback_offset_command = lambda x, y, offrepdata=offrepdata, offrepdispdata=offrepdispdata: callback_offset(x, y, offrepdata, offrepdispdata)
@@ -808,22 +755,16 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     offrepdispdata.label_date.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
     
-    label = Label(repro_addon_control_frame, text='Inertial Long:')
+    label = Label(repro_addon_control_frame, text='Latitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_inertial_longitude = Label(repro_addon_control_frame, text='')
-    offrepdispdata.label_inertial_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    offrepdispdata.label_latitude = Label(repro_addon_control_frame, text='')
+    offrepdispdata.label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
 
-    label = Label(repro_addon_control_frame, text='Co-Rot Long:')
+    label = Label(repro_addon_control_frame, text='Longitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_corot_longitude = Label(repro_addon_control_frame, text='')
-    offrepdispdata.label_corot_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(repro_addon_control_frame, text='Radius:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offrepdispdata.label_radius = Label(repro_addon_control_frame, text='')
-    offrepdispdata.label_radius.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    offrepdispdata.label_longitude = Label(repro_addon_control_frame, text='')
+    offrepdispdata.label_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
 
     label = Label(repro_addon_control_frame, text='Phase:')
@@ -864,10 +805,10 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
 def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
                              option_invalid_reproject, do_mainloop=True):
     if options.verbose:
-        print '** Display', offrepdata.obsid, '/', offrepdata.image_name
+        print '** Display', offrepdata.body_name, '/', offrepdata.image_name
     if offrepdata.off_metadata is None:
         (offrepdata.the_offset, offrepdata.manual_offset,
-         offrepdata.off_metadata) = fring_util.read_offset(offrepdata.offset_path)
+         offrepdata.off_metadata) = moon_util.read_offset(offrepdata.offset_path)
 
     if option_invalid_offset and (offrepdata.the_offset is not None or offrepdata.manual_offset is not None):
         if options.verbose:
@@ -882,7 +823,7 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
     img_max_y = offrepdata.obs.data.shape[1]-1
 
     if offrepdata.repro_img is None:
-        ret = fring_util.read_repro(offrepdata.repro_path)
+        ret = moon_util.read_repro(offrepdata.repro_path)
         _update_offrepdata_repro(offrepdata, ret)
  
     if offrepdata.repro_img is not None:
@@ -890,11 +831,12 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
     else:
         offrepdispdata.repro_overlay = None
         
+    offrepdispdata.repro_latitudes = offrepdata.repro_latitudes
     offrepdispdata.repro_longitudes = offrepdata.repro_longitudes
     offrepdispdata.repro_resolutions = offrepdata.repro_resolutions
     offrepdispdata.repro_phase_angles = offrepdata.repro_phase_angles
     offrepdispdata.repro_emission_angles = offrepdata.repro_emission_angles
-    offrepdispdata.repro_incidence_angle = offrepdata.repro_incidence_angle
+    offrepdispdata.repro_incidence_angles = offrepdata.repro_incidence_angles
     
     setup_offset_reproject_window(offrepdata, offrepdispdata)
     draw_repro_overlay(offrepdata, offrepdispdata)
@@ -907,16 +849,12 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     if offrepdispdata.repro_longitudes is None:
         return
 
-    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%offrepdispdata.repro_longitudes[x]))
-    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
-                                                                                                    offrepdata.obs.midtime)))
-    
-    radius = y*options.radius_resolution+options.radius_inner
-    offrepdispdata.label_radius.config(text = '%7.3f'%radius)
-    offrepdispdata.label_resolution.config(text=('%7.3f'%offrepdispdata.repro_resolutions[x]))
-    offrepdispdata.label_phase.config(text=('%7.3f'%offrepdispdata.repro_phase_angles[x]))
-    offrepdispdata.label_emission.config(text=('%7.3f'%offrepdispdata.repro_emission_angles[x]))
-    offrepdispdata.label_incidence.config(text=('%7.3f'%offrepdispdata.repro_incidence_angle))
+    offrepdispdata.label_latitude.config(text=('%7.3f'%offrepdispdata.repro_latitudes[y]))
+    offrepdispdata.label_longitude.config(text=('%7.3f'%offrepdispdata.repro_longitudes[x]))
+    offrepdispdata.label_resolution.config(text=('%7.3f'%offrepdispdata.repro_resolutions[y,x]))
+    offrepdispdata.label_phase.config(text=('%7.3f'%offrepdispdata.repro_phase_angles[y,x]))
+    offrepdispdata.label_emission.config(text=('%7.3f'%offrepdispdata.repro_emission_angles[y,x]))
+    offrepdispdata.label_incidence.config(text=('%7.3f'%offrepdispdata.repro_incidence_angles[y,x]))
 
 
 #####################################################################################
@@ -929,27 +867,27 @@ subprocess_list = []
 
 offrepdispdata = OffRepDispData()
 
-found_obsid = False
-cur_obsid = None
-obsid_list = []
+found_body_name = False
+cur_body_name = None
+body_name_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
-#    if obsid == 'ISS_006RI_LPHRLFMOV001_PRIME':
+for body_name, image_name, image_path in moon_util.enumerate_files(options, args, '_CALIB.IMG'):
+#    if body_name == 'ISS_006RI_LPHRLFMOV001_PRIME':
 #        continue
-    if options.start_obsid != '' and not found_obsid:
-        if obsid != options.start_obsid:
+    if options.start_body_name != '' and not found_body_name:
+        if body_name != options.start_body_name:
             continue
-        found_obsid = True
+        found_body_name = True
             
-    offrepdata = fring_util.OffRepData()
-    offrepdata.obsid = obsid
+    offrepdata = moon_util.OffRepData()
+    offrepdata.body_name = body_name
     offrepdata.image_name = image_name
     offrepdata.image_path = image_path
     
-    offrepdata.offset_path = fring_util.offset_path(options, image_path, image_name)
-    offrepdata.repro_path = fring_util.repro_path(options, image_path, image_name)
+    offrepdata.offset_path = moon_util.offset_path(options, image_path, image_name)
+    offrepdata.repro_path = moon_util.repro_path(options, image_path, image_name)
 
     offrepdata.subprocess_run = False
 
@@ -966,9 +904,9 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '
                         options.recompute_reproject)
 
     if options.max_subprocesses and offrepdata.subprocess_run:
-        run_and_maybe_wait([fring_util.PYTHON_EXE, python_reproject_program] + 
+        run_and_maybe_wait([moon_util.PYTHON_EXE, python_reproject_program] + 
                            collect_cmd_line() + 
-                           [offrepdata.obsid+'/'+offrepdata.image_name])
+                           [offrepdata.body_name+'/'+offrepdata.image_name])
     
     # Display offset and reprojection
     if options.display_offset_reproject or options.display_invalid_offset or options.display_invalid_reproject:

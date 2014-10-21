@@ -1,6 +1,10 @@
+import cb_logging
+import logging
+
 import numpy as np
 import numpy.ma as ma
 import scipy.interpolate as interp
+import scipy.ndimage.interpolation as ndinterp
 import scipy.fftpack as fftpack
 import scipy.ndimage.filters as filt
 import os
@@ -10,9 +14,16 @@ import oops.inst.cassini.iss as iss
 import imgdisp
 import Tkinter as tk
 import cProfile, pstats, StringIO
+from cb_correlate import *
+from cb_config import MAX_POINTING_ERROR
+from cb_moons import moons_create_model
+from cb_util_image import *
+from cb_util_oops import *
 
-LONGITUDE_RES = 0.1
-LATITUDE_RES = 0.1
+LOGGING_NAME = 'cb.' + __name__
+
+LONGITUDE_RESOLUTION = 0.1
+LATITUDE_RESOLUTION = 0.1
 
 MIN_LAMBERT = 0.2
 MAX_EMISSION = 60.
@@ -24,16 +35,16 @@ MIMAS_FILES = [
 #        'COISS_2060/data/1644743986_1644781734/N1644781312_1.IMG',
 #        'COISS_2060/data/1644743986_1644781734/N1644781481_6.IMG',
 #        'COISS_2060/data/1644781751_1644850420/N1644782658_1.IMG',
-        'COISS_2060/data/1644781751_1644850420/N1644783429_1.IMG',
+#        'COISS_2060/data/1644781751_1644850420/N1644783429_1.IMG',
 #        'COISS_2060/data/1644781751_1644850420/N1644784329_1.IMG'       
                
 'COISS_2008/data/1484506648_1484573247/N1484530421_1.IMG',
-'COISS_2008/data/1484506648_1484573247/N1484535522_1.IMG',
-'COISS_2011/data/1492102078_1492217636/N1492217357_1.IMG',
-'COISS_2011/data/1492217706_1492344437/N1492221997_1.IMG',
-'COISS_2014/data/1501618408_1501647096/N1501630117_1.IMG',
-'COISS_2014/data/1501618408_1501647096/N1501637285_1.IMG',
-'COISS_2014/data/1501618408_1501647096/N1501640595_1.IMG',
+#'COISS_2008/data/1484506648_1484573247/N1484535522_1.IMG',
+#'COISS_2011/data/1492102078_1492217636/N1492217357_1.IMG',
+#'COISS_2011/data/1492217706_1492344437/N1492221997_1.IMG',
+#'COISS_2014/data/1501618408_1501647096/N1501630117_1.IMG',
+#'COISS_2014/data/1501618408_1501647096/N1501637285_1.IMG',
+#'COISS_2014/data/1501618408_1501647096/N1501640595_1.IMG',
 'COISS_2014/data/1501618408_1501647096/N1501640835_1.IMG',
 'COISS_2014/data/1501618408_1501647096/N1501646143_1.IMG',
 'COISS_2014/data/1501618408_1501647096/N1501647096_1.IMG',
@@ -85,306 +96,252 @@ def test_corr():
     print offset_u, offset_v
     assert False
 
-def correlate2d(image, model, normalize=False, retile=False):
-    """Correlate the image with the model; normalization to [-1,1] is optional.
+def _model_filter(image):
+    return filter_sub_median(image, median_boxsize=0, gaussian_blur=1.2)
 
-    Inputs:
-        image              The image.
-        model              The model to correlation against image.
-        normalize          If True, normalize the correlation to 1.
-        retile             If True, the resulting correlation matrix is
-                           shifted by 1/2 along each dimension so that
-                           (0,0) is now in the center.
-                       
-    Returns:
-        The 2-D correlation matrix.
-    """
-    image_fft = fftpack.fft2(image)
-    model_fft = fftpack.fft2(model)
-    corr = np.real(fftpack.ifft2(image_fft * np.conj(model_fft)))
-
-    if normalize:
-        norm_amt = np.sqrt(np.sum(image**2) * np.sum(model**2))
-        if norm_amt != 0:
-            corr /= norm_amt 
+def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude):
+    latitude = np.asarray(latitude)
+    longitude = np.asarray(longitude)
     
-    if retile:
-        y = corr.shape[0] // 2
-        x = corr.shape[1] // 2
-        offset_image = np.empty(corr.shape)
-        offset_image[ 0:y, 0:x] = corr[-y: ,-x: ]
-        offset_image[ 0:y,-x: ] = corr[-y: , 0:x]
-        offset_image[-y: , 0:x] = corr[ 0:y,-x: ]
-        offset_image[-y: ,-x: ] = corr[ 0:y, 0:x]
-        corr = offset_image
+    if len(longitude) == 0:
+        return np.array([]), np.array([])
     
-    return corr
+    moon_surface = oops.Body.lookup(body_name).surface
+    obs_event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
+                           obs.path, obs.frame)
+    _, obs_event = moon_surface.photon_to_event_by_coords(obs_event,
+                                      (longitude*oops.RPD, latitude*oops.RPD))
 
-def find_correlated_offset(corr, search_size_min=0, search_size_max=40):
-    """Find the offset that best aligns an image and a model given the correlation.
-
-    Inputs:
-        corr               A 2-D correlation matrix.
-        search_size_min    The number of pixels from an offset of zero to
-        search_size_max    search. If either is a single number, the same search
-                           size is used in each dimension. Otherwise it is
-                           (search_size_u, search_size_v).
-    Returns:
-        offset_u, offset_v, peak_value
-        
-        offset_u           The offset in the U direction.
-        offset_v           The offset in the V direction.
-        peak_value         The correlation value at the peak.
-    """
-    if np.shape(search_size_min) == ():
-        search_size_min_u = search_size_min
-        search_size_min_v = search_size_min
-    else:
-        search_size_min_u, search_size_min_v = search_size_min
-
-    if np.shape(search_size_max) == ():
-        search_size_max_u = search_size_max
-        search_size_max_v = search_size_max
-    else:
-        search_size_max_u, search_size_max_v = search_size_max
-        
-    assert 0 <= search_size_min_u <= search_size_max_u
-    assert 0 <= search_size_min_v <= search_size_max_v
-    assert 0 <= search_size_max_u <= corr.shape[1]//2 
-    assert 0 <= search_size_max_v <= corr.shape[0]//2 
-
-    slice = corr[corr.shape[0]//2-search_size_max_v:
-                 corr.shape[0]//2+search_size_max_v+1,
-                 corr.shape[1]//2-search_size_max_u:
-                 corr.shape[1]//2+search_size_max_u+1]
-
-    if search_size_min_u != 0 and search_size_min_v != 0:
-        slice[slice.shape[0]//2-search_size_min_v+1:
-              slice.shape[0]//2+search_size_min_v,
-              slice.shape[1]//2-search_size_min_u+1:
-              slice.shape[1]//2+search_size_min_u] = -1.1
+    uv = obs.fov.uv_from_los(-obs_event.arr)
+    u, v = uv.to_scalars()
     
-    peak = np.where(slice == slice.max())
+    return u.vals, v.vals
     
-    if len(peak[0]) != 1:
-        return None, None, None
-    
-    peak_v = peak[0][0]
-    peak_u = peak[1][0]
-    offset_v = peak_v-search_size_max_v
-    offset_u = peak_u-search_size_max_u
-    
-    if False:
-        plt.jet()
-        plt.imshow(slice)
-        plt.contour(slice)
-        plt.plot((search_size_max_u,search_size_max_u),(0,2*search_size_max_v),'k')
-        plt.plot((0,2*search_size_max_u),(search_size_max_v,search_size_max_v),'k')
-        plt.plot(peak[1], peak[0], 'ko')
-        plt.xticks(range(0,2*search_size_max_u+1,2), 
-                   [str(x) for x in range(-search_size_max_u,search_size_max_u+1,2)])
-        plt.yticks(range(0,2*search_size_max_v+1,2), 
-                   [str(y) for y in range(-search_size_max_v,search_size_max_v+1,2)])
-        plt.xlabel('U')
-        plt.ylabel('V')
-        plt.show()
+def process_moon_one_file(filename, body_name):
+    logger = logging.getLogger(LOGGING_NAME+'process_moon_one_file')
 
-    return offset_u, offset_v, slice[peak_v,peak_u]
-
-def shift_image(image, offset_u, offset_v):
-    """Shift an image by an offset."""
-    image = np.roll(image, -offset_u, 1)
-    image = np.roll(image, -offset_v, 0)
-
-    if offset_u != 0:    
-        if offset_u < 0:
-            image[:,:-offset_u] = 0
-        else:
-            image[:,-offset_u:] = 0
-    if offset_v != 0:
-        if offset_v < 0:
-            image[:-offset_v,:] = 0
-        else:
-            image[-offset_v:,:] = 0
-    
-    return image
-
-def mask_to_array(mask, shape):
-    if np.shape(mask) == shape:
-        return mask
-    
-    new_mask = np.empty(shape)
-    new_mask[:,:] = mask
-    return new_mask
-
-def process_moon_one_file(filename, body_name, mosaic, mosaic_resolution):
     print 'Processing', filename
     
+    latitude_resolution = LATITUDE_RESOLUTION
+    longitude_resolution = LONGITUDE_RESOLUTION
+    zoom = 2
+    
     obs = iss.from_file(filename, fast_distortion=True)
-#    meshgrid = oops.Meshgrid.for_fov(obs.fov, origin=0.5-512, undersample=1, oversample=1, limit=(1024+512,1024+512),
-#                     swap=True)
-#    bp = oops.Backplane(obs, meshgrid=meshgrid)
-    pr = cProfile.Profile()
-    pr.enable()
 
-    bp = oops.Backplane(obs)
+    extend_fov = MAX_POINTING_ERROR[obs.detector]
+    search_size_max_u, search_size_max_v = extend_fov
+
+    # Check to see if the moon takes up the whole image - can't handle
+    # that case here
+    set_obs_ext_corner_bp(obs, extend_fov)
     
-    filt_data = obs.data - filt.gaussian_filter(obs.data, 10, mode="reflect")
-#    old_filt_data = filt_data
-#    filt_data = np.zeros((2048,2048))
-#    filt_data[512:1536,512:1536] = old_filt_data
+    body_mask = obs.ext_corner_bp.where_intercepted(body_name).vals
+    if np.all(body_mask):
+        print 'Moon takes up whole image - no limb'
+        return
 
-    body_mask = bp.where_intercepted(body_name).vals
+    # Extend the data, create a model of the moon, and find the offset
     
-    body_mask = mask_to_array(body_mask, bp.shape)
-    body_mask_inv = np.logical_not(body_mask)
+    set_obs_ext_bp(obs, extend_fov)
+    set_obs_ext_data(obs, extend_fov)
 
-    if (body_mask[ 0, 0] and body_mask[-1, 0] and
-        body_mask[ 0,-1] and body_mask[-1,-1]):
-        # No limb
-        return # XXX
-        
-    lambert = bp.lambert_law(body_name).vals.astype('float')
+    model = moons_create_model(obs, body_name, lambert=True,
+                               extend_fov=extend_fov,
+                               use_cartographic=False)
+
+    model_offset_list = find_correlation_and_offset(
+                               obs.ext_data,
+                               model, search_size_min=0,
+                               search_size_max=(search_size_max_u, 
+                                                search_size_max_v),
+                               extend_fov=extend_fov,
+#                               filter=_model_filter
+                               )
+
+    if len(model_offset_list) > 0:
+        (model_offset_u, model_offset_v,
+         peak) = model_offset_list[0]
+    else:
+        print 'Finding offset failed'
+        return
     
-    pr.disable()
-    s = StringIO.StringIO()
-    sortby = 'cumulative'
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    ps.print_callers()
-    print s.getvalue()
-    lambert[body_mask_inv] = 0.
+    model = shift_image(model, -model_offset_u, -model_offset_v)
 
-    lambert = lambert - filt.gaussian_filter(lambert, 10, mode="reflect")
+    print 'OFFSET U', model_offset_u, 'V', model_offset_v
 
-    corr = correlate2d(filt_data, lambert, normalize=True, retile=True)
-    offset_u, offset_v, peak = find_correlated_offset(corr)
-    print 'OFFSET U', offset_u, 'V', offset_v
-
-    im = imgdisp.ImageDisp([filt_data], [lambert], canvas_size=(1024,768), allow_enlarge=True)
+    im = imgdisp.ImageDisp([obs.ext_data], [model], canvas_size=(1024,768), allow_enlarge=True)
     tk.mainloop()
     
-#    offset_u = -16
-#    offset_v = -20
-    
-    obs.fov = oops.fov.OffsetFOV(obs.fov, (offset_u, offset_v))
-    bp = oops.Backplane(obs)
+    # Given the offset, create a new offset FOV and compute the image
+    # metadata
+    obs.fov = oops.fov.OffsetFOV(obs.fov, (model_offset_u, model_offset_v))
+    set_obs_bp(obs, force=True)
 
-    body_mask = bp.where_intercepted(body_name).vals
-    body_mask = mask_to_array(body_mask, bp.shape)
-    body_mask_inv = np.logical_not(body_mask) # Where not intercepted
+    body_mask = obs.bp.where_intercepted(body_name).vals
+    body_mask = mask_to_array(body_mask, obs.bp.shape)
+    body_mask_inv = np.logical_not(body_mask) # Where not intercepted - no data
 
-    if (body_mask[0,0] and body_mask[-1,0] and
-        body_mask[0,-1] and body_mask[-1,-1]):
-        # No limb
-        return # XXX
-        
-    lambert = bp.lambert_law(body_name).vals.astype('float')
-    emission = bp.emission_angle(body_name)
-    emission = emission.vals.astype('float') * oops.DPR
-    center_resolution = bp.center_resolution(body_name).vals.astype('float')
-#    center_resolution = bp.center_distance(body_name).vals.astype('float')**2
-    resolution = center_resolution / np.cos(emission * oops.RPD)
+    lambert = obs.bp.lambert_law(body_name).vals.astype('float')
     
+    emission = obs.bp.emission_angle(body_name).vals.astype('float')
+    
+    # Resolution takes into account the emission angle - the "along sight"
+    # projection
+    center_resolution = obs.bp.center_resolution(body_name).vals.astype('float')
+    resolution = center_resolution / np.cos(emission)
+
+    bp_latitude = obs.bp.latitude(body_name, lat_type='centric')
+    bp_latitude = bp_latitude.vals.astype('float') * oops.DPR
+
+    bp_longitude = obs.bp.longitude(body_name, direction='east')
+    bp_longitude = bp_longitude.vals.astype('float') * oops.DPR
+
+    #XXX - Test invertibility
+#    for u in range(474,646,20):
+#        for v in range(446,600,20):
+#            lat = bp_latitude[v,u]
+#            lon = bp_longitude[v,u]
+#            u_pixels, v_pixels = moons_latitude_longitude_to_pixels(obs, body_name, [lat], [lon])
+#            print u, u_pixels,
+#            print v, v_pixels
+
+    emission_deg = emission * oops.DPR
+
+#    im = imgdisp.ImageDisp([bp_latitude,bp_longitude], canvas_size=(768,768), allow_enlarge=True)
+#    tk.mainloop()
+    
+    # A pixel is OK if it falls on the body, the lambert model is
+    # bright enough and the emission angle is large enough
     ok_body_mask_inv = np.logical_or(body_mask_inv, lambert < MIN_LAMBERT)
-    ok_body_mask_inv = np.logical_or(ok_body_mask_inv, emission > MAX_EMISSION)
+    ok_body_mask_inv = np.logical_or(ok_body_mask_inv, emission_deg > MAX_EMISSION)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
     
-    im = imgdisp.ImageDisp([obs.data], [lambert], canvas_size=(1024,768), allow_enlarge=True)
-    tk.mainloop()
+#    im = imgdisp.ImageDisp([obs.data], [lambert], canvas_size=(1024,768), allow_enlarge=True)
+#    tk.mainloop()
 
+    # Divide the data by the lambert model in an attempt to account for
+    # projected illumination
     lambert[ok_body_mask_inv] = 1e300
     adj_data = obs.data / lambert
-    adj_data[ok_body_mask_inv] = 1e300
+    adj_data[ok_body_mask_inv] = 0.
     lambert[ok_body_mask_inv] = 0.
-    
-    latitude = bp.latitude(body_name, lat_type='graphic')
-    latitude = latitude.vals.astype('float') * oops.DPR
 
-    longitude = bp.longitude(body_name, direction='west')
-    longitude = longitude.vals.astype('float') * oops.DPR
+#    im = imgdisp.ImageDisp([adj_data], canvas_size=(1024,768), allow_enlarge=True)
+#    tk.mainloop()
 
     emission[ok_body_mask_inv] = 1e300
     resolution[ok_body_mask_inv] = 1e300
 
-#    plt.figure()
-#    plt.imshow(latitude)
-#    plt.figure()
-#    plt.imshow(longitude)
-#    plt.figure()
-#    plt.imshow(adj_data)
-#    plt.show()
-    
-#    valid_latitude = latitude[ok_body_mask].flatten()
-#    valid_longitude = longitude[ok_body_mask].flatten()
-#    valid_data = adj_data[ok_body_mask].flatten()
-#    valid_resolution = resolution[ok_body_mask].flatten()
-#    valid_emission = emission[ok_body_mask].flatten()
-    valid_latitude = latitude.flatten()
-    valid_longitude = longitude.flatten()
-    valid_data = adj_data.flatten()
-    valid_resolution = resolution.flatten()
-    valid_emission = emission.flatten()
-    
-    lat_bins = np.repeat(np.arange(mosaic.shape[0]),mosaic.shape[1])
-    lat_bins_act = (lat_bins+0.5) * LATITUDE_RES - 90.
-    
-    long_bins = np.tile(np.arange(mosaic.shape[1]),mosaic.shape[0])
-    long_bins_act = (long_bins+0.5) * LONGITUDE_RES
+    # The number of pixels in the final reprojection 
+    latitude_pixels = int(180. / latitude_resolution)
+    longitude_pixels = int(360. / longitude_resolution)
 
-    print 'LAT RANGE', np.min(valid_latitude), np.max(valid_latitude)
-    print 'LONG RANGE', np.min(valid_longitude), np.max(valid_longitude)
-    
-    print 'LAT BINS RANGE', np.min(lat_bins_act), np.max(lat_bins_act)
-    print 'LONG BINS RANGE', np.min(long_bins_act), np.max(long_bins_act)
-    
-    latlon_points = np.empty((lat_bins.shape[0], 2))
-    latlon_points[:,0] = lat_bins_act
-    latlon_points[:,1] = long_bins_act
-    
-    interp_data = interp.griddata((valid_latitude, valid_longitude), valid_data,
-                                  latlon_points, fill_value=1e300)
-    interp_res = interp.griddata((valid_latitude, valid_longitude), valid_resolution,
-                                 latlon_points, fill_value=1e300)
-    interp_em = interp.griddata((valid_latitude, valid_longitude), valid_emission,
-                                latlon_points, fill_value=1e300)
+    # Restrict the latitude and longitude ranges for some attempt at efficiency
+    min_latitude_pixel = (np.floor(np.min(bp_latitude[ok_body_mask]+90) / 
+                                    latitude_resolution)).astype('int')
+    min_latitude_pixel = np.clip(min_latitude_pixel, 0, latitude_pixels-1)
+    max_latitude_pixel = (np.ceil(np.max(bp_latitude[ok_body_mask]+90) / 
+                                   latitude_resolution)).astype('int')
+    max_latitude_pixel = np.clip(max_latitude_pixel, 0, latitude_pixels-1)
+    num_latitude_pixel = max_latitude_pixel - min_latitude_pixel + 1
 
-    new_mosaic = np.zeros(mosaic.shape)
-    new_mosaic[lat_bins,long_bins] = interp_data
-    new_resolution = np.zeros(mosaic.shape)+1e300
-    new_resolution[lat_bins,long_bins] = interp_res
-    new_emission = np.zeros(mosaic.shape)+1e300
-    new_emission[lat_bins,long_bins] = interp_em
+    min_longitude_pixel = (np.floor(np.min(bp_longitude[ok_body_mask]) / 
+                                    longitude_resolution)).astype('int')
+    min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
+    max_longitude_pixel = (np.ceil(np.max(bp_longitude[ok_body_mask]) / 
+                                   longitude_resolution)).astype('int')
+    max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
+    num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
     
-    new_mosaic_mask = np.logical_not(np.isnan(new_mosaic))
-    better_resolution_mask = (new_resolution < mosaic_resolution)
-    ok_emission_mask = (new_emission < 80)
-    ok_value_mask = np.logical_and(-100 < new_mosaic, new_mosaic < 100)
-    new_mosaic_mask = np.logical_and(new_mosaic_mask, better_resolution_mask)
-    new_mosaic_mask = np.logical_and(new_mosaic_mask, ok_emission_mask)
-    new_mosaic_mask = np.logical_and(new_mosaic_mask, ok_value_mask)
+    # Latitude bin numbers
+    lat_bins = np.repeat(np.arange(min_latitude_pixel, max_latitude_pixel+1), 
+                         num_longitude_pixel)
+    # Actual latitude (deg)
+    lat_bins_act = lat_bins * latitude_resolution - 90.
+
+    # Longitude bin numbers
+    long_bins = np.tile(np.arange(min_longitude_pixel, max_longitude_pixel+1), 
+                        num_latitude_pixel)
+    # Actual longitude (deg)
+    long_bins_act = long_bins * longitude_resolution
+
+    logger.debug('Latitude range %8.2f %8.2f', np.min(bp_latitude[ok_body_mask]), 
+                 np.max(bp_latitude[ok_body_mask]))
+    logger.debug('Latitude bin range %8.2f %8.2f', np.min(lat_bins_act), 
+                 np.max(lat_bins_act))
+    logger.debug('Longitude range %6.2f %6.2f', np.min(bp_longitude[ok_body_mask]), 
+                 np.max(bp_longitude[ok_body_mask]))
+    logger.debug('Longitude bin range %6.2f %6.2f', np.min(long_bins_act),
+                 np.max(long_bins_act))
+    logger.debug('Resolution range %7.2f %7.2f', np.min(resolution[ok_body_mask]),
+                 np.max(resolution[ok_body_mask]))
+    logger.debug('Data range %f %f', np.min(adj_data), np.max(adj_data))
+
+    u_pixels, v_pixels = moons_latitude_longitude_to_pixels(obs, body_name,
+                                                            lat_bins_act,
+                                                            long_bins_act)
+        
+    zoom_data = ndinterp.zoom(adj_data, zoom) # XXX Default to order=3 - OK?
+
+    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= obs.data.shape[1]-1)
+    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= obs.data.shape[0]-1)
+    goodmask = np.logical_and(goodumask, goodvmask)
     
-    mosaic[new_mosaic_mask] = new_mosaic[new_mosaic_mask]
-    mosaic_resolution[new_mosaic_mask] = new_resolution[new_mosaic_mask]
+    good_u = u_pixels[goodmask]
+    good_v = v_pixels[goodmask]
     
-#    plt.imshow(mosaic)
-#    plt.show()
+    good_lat = lat_bins[goodmask]
+    good_long = long_bins[goodmask]
     
-    im = imgdisp.ImageDisp([mosaic], canvas_size=(1024,768), allow_enlarge=True)
+    bad_data_mask = (adj_data == 0.)
+    # Replicate the mask in each zoom x zoom block
+    bad_data_mask_zoom = ndinterp.zoom(bad_data_mask, zoom, order=0)
+    zoom_data[bad_data_mask_zoom] = 0.
+    
+    interp_data = zoom_data[(good_v*zoom).astype('int'), (good_u*zoom).astype('int')]
+    
+    repro_img = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_img[good_lat,good_long] = interp_data
+
+    good_u = good_u.astype('int')
+    good_v = good_v.astype('int')
+    
+    repro_res = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32) + 1e300
+    repro_res[good_lat,good_long] = resolution[good_v,good_u]
+
+    im = imgdisp.ImageDisp([repro_img], canvas_size=(1024,768), allow_enlarge=True)
+    tk.mainloop()
+
+    return repro_img, repro_res
+
+def add_to_mosaic(mosaic, mosaic_resolution, repro_img, repro_resolution):
+    better_resolution_mask = (repro_resolution < mosaic_resolution)
+    ok_value_mask = np.logical_and(-100 < repro_img, repro_img < 100)
+    new_mosaic_mask = np.logical_and(better_resolution_mask, ok_value_mask)
+    
+    mosaic[new_mosaic_mask] = repro_img[new_mosaic_mask]
+    mosaic_resolution[new_mosaic_mask] = repro_resolution[new_mosaic_mask]
+
+    overlay = (repro_img-np.min(repro_img)) / (np.max(repro_img)-np.min(repro_img))
+    im = imgdisp.ImageDisp([mosaic], [overlay],
+                           canvas_size=(1024,768), allow_enlarge=True)
     tk.mainloop()
 
 def process_moon(filespec_list, body_name):
-    nlat = int(np.round(180. / LATITUDE_RES))
-    nlong = int(np.round(360. / LONGITUDE_RES))
+    nlat = int(np.round(180. / LATITUDE_RESOLUTION))
+    nlong = int(np.round(360. / LONGITUDE_RESOLUTION))
     
     mosaic = np.zeros((nlat, nlong))
-    mosaic_resolution = np.zeros((nlat, nlong)) + 1e38
+    mosaic_resolution = np.zeros((nlat, nlong)) + 1e300
     
     for filespec in filespec_list:
         full_filename = os.path.join(COISS_ROOT, filespec)
         full_filename = full_filename[:-4]
         full_filename += '_CALIB.IMG'
-        process_moon_one_file(full_filename, body_name, mosaic, mosaic_resolution)
+        repro_img, repro_res = process_moon_one_file(full_filename, body_name)
+
+        add_to_mosaic(mosaic, mosaic_resolution, repro_img, repro_res)
+    
     im = imgdisp.ImageDisp([mosaic], canvas_size=(1024,768), allow_enlarge=True)
     tk.mainloop()
 

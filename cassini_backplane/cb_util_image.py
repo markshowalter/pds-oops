@@ -107,12 +107,18 @@ def filter_local_maximum(data, maximum_boxsize=3, median_boxsize=11,
     return filtered
 
 def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
-    filtered = data - filt.median_filter(data, median_boxsize)
+    if not median_boxsize and not gaussian_blur:
+        return data
+    
+    sub = data
+    
+    if median_boxsize:
+        sub = filt.median_filter(sub, median_boxsize)
     
     if gaussian_blur:
-        filtered = filt.gaussian_filter(filtered, gaussian_blur)
+        sub = filt.gaussian_filter(sub, gaussian_blur)
 
-    return filtered
+    return data - sub
 
 
 def detect_local_maxima(arr):

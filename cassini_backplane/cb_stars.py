@@ -268,11 +268,11 @@ def _star_perform_photometry(obs, calib_data, star, offset_u, offset_v,
     v = int(np.round(star.v)) + offset_v + extend_fov[1]
     
     if star.dn > 500:
-        boxsize = 9
+        boxsize = 11
     elif star.dn > 100:
-        boxsize = 7
+        boxsize = 9
     else:
-        boxsize = 5
+        boxsize = 7 #XXX
     
     star.photometry_box_width = boxsize
     
@@ -368,10 +368,54 @@ def star_perform_photometry(obs, calib_data, star_list, offset_u=0, offset_v=0,
 
     good_stars = 0
     for star in star_list:
-        if star.photometry_confidence > STAR_MIN_CONFIDENCE:
+        if star.photometry_confidence >= STAR_MIN_CONFIDENCE:
             good_stars += 1
 
     return good_stars
+
+def _star_refine_offset(obs, calib_data, star_list, offset_u, offset_v):
+    logger = logging.getLogger(LOGGING_NAME+'._star_refine_offset')
+
+    gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector])
+    
+    delta_u_list = []
+    delta_v_list = []
+    dn_list = []
+    for star in star_list:
+        if star.conflicts:
+            continue
+        if star.photometry_confidence < STAR_MIN_CONFIDENCE:
+            continue
+        u = star.u + offset_u
+        v = star.v + offset_v
+        ret = gausspsf.find_position(calib_data, (5,5),
+                      (v,u), search_limit=(1.5, 1.5),
+                      bkgnd_degree=2, bkgnd_ignore_center=(2,2),
+                      bkgnd_num_sigma=5,
+                      tolerance=1e-5, num_sigma=5,
+                      max_bad_frac=0.2)
+        if ret is None:
+            continue
+        pos_v, pos_u, metadata = ret
+        logger.debug('Star %9d UV %7.2f %7.2f refined to %7.2f %7.2f', 
+                     star.unique_number, u, v, pos_u, pos_v)
+        delta_u_list.append(pos_u-u)
+        delta_v_list.append(pos_v-v)
+        dn_list.append(star.dn)
+        
+    if len(delta_u_list) == 0:
+        return offset_u, offset_v
+    
+#    du_mean = np.average(delta_u_list, weights=dn_list)
+#    dv_mean = np.average(delta_v_list, weights=dn_list)
+    
+    du_mean = np.mean(delta_u_list)
+    dv_mean = np.mean(delta_v_list)
+    
+    logger.debug('Mean dU,dV %7.2f %7.2f', du_mean, dv_mean)
+    
+    return (int(np.round(offset_u+du_mean)),
+            int(np.round(offset_v+dv_mean)))
 
 def star_make_good_bad_overlay(obs, star_list, offset_u, offset_v,
                                overlay_box_width=None,
@@ -505,20 +549,19 @@ def _star_mark_conflicts(obs, star, offset_u, offset_v, margin):
 #                something_conflicted = True
         
 
-def _optimize_offset_list(offset_u_list, offset_v_list, peak_list,
-                          tolerance=1):
+def _optimize_offset_list(offset_list, tolerance=1):
     logger = logging.getLogger(LOGGING_NAME+'._star_find_offset')
 
-    mark_for_deletion = [False] * len(offset_u_list)
-    for idx1 in xrange(len(offset_u_list)-2):
-        for idx2 in xrange(idx1+1,len(offset_u_list)-1):
-            for idx3 in xrange(idx2+1,len(offset_u_list)):
-                u1 = offset_u_list[idx1]
-                u2 = offset_u_list[idx2]
-                u3 = offset_u_list[idx3]
-                v1 = offset_v_list[idx1]
-                v2 = offset_v_list[idx2]
-                v3 = offset_v_list[idx3]
+    mark_for_deletion = [False] * len(offset_list)
+    for idx1 in xrange(len(offset_list)-2):
+        for idx2 in xrange(idx1+1,len(offset_list)-1):
+            for idx3 in xrange(idx2+1,len(offset_list)):
+                u1 = offset_list[idx1][0]
+                u2 = offset_list[idx2][0]
+                u3 = offset_list[idx3][0]
+                v1 = offset_list[idx1][1]
+                v2 = offset_list[idx2][1]
+                v3 = offset_list[idx3][1]
                 if (u1 is None or u2 is None or u3 is None or
                     v1 is None or v2 is None or v3 is None):
                     continue
@@ -541,16 +584,12 @@ def _optimize_offset_list(offset_u_list, offset_v_list, peak_list,
                                      idx1+1, u1, v1, idx2+1, u2, v2, idx3+1, u3, v3)
                         mark_for_deletion[idx2] = True
                         mark_for_deletion[idx3] = True
-    new_offset_u_list = []
-    new_offset_v_list = []
-    new_peak_list = []
-    for i in xrange(len(offset_u_list)):
+    new_offset_list = []
+    for i in xrange(len(offset_list)):
         if not mark_for_deletion[i]:
-            new_offset_u_list.append(offset_u_list[i])
-            new_offset_v_list.append(offset_v_list[i])
-            new_peak_list.append(peak_list[i])
+            new_offset_list.append(offset_list[i])
     
-    return new_offset_u_list, new_offset_v_list, new_peak_list
+    return new_offset_list
 
 def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
                       search_multiplier, num_peaks, debug_level=4, already_tried=None):
@@ -584,36 +623,33 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
     
     model = star_create_model(obs, star_list, extend_fov=obs.extend_fov)
 
-    offset_u_list, offset_v_list, peak_list = find_correlation_and_offset(
+    offset_list = find_correlation_and_offset(
                     filtered_data, model, search_size_min=0,
                     search_size_max=(search_size_max_u, search_size_max_v),
                     num_peaks=trial_num_peaks)
 
-    offset_u_list, offset_v_list, peak_list = _optimize_offset_list(offset_u_list, offset_v_list, peak_list)
-    offset_u_list = offset_u_list[:num_peaks]
-    offset_v_list = offset_v_list[:num_peaks]
-    peak_list = peak_list[:num_peaks]
+    offset_list = _optimize_offset_list(offset_list)
+    offset_list = offset_list[:num_peaks]
     
     new_offset_u_list = []
     new_offset_v_list = []
     new_peak_list = []
-    for i in xrange(len(offset_u_list)):
-        if offset_u_list[i] is None:
-            continue
-        if (offset_u_list[i], offset_v_list[i]) not in already_tried:
-            new_offset_u_list.append(offset_u_list[i])
-            new_offset_v_list.append(offset_v_list[i])
-            new_peak_list.append(peak_list[i])
+    for i in xrange(len(offset_list)):
+        if offset_list[i][:2] not in already_tried:
+            new_offset_u_list.append(offset_list[i][0])
+            new_offset_v_list.append(offset_list[i][1])
+            new_peak_list.append(offset_list[i][2])
             # Nobody else gets to try these before we do
-            already_tried.append((offset_u_list[i],offset_v_list[i]))
+            already_tried.append(offset_list[i][:2])
         else:
             logger.debug('Offset %d,%d already tried (or reserved)', 
-                         offset_u_list[i], offset_v_list[i])
+                         offset_list[i][0], offset_list[i][1])
 
     logger.debug('Final peak list:')
     for i in xrange(len(new_offset_u_list)):
-        logger.debug('Peak %d U,V %d,%d', i+1, 
-                     new_offset_u_list[i], new_offset_v_list[i])
+        logger.debug('Peak %d U,V %d,%d VAL %f', i+1, 
+                     new_offset_u_list[i], new_offset_v_list[i],
+                     new_peak_list[i])
             
     for peak_num in xrange(len(new_offset_u_list)):
         offset_u = new_offset_u_list[peak_num]
@@ -701,7 +737,7 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
             
             model = star_create_model(obs, new_star_list, extend_fov=obs.extend_fov)
     
-            conf_offset_u_list, conf_offset_v_list, conf_peak_list = find_correlation_and_offset(
+            conf_offset_list = find_correlation_and_offset(
                             filtered_data, model, search_size_min=0,
                             search_size_max=(search_size_max_u, search_size_max_v),
                             num_peaks=1)
@@ -709,18 +745,16 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
             new_conf_offset_u_list = []
             new_conf_offset_v_list = []
             new_conf_peak_list = []
-            for i in xrange(len(conf_offset_u_list)):
-                if conf_offset_u_list[i] is None:
-                    continue
-                if (conf_offset_u_list[i], conf_offset_v_list[i]) not in already_tried:
-                    new_conf_offset_u_list.append(conf_offset_u_list[i])
-                    new_conf_offset_v_list.append(conf_offset_v_list[i])
-                    new_conf_peak_list.append(conf_peak_list[i])
+            for i in xrange(len(conf_offset_list)):
+                if conf_offset_list[i][:2] not in already_tried:
+                    new_conf_offset_u_list.append(conf_offset_list[i][0])
+                    new_conf_offset_v_list.append(conf_offset_list[i][1])
+                    new_conf_peak_list.append(conf_offset_list[i][2])
                     # Nobody else gets to try these before we do
-                    already_tried.append((conf_offset_u_list[i],conf_offset_v_list[i]))
+                    already_tried.append(conf_offset_list[i][:2])
                 else:
                     logger.debug('Offset %d,%d already tried (or reserved)',
-                                 conf_offset_u_list[i], conf_offset_v_list[i])
+                                 conf_offset_list[i][0], conf_offset_list[i][0])
 
             for conf_peak_num in xrange(len(new_conf_offset_u_list)):
                 offset_u = new_conf_offset_u_list[conf_peak_num]
@@ -888,7 +922,7 @@ def star_find_offset(obs, min_stars=3, psf_size=9, extend_fov=(0,0)):
                 # It was the last star - nothing to compare against
                 logger.debug('No dim enough stars left - giving up')
                 break
-            if star_list[i].dn > 10000: #star_list[i].dn > star_list[i+1].dn*2: # XXX
+            if star_list[i].dn > 1000: #star_list[i].dn > star_list[i+1].dn*2: # XXX
                 # Star is twice as bright as next star - get rid of it
 #                logger.debug('Star %9d (DN %7.2f) is much brighter than star %9d (DN %7.2f) - ignoring and iterating',
 #                             star_list[i].unique_number, star_list[i].dn,
@@ -923,6 +957,12 @@ def star_find_offset(obs, min_stars=3, psf_size=9, extend_fov=(0,0)):
         offset_v = best_offset_v
         good_stars = best_good_stars
         star_list = saved_star_list
+
+        logger.debug('Trial final offset U,V %d,%d / Good stars %d',
+                     offset_u, offset_v, good_stars)
+
+        offset_u, offset_v = _star_refine_offset(obs, obs.data, star_list,
+                                                 offset_u, offset_v)
         
         logger.debug('Returning final offset U,V %d,%d / Good stars %d',
                      offset_u, offset_v, good_stars)

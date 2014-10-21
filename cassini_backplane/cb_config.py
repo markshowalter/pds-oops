@@ -19,7 +19,7 @@ LARGE_BODY_LIST = ['SATURN', 'ATLAS', 'PROMETHEUS', 'PANDORA',
                    'TETHYS', 'DIONE', 'RHEA', 'TITAN', 'HYPERION',
                    'IAPETUS', 'PHOEBE']
 
-FUZZY_BODY_LIST = ['SATURN', 'TITAN']
+FUZZY_BODY_LIST = ['TITAN', 'PANDORA']
 
 
 # These values are pretty aggressively dim - there's no guarantee a star with 

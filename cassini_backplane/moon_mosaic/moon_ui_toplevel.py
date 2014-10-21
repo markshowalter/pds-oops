@@ -8,7 +8,7 @@ from Tkinter import *
 import tkMessageBox
 import sys
 import os.path
-import fring_util
+import moon_util
 from optparse import OptionParser
 import pickle
 from imgdisp import ImageDisp, IntegerEntry, FloatEntry, ScrolledList
@@ -16,9 +16,9 @@ import subprocess
 
 python_filename = sys.argv[0]
 python_dir = os.path.split(sys.argv[0])[0]
-python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
-python_mosaic_program = os.path.join(python_dir, fring_util.PYTHON_RING_MOSAIC)
-python_bkgnd_program = os.path.join(python_dir, fring_util.PYTHON_RING_BKGND)
+python_reproject_program = os.path.join(python_dir, moon_util.PYTHON_MOON_REPROJECT)
+python_mosaic_program = os.path.join(python_dir, moon_util.PYTHON_MOON_MOSAIC)
+python_bkgnd_program = os.path.join(python_dir, moon_util.PYTHON_MOON_BKGND)
 
 cmd_line = sys.argv[1:]
 
@@ -28,7 +28,7 @@ if len(cmd_line) == 0:
 
 parser = OptionParser()
 
-fring_util.add_parser_options(parser)
+moon_util.add_parser_options(parser)
 
 options, args = parser.parse_args(cmd_line)
 
@@ -79,15 +79,15 @@ def get_file_status(guidata):
     status_list = []
     max_repro_mtime = 0
     
-    for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+    for obsid, image_name, image_path in moon_util.enumerate_files(options, args, '_CALIB.IMG'):
 #        print obsid, image_name
         offrepstatus = OffRepStatus()
         offrepstatus.obsid = obsid
         offrepstatus.image_name = image_name
         offrepstatus.image_path = image_path
         
-        offrepstatus.offset_path = fring_util.offset_path(options, image_path, image_name)
-        offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)+'.pickle'
+        offrepstatus.offset_path = moon_util.offset_path(options, image_path, image_name)
+        offrepstatus.repro_path = moon_util.repro_path(options, image_path, image_name)+'.pickle'
         
         offrepstatus.offset_status = ''
         if (os.path.exists(offrepstatus.offset_path+'.pickle') and
@@ -143,7 +143,7 @@ def read_one_offset_status(offrepstatus):
         return
     
     (offrepstatus.auto_offset,
-     offrepstatus.manual_offset, offrepstatus.offset_metadata) = fring_util.read_offset(offrepstatus.offset_path)
+     offrepstatus.manual_offset, offrepstatus.offset_metadata) = moon_util.read_offset(offrepstatus.offset_path)
      
     auto_status = ' '
     man_status = ' '
@@ -169,7 +169,7 @@ def get_mosaic_status(cur_obsid, max_repro_mtime):
     radius_resolution = guidata.entry_radius_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
     (data_path, metadata_path,
-     png_path) = fring_util.mosaic_paths_spec(radius_inner, radius_outer,
+     png_path) = moon_util.mosaic_paths_spec(radius_inner, radius_outer,
                                                                   radius_resolution,
                                                                   longitude_resolution,
                                                                   cur_obsid)
@@ -192,7 +192,7 @@ def get_bkgnd_status(cur_obsid):
     longitude_resolution = guidata.entry_longitude_resolution.value()
 
     (data_path, metadata_path,
-     png_path) = fring_util.mosaic_paths_spec(radius_inner, radius_outer,
+     png_path) = moon_util.mosaic_paths_spec(radius_inner, radius_outer,
                                                                   radius_resolution,
                                                                   longitude_resolution,
                                                                   cur_obsid)
@@ -208,7 +208,7 @@ def get_bkgnd_status(cur_obsid):
     
     (reduced_mosaic_data_filename, reduced_mosaic_metadata_filename,
      bkgnd_mask_filename, bkgnd_model_filename,
-     bkgnd_metadata_filename) = fring_util.bkgnd_paths_spec(radius_inner, radius_outer,
+     bkgnd_metadata_filename) = moon_util.bkgnd_paths_spec(radius_inner, radius_outer,
                                                           radius_resolution,
                                                           longitude_resolution,
                                                           cur_obsid)
@@ -326,7 +326,7 @@ def offrep_img_list_buttonrelease_handler(event, guidata):
     if guidata.obsid_selection is None:
         return
     guidata.img_selection = guidata.obsid_db[guidata.obsid_selection][2][int(img_selections[0])]
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
                       '--no-auto-offset', '--no-reproject',
                       guidata.obsid_selection + '/' + guidata.img_selection.image_name] +
                       cmdline_arguments(guidata))
@@ -350,7 +350,7 @@ def offrep_display_mosaic_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Display Mosaic', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_mosaic_program, '--display-mosaic', 
+    subprocess.Popen([moon_util.PYTHON_EXE, python_mosaic_program, '--display-mosaic', 
                       '--no-mosaic', guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -361,7 +361,7 @@ def offrep_display_bkgnd_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Display Background', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_bkgnd_program, '--display-bkgnd', 
+    subprocess.Popen([moon_util.PYTHON_EXE, python_bkgnd_program, '--display-bkgnd', 
                       '--no-bkgnd', guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -372,7 +372,7 @@ def offrep_update_offsets_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Update Offsets', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--no-reproject',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--no-reproject',
                       guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -380,7 +380,7 @@ def offrep_update_offsets_button_handler(guidata):
 # Update All Offsets button
 #
 def offrep_update_all_offsets_button_handler(guidata):
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--no-reproject',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--no-reproject',
                       '-a'] +
                       cmdline_arguments(guidata))
 
@@ -394,7 +394,7 @@ def offrep_force_update_offsets_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update Offsets',
                                  'Are you sure you want to do a forced update on ALL offsets in this OBSID?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--recompute-auto-offset',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--recompute-auto-offset',
                       '--no-reproject', guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -405,7 +405,7 @@ def offrep_force_update_all_offsets_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update All Offsets',
                                  'Are you sure you want to do a forced update on ALL offsets?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--recompute-auto-offset',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--recompute-auto-offset',
                       '--no-reproject', '-a'] +
                       cmdline_arguments(guidata))
 
@@ -416,7 +416,7 @@ def offrep_update_reprojects_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Update Reprojections', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--no-auto-offset',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--no-auto-offset',
                       guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -424,7 +424,7 @@ def offrep_update_reprojects_button_handler(guidata):
 # Update All Reprojections button
 #
 def offrep_update_all_reprojects_button_handler(guidata):
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--no-auto-offset',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--no-auto-offset',
                       '-a'] +
                       cmdline_arguments(guidata))
 
@@ -438,7 +438,7 @@ def offrep_force_update_reprojects_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update Reprojections',
                                  'Are you sure you want to do a forced update on ALL reprojections in this OBSID?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--recompute-reproject',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--recompute-reproject',
                       '--no-auto-offset', guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -449,7 +449,7 @@ def offrep_force_update_all_reprojects_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update All Reprojections',
                                  'Are you sure you want to do a forced update on ALL reprojections?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--recompute-reproject',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--recompute-reproject',
                       '--no-auto-offset', '-a'] +
                       cmdline_arguments(guidata))
 
@@ -460,14 +460,14 @@ def offrep_update_mosaic_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Update Mosaic', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_mosaic_program, guidata.obsid_selection] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_mosaic_program, guidata.obsid_selection] +
                      cmdline_arguments(guidata))
 
 #
 # Update All Mosaics button
 #
 def offrep_update_all_mosaics_button_handler(guidata):
-    subprocess.Popen([fring_util.PYTHON_EXE, python_mosaic_program, '-a'] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_mosaic_program, '-a'] +
                      cmdline_arguments(guidata))
 
 #
@@ -477,7 +477,7 @@ def offrep_force_update_mosaic_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Force Update Mosaic', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_mosaic_program, '--recompute-mosaic',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_mosaic_program, '--recompute-mosaic',
                       guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -487,7 +487,7 @@ def offrep_force_update_mosaic_button_handler(guidata):
 def offrep_force_update_all_mosaics_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update All Mosaics', 'Are you sure you want to do a forced update on ALL mosaics?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_mosaic_program, '-a', '--recompute-mosaic'] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_mosaic_program, '-a', '--recompute-mosaic'] +
                      cmdline_arguments(guidata))
 
 #
@@ -497,14 +497,14 @@ def offrep_update_bkgnd_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Update Background', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_bkgnd_program, guidata.obsid_selection] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_bkgnd_program, guidata.obsid_selection] +
                      cmdline_arguments(guidata))
 
 #
 # Update All Backgrounds button
 #
 def offrep_update_all_bkgnds_button_handler(guidata):
-    subprocess.Popen([fring_util.PYTHON_EXE, python_bkgnd_program, '-a'] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_bkgnd_program, '-a'] +
                      cmdline_arguments(guidata))
 
 #
@@ -514,7 +514,7 @@ def offrep_force_update_bkgnd_button_handler(guidata):
     if guidata.obsid_selection == None:
         tkMessageBox.showerror('Force Update Background', 'No current OBSID selection')
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_bkgnd_program, '--recompute-bkgnd',
+    subprocess.Popen([moon_util.PYTHON_EXE, python_bkgnd_program, '--recompute-bkgnd',
                       guidata.obsid_selection] +
                       cmdline_arguments(guidata))
 
@@ -524,7 +524,7 @@ def offrep_force_update_bkgnd_button_handler(guidata):
 def offrep_force_update_all_bkgnds_button_handler(guidata):
     if not tkMessageBox.askyesno('Force Update All Backgrounds', 'Are you sure you want to do a forced update on ALL backgrounds?'):
         return
-    subprocess.Popen([fring_util.PYTHON_EXE, python_bkgnd_program, '-a', '--recompute-bkgnd'] +
+    subprocess.Popen([moon_util.PYTHON_EXE, python_bkgnd_program, '-a', '--recompute-bkgnd'] +
                      cmdline_arguments(guidata))
 
 #

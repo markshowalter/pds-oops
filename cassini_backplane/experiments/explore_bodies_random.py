@@ -34,7 +34,7 @@ def process_image(filename, interactive=True):
 #                                                      allow_stars=False, allow_rings=False)
     
     ext_data = metadata['ext_data']
-    overlay = metadata['overlay']
+    overlay = metadata['ext_overlay']
     
     if interactive and ext_data is not None:
         ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
@@ -76,6 +76,10 @@ def process_random_file(root_path):
 
 # Star field long exposure - star matching doesn't work
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2051\data\1608970573_1609104344\N1608970573_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2053\data\1613598819_1613977956\N1613844349_1_CALIB.IMG')
+
+# Saturn limb only
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2072\data\1704630602_1704833275\N1704832756_1_CALIB.IMG')
 
 # Saturn plus rings and moons - should ignore Saturn for match - rings shadowed on Saturn
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2034\data\1564337660_1564348958\W1564345216_1_CALIB.IMG')
@@ -94,10 +98,10 @@ def process_random_file(root_path):
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2028\data\1546797712_1546867749\N1546863063_1_CALIB.IMG')
 
 # Dione
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2027\data\1544835042_1544908839\N1544892287_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2027\data\1544835042_1544908839\N1544892287_1_CALIB.IMG')
 
 # Hyperion rotated incorrectly - rotation is chaotic
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2023\data\1530158136_1530199809\N1530185228_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2023\data\1530158136_1530199809\N1530185228_1_CALIB.IMG')
 
 # Saturn and full rings with shadow
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2001\data\1458023716_1458209270\N1458112889_1_CALIB.IMG', interactive=True)
@@ -136,8 +140,17 @@ process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2023\data\153015813
 # Tethys
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2007/data/1477601077_1477653092/N1477639356_1_CALIB.IMG', interactive=True)
 
-#while True:
-#    process_random_file('t:/external/cassini/derived/COISS_2xxx')
+# Bad DN calibration - DN is way too high!
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2012\data\1497164137_1497406737\N1497238879_1_CALIB.IMG')
+
+# Mimas and Tethys + rings at a distance
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2032\data\1559710457_1559931672\W1559730511_1_CALIB.IMG')
+
+# Rings and Pandora - offset from real position as seen by stars
+#process_image('t:/external/cassini/derived/COISS_2xxx\COISS_2009\data\1484846724_1485147239\N1484916376_1_CALIB.IMG')
+
+while True:
+    process_random_file('t:/external/cassini/derived/COISS_2xxx')
 
 
 

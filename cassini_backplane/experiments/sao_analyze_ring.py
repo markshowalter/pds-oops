@@ -22,6 +22,9 @@ import cb_correlate
 
 #cb_correlate.DEBUG_CORRELATE_PLOT = True
 
+LONGITUDE_RESOLUTION = 0.005
+RADIUS_RESOLUTION = 5
+
 class OffData(object):
     """Offset and Reprojection data."""
     def __init__(self):
@@ -174,19 +177,49 @@ def callback_b1press(x, y, offdispdata):
         
 
 # Setup the offset window with no data
-def setup_offset_window(offdata, offdispdata):
-    if offdata.the_offset is not None:
-        offdata.obs.fov = oops.fov.OffsetFOV(offdata.obs.fov, uv_offset=offdata.the_offset)
-    set_obs_bp(offdata.obs)
-    
-    offdispdata.off_radii = offdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-    offdispdata.off_longitudes = offdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
-    offdispdata.off_resolution = offdata.obs.bp.ring_radial_resolution('saturn:ring').vals.astype('float')
-    offdispdata.off_incidence = offdata.obs.bp.incidence_angle('saturn:ring').vals.astype('float') * oops.DPR
-    offdispdata.off_emission = offdata.obs.bp.emission_angle('saturn:ring').vals.astype('float') * oops.DPR
-    offdispdata.off_phase = offdata.obs.bp.phase_angle('saturn:ring').vals.astype('float') * oops.DPR
-    
-    pickle_fp = open('j:/Temp/'+offdata.image_name+'.pickle', 'wb')
+def setup_offset_window(offdata, offdispdata, reproject):
+    if not reproject:
+        if offdata.the_offset is not None:
+            offdata.obs.fov = oops.fov.OffsetFOV(offdata.obs.fov, uv_offset=offdata.the_offset)
+        set_obs_bp(offdata.obs)
+        
+        offdispdata.off_radii = offdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
+        offdispdata.off_longitudes = offdata.obs.bp.ring_longitude('saturn:ring', reference='aries').vals.astype('float') * oops.DPR
+        offdispdata.off_resolution = offdata.obs.bp.ring_radial_resolution('saturn:ring').vals.astype('float')
+        offdispdata.off_incidence = offdata.obs.bp.incidence_angle('saturn:ring').vals.astype('float') * oops.DPR
+        offdispdata.off_emission = offdata.obs.bp.emission_angle('saturn:ring').vals.astype('float') * oops.DPR
+        offdispdata.off_phase = offdata.obs.bp.phase_angle('saturn:ring').vals.astype('float') * oops.DPR
+
+    else:
+#    ret['long_mask'] = good_long_mask
+#    ret['img'] = repro_mosaic
+#    ret['mean_resolution'] = repro_mean_res
+#    ret['mean_phase'] = repro_mean_phase
+#    ret['mean_emission'] = repro_mean_emission
+#    ret['mean_incidence'] = repro_mean_incidence
+#    ret['time'] = obs.midtime
+
+        ret = rings_reproject(offdata.obs, offset_u=offdata.the_offset[0], offset_v=offdata.the_offset[1],
+                      longitude_resolution=LONGITUDE_RESOLUTION,
+                      radius_resolution=RADIUS_RESOLUTION,
+                      radius_inner=135000.,
+                      radius_outer=138000.)
+        offdata.obs.data = ret['img']
+        radii = rings_generate_radii(135000.,138000.,radius_resolution=RADIUS_RESOLUTION)
+        offdispdata.off_radii = np.zeros(offdata.obs.data.shape)
+        offdispdata.off_radii[:,:] = radii[:,np.newaxis]
+        longitudes = rings_generate_longitudes(longitude_resolution=LONGITUDE_RESOLUTION)
+        offdispdata.off_longitudes = np.zeros(offdata.obs.data.shape)
+        offdispdata.off_longitudes[:,:] = longitudes[ret['long_mask']]
+        offdispdata.off_resolution = ret['resolution']
+        offdispdata.off_incidence = ret['incidence']
+        offdispdata.off_emission = ret['emission']
+        offdispdata.off_phase = ret['phase']
+        
+    if reproject:
+        pickle_fp = open('j:/Temp/'+offdata.image_name+'-repro.pickle', 'wb')
+    else:
+        pickle_fp = open('j:/Temp/'+offdata.image_name+'.pickle', 'wb')
     pickle.dump(offdata.obs.data, pickle_fp)
     pickle.dump(offdispdata.off_radii, pickle_fp)
     pickle.dump(offdispdata.off_longitudes, pickle_fp)
@@ -200,7 +233,10 @@ def setup_offset_window(offdata, offdispdata):
     offdispdata.toplevel.title(offdata.obsid + ' / ' + offdata.image_name)
     frame_toplevel = Frame(offdispdata.toplevel)
 
-    offset_overlay = offdata.off_metadata['overlay'].copy()
+    if reproject:
+        offset_overlay = None
+    else:
+        offset_overlay = offdata.off_metadata['overlay'].copy()
 
     # The original image and overlaid ring curves
     offdispdata.imdisp_offset = ImageDisp([offdata.obs.data], [offset_overlay],
@@ -327,15 +363,13 @@ def setup_offset_window(offdata, offdispdata):
     frame_toplevel.pack()
 
 # Display the original image
-def display_offset(offdata, offdispdata):
+def display_offset(offdata, offdispdata, reproject):
     # The original image
     
     if offdata.obs is None:
         offdata.obs = iss.from_file(offdata.image_path)
 
-    img_max_y = offdata.obs.data.shape[1]-1
-
-    setup_offset_window(offdata, offdispdata)
+    setup_offset_window(offdata, offdispdata, reproject)
 
     mainloop()
 
@@ -348,7 +382,7 @@ def display_offset(offdata, offdispdata):
 
 offdispdata = OffDispData()
 
-def process(image_path):
+def process(image_path, reproject=False):
     obsid = 'XXX'
     
     offdata = OffData()
@@ -364,7 +398,7 @@ def process(image_path):
     offset_one_image(offdata)
     
     # Display offset
-    display_offset(offdata, offdispdata)
+    display_offset(offdata, offdispdata, reproject=reproject)
     
     del offdata
     offdata = None
@@ -381,9 +415,10 @@ def process(image_path):
 
 do_profile = False
 
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2052/data/1609906195_1610170084/N1610086205_1_CALIB.IMG')
+#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622549816_1622632159/N1622592788_1_CALIB.IMG')
+#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2052/data/1609906195_1610170084/N1610086205_1_CALIB.IMG')
 #process(r't:/clumps/data/ISS_075RF_FMOVIE002_VIMS/N1593945662_1_CALIB.IMG')
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270620_1_CALIB.IMG')
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270620_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054\data/1617917998_1618066143/W1617920879_1_CALIB.IMG')
 
 #process(r'T:\external\cassini\derived\COISS_2xxx/COISS_2056/data/1626245310_1626407985/N1626333579_1_CALIB.IMG')

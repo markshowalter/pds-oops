@@ -173,4 +173,4 @@ def process(image_path):
     # Display offset
     display_offset(offdata, offdispdata)
     
-process(r'j:/Temp/N1630270620_1_CALIB.IMG.pickle')
+process(r'j:/Dropbox/Shared-Tom-Woodrow/N1630270620_1_CALIB.IMG-repro.pickle')
