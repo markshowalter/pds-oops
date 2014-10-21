@@ -4,7 +4,6 @@ Created on Sep 19, 2011
 @author: rfrench
 '''
 
-import pickle
 import os
 import os.path
 import numpy as np
@@ -72,15 +71,14 @@ def callback_b1press(x, y, offdispdata):
 
 # Setup the offset window with no data
 def setup_offset_window(offdata, offdispdata):
-    pickle_fp = open(offdata.image_path, 'rb')
-    offdata.data = pickle.load(pickle_fp)
-    offdispdata.off_radii = pickle.load(pickle_fp)
-    offdispdata.off_longitudes = pickle.load(pickle_fp)
-    offdispdata.off_resolution = pickle.load(pickle_fp)
-    offdispdata.off_incidence = pickle.load(pickle_fp)
-    offdispdata.off_emission = pickle.load(pickle_fp)
-    offdispdata.off_phase = pickle.load(pickle_fp)
-    pickle_fp.close()
+    npres = np.load(offdata.image_path+'.npz')
+    offdata.data = npres['data']
+    offdispdata.off_radii = npres['radii']
+    offdispdata.off_longitudes = npres['longitudes']
+    offdispdata.off_resolution = npres['resolution']
+    offdispdata.off_incidence = npres['incidence']
+    offdispdata.off_emission = npres['emission']
+    offdispdata.off_phase = npres['phase']
     
     offdispdata.toplevel = Tk()
     offdispdata.toplevel.title(offdata.image_name)
@@ -173,4 +171,6 @@ def process(image_path):
     # Display offset
     display_offset(offdata, offdispdata)
     
-process(r'j:/Dropbox/Shared-Tom-Woodrow/N1630270620_1_CALIB.IMG-repro.pickle')
+#process(r'j:/Temp/N1624900314_1_CALIB.IMG-repro')
+process(r'j:/Temp/N1632214958_1_CALIB.IMG')
+

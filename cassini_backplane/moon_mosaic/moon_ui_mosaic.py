@@ -5,7 +5,7 @@ Created on Sep 19, 2011
 '''
 
 from optparse import OptionParser
-import fring_util
+import moon_util
 import pickle
 import os
 import os.path
@@ -18,16 +18,16 @@ import colorsys
 from imgdisp import ImageDisp, FloatEntry
 from Tkinter import *
 from PIL import Image
-from cb_rings import *
+from cb_moons import *
 
 python_dir = os.path.split(sys.argv[0])[0]
-python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
+python_reproject_program = os.path.join(python_dir, moon_util.PYTHON_MOON_REPROJECT)
 
 cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                'ISS_036RF_FMOVIE001_VIMS',
+                'MIMAS',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
@@ -69,7 +69,7 @@ parser.add_option('--display-mosaic', dest='display_mosaic',
                   action='store_true', default=False,
                   help='Display the mosaic')
 
-fring_util.add_parser_options(parser)
+moon_util.add_parser_options(parser)
 
 options, args = parser.parse_args(cmd_line)
 
@@ -88,29 +88,30 @@ class MosaicDispData:
 
 def _update_mosaicdata(mosaicdata, metadata):
     mosaicdata.img = metadata['img']
-    mosaicdata.long_mask = metadata['long_mask']
-    mosaicdata.resolutions = metadata['mean_resolution']
+    mosaicdata.full_mask = metadata['full_mask']
+    mosaicdata.resolutions = metadata['resolution']
     mosaicdata.image_numbers = metadata['image_number']
     mosaicdata.ETs = metadata['time'] 
-    mosaicdata.emission_angles = metadata['mean_emission']
-    mosaicdata.incidence_angle = metadata['mean_incidence']
-    mosaicdata.phase_angles = metadata['mean_phase']
-    full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
-    full_longitudes[np.logical_not(mosaicdata.long_mask)] = -10
+    mosaicdata.emission_angles = metadata['emission']
+    mosaicdata.incidence_angle = metadata['incidence']
+    mosaicdata.phase_angles = metadata['phase']
+    full_latitudes = moons_generate_latitudes(latitude_resolution=options.latitude_resolution)
+    mosaicdata.latitudes = full_latitudes
+    full_longitudes = moons_generate_longitudes(longitude_resolution=options.longitude_resolution)
     mosaicdata.longitudes = full_longitudes
 
 def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     # Input files: image_path_list (includes repro suffix)
     # Output files:
     #  mosaic_data_filename (the basic 2-D array)
-    #  mosaic_metadata_filename (obsid_list, image_name_list, image_path_list)
+    #  mosaic_metadata_filename (body_name_list, image_name_list, image_path_list)
     #  large_png_filename (full size mosaic graphic)
     #  small_png_filename (reduced size mosaic graphic)
     (mosaicdata.data_path, mosaicdata.metadata_path,
-     mosaicdata.png_path) = fring_util.mosaic_paths(options, mosaicdata.obsid)
+     mosaicdata.png_path) = moon_util.mosaic_paths(options, mosaicdata.body_name)
     
     if options.verbose:
-        print 'Make_mosaic:', mosaicdata.obsid
+        print 'Make_mosaic:', mosaicdata.body_name
         
     if option_no:  # Just don't do anything
         if options.verbose:
@@ -140,49 +141,50 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
                     print 'Not doing anything because output files already exist and are current'
                 return
     
-    print 'Making mosaic for', mosaicdata.obsid
+    print 'Making mosaic for', mosaicdata.body_name
     
-    mosaic_metadata = rings_fring_mosaic_init(options.longitude_resolution,
-                                              options.radius_inner, options.radius_outer,
-                               options.radius_resolution)
+    mosaic_metadata = moons_mosaic_init(options.latitude_resolution,
+                               options.longitude_resolution)
     for i, repro_path in enumerate(mosaicdata.repro_path_list):
-        repro_metadata = fring_util.read_repro(repro_path)
+        repro_metadata = moon_util.read_repro(repro_path)
         if repro_metadata is not None:
             if options.verbose:
                 print 'Adding mosaic data for', repro_path
-            rings_fring_mosaic_add(mosaic_metadata, repro_metadata, i)
-
+            moons_mosaic_add(mosaic_metadata, repro_metadata, i)
+#            if i == 2:
+#                break
+            
     _update_mosaicdata(mosaicdata, mosaic_metadata)
 
     # Save mosaic image array in binary
     np.save(mosaicdata.data_path, mosaicdata.img)
     
     # Save metadata
-    metadata = mosaic_metadata.copy() # Everything except img
-    del metadata['img']
-    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
-    pickle.dump(metadata, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.obsid_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
-    mosaic_metadata_fp.close()
+#XXX    metadata = mosaic_metadata.copy() # Everything except img
+#    del metadata['img']
+#    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
+#    pickle.dump(metadata, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.body_name_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
+#    mosaic_metadata_fp.close()
     
-    blackpoint = max(np.min(mosaicdata.img), 0)
-    whitepoint = np.max(mosaicdata.img)
-    img = mosaicdata.img
-    
-    blackpoint = 0. # XXX
-    whitepoint = whitepoint / 3. # XXX
-    img = img[75:326,::15].copy()
-    
-    gamma = 0.5
-    # The +0 forces a copy - necessary for PIL
-    scaled_mosaic = np.cast['int8'](ImageDisp.scale_image(img, blackpoint,
-                                                         whitepoint, gamma))[::-1,:]+0
-    img = Image.frombuffer('L', (scaled_mosaic.shape[1], scaled_mosaic.shape[0]),
-                           scaled_mosaic, 'raw', 'L', 0, 1)
-    img.save(mosaicdata.png_path, 'PNG')
+#XXX    blackpoint = max(np.min(mosaicdata.img), 0)
+#    whitepoint = np.max(mosaicdata.img)
+#    img = mosaicdata.img
+#    
+#    blackpoint = 0. # XXX
+#    whitepoint = whitepoint / 3. # XXX
+#    img = img[75:326,::15].copy()
+#    
+#    gamma = 0.5
+#    # The +0 forces a copy - necessary for PIL
+#    scaled_mosaic = np.cast['int8'](ImageDisp.scale_image(img, blackpoint,
+#                                                         whitepoint, gamma))[::-1,:]+0
+#    img = Image.frombuffer('L', (scaled_mosaic.shape[1], scaled_mosaic.shape[0]),
+#                           scaled_mosaic, 'raw', 'L', 0, 1)
+#    img.save(mosaicdata.png_path, 'PNG')
 
 
 #####################################################################################
@@ -235,7 +237,7 @@ def command_refresh_color(mosaicdata, mosaicdispdata):
     
 def setup_mosaic_window(mosaicdata, mosaicdispdata):
     mosaicdispdata.toplevel = Tk()
-    mosaicdispdata.toplevel.title(mosaicdata.obsid)
+    mosaicdispdata.toplevel.title(mosaicdata.body_name)
     frame_toplevel = Frame(mosaicdispdata.toplevel)
 
     mosaicdispdata.imdisp = ImageDisp([mosaicdata.img], canvas_size=(1024,512),
@@ -250,26 +252,18 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
     
     addon_control_frame = mosaicdispdata.imdisp.addon_control_frame
     
-    label = Label(addon_control_frame, text='Inertial Long:')
+    label = Label(addon_control_frame, text='Latitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    # We make this one fixed-width so that the color-control column stays in one place
-    mosaicdispdata.label_inertial_longitude = Label(addon_control_frame, text='', anchor='w', width=28)
-    mosaicdispdata.label_inertial_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    mosaicdispdata.label_latitude= Label(addon_control_frame, text='')
+    mosaicdispdata.label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
-
-    label = Label(addon_control_frame, text='Co-Rot Long:')
+    
+    label = Label(addon_control_frame, text='Longitude:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    # We make this one fixed-width so that the color-control column stays in one place
-    mosaicdispdata.label_longitude = Label(addon_control_frame, text='', anchor='w', width=28)
+    mosaicdispdata.label_longitude = Label(addon_control_frame, text='', anchor='w')
     mosaicdispdata.label_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
 
-    label = Label(addon_control_frame, text='Radius:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    mosaicdispdata.label_radius = Label(addon_control_frame, text='')
-    mosaicdispdata.label_radius.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-    
     label = Label(addon_control_frame, text='Phase:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
     mosaicdispdata.label_phase = Label(addon_control_frame, text='')
@@ -300,10 +294,10 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
     mosaicdispdata.label_image.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
     
-    label = Label(addon_control_frame, text='OBSID:')
+    label = Label(addon_control_frame, text='body_name:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    mosaicdispdata.label_obsid = Label(addon_control_frame, text='')
-    mosaicdispdata.label_obsid.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    mosaicdispdata.label_body_name = Label(addon_control_frame, text='')
+    mosaicdispdata.label_body_name.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
     
     label = Label(addon_control_frame, text='Date:')
@@ -354,7 +348,7 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
 def display_mosaic(mosaicdata, mosaicdispdata):
     if mosaicdata.img is None:
         (mosaicdata.data_path, mosaicdata.metadata_path,
-         mosaicdata.png_path) = fring_util.mosaic_paths(options, mosaicdata.obsid)
+         mosaicdata.png_path) = moon_util.mosaic_paths(options, mosaicdata.body_name)
         
         img = np.load(mosaicdata.data_path+'.npy')
         
@@ -362,7 +356,7 @@ def display_mosaic(mosaicdata, mosaicdispdata):
         metadata = pickle.load(mosaic_metadata_fp)
         metadata['img'] = img
         _update_mosaicdata(mosaicdata, metadata)
-        mosaicdata.obsid_list = pickle.load(mosaic_metadata_fp)
+        mosaicdata.body_name_list = pickle.load(mosaic_metadata_fp)
         mosaicdata.image_name_list = pickle.load(mosaic_metadata_fp)
         mosaicdata.image_path_list = pickle.load(mosaic_metadata_fp)
         mosaicdata.repro_path_list = pickle.load(mosaic_metadata_fp)
@@ -376,43 +370,39 @@ def display_mosaic(mosaicdata, mosaicdispdata):
 def callback_move_mosaic(x, y, mosaicdata):
     x = int(x)
     if x < 0: return
-    if mosaicdata.longitudes[x] < 0:  # Invalid longitude
-        mosaicdispdata.label_inertial_longitude.config(text='')
+    y = int(y)
+    if y < 0: return
+    if mosaicdata.full_mask[y,x]:  # Invalid pixel
         mosaicdispdata.label_longitude.config(text='')
         mosaicdispdata.label_phase.config(text='')
         mosaicdispdata.label_incidence.config(text='')
         mosaicdispdata.label_emission.config(text='')
         mosaicdispdata.label_resolution.config(text='')
         mosaicdispdata.label_image.config(text='')
-        mosaicdispdata.label_obsid.config(text='')
+        mosaicdispdata.label_body_name.config(text='')
         mosaicdispdata.label_date.config(text='')
     else:
-        mosaicdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(mosaicdata.longitudes[x],
-                                                                                                   mosaicdata.ETs[x])))
         mosaicdispdata.label_longitude.config(text=('%7.3f'%mosaicdata.longitudes[x]))
-#        radius = mosaic.IndexToRadius(y, options.radius_resolution)
-#        mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
-        mosaicdispdata.label_phase.config(text=('%7.3f'%mosaicdata.phase_angles[x]))
-        mosaicdispdata.label_incidence.config(text=('%7.3f'%mosaicdata.incidence_angle))
-        mosaicdispdata.label_emission.config(text=('%7.3f'%mosaicdata.emission_angles[x]))
-        mosaicdispdata.label_resolution.config(text=('%7.3f'%mosaicdata.resolutions[x]))
-        mosaicdispdata.label_image.config(text=mosaicdata.image_name_list[mosaicdata.image_numbers[x]])
-        mosaicdispdata.label_obsid.config(text=mosaicdata.obsid_list[mosaicdata.image_numbers[x]])
-        mosaicdispdata.label_date.config(text=cspice.et2utc(float(mosaicdata.ETs[x]), 'C', 0))
+        mosaicdispdata.label_latitude.config(text=('%7.3f'%mosaicdata.latitudes[y]))
+        mosaicdispdata.label_phase.config(text=('%7.3f'%mosaicdata.phase_angles[y,x]))
+        mosaicdispdata.label_incidence.config(text=('%7.3f'%mosaicdata.incidence_angle[y,x]))
+        mosaicdispdata.label_emission.config(text=('%7.3f'%mosaicdata.emission_angles[y,x]))
+        mosaicdispdata.label_resolution.config(text=('%7.3f'%mosaicdata.resolutions[y,x]))
+        mosaicdispdata.label_image.config(text=mosaicdata.image_name_list[mosaicdata.image_numbers[y,x]])
+        mosaicdispdata.label_body_name.config(text=mosaicdata.body_name_list[mosaicdata.image_numbers[y,x]])
+        mosaicdispdata.label_date.config(text=cspice.et2utc(float(mosaicdata.ETs[y,x]), 'C', 0))
     
-    y = int(y)
-    if y < 0: return
-    radius = y*options.radius_resolution+options.radius_inner
-    mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
-
 # The command for Mosaic button press - rerun offset/reproject
 def callback_b1press_mosaic(x, y, mosaicdata):
+    x = int(x)
     if x < 0: return
-    if mosaicdata.longitudes[x] < 0:  # Invalid longitude - nothing to do
+    y = int(y)
+    if y < 0: return
+    if mosaicdata.full_mask[y,x]:
         return
-    image_number = mosaicdata.image_numbers[x]
-    subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
-                      mosaicdata.obsid_list[image_number] + '/' + mosaicdata.image_name_list[image_number]])
+    image_number = mosaicdata.image_numbers[y,x]
+    subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
+                      mosaicdata.body_name_list[image_number] + '/' + mosaicdata.image_name_list[image_number]])
 
 #####################################################################################
 #
@@ -420,57 +410,56 @@ def callback_b1press_mosaic(x, y, mosaicdata):
 #
 #####################################################################################
 
-# Each entry in the list is a tuple of obsid_list, image_name_list, image_path_list, repro_path_list
+# Each entry in the list is a tuple of body_name_list, image_name_list, image_path_list, repro_path_list
 mosaic_list = []
 
-cur_obsid = None
-obsid_list = []
+cur_body_name = None
+body_name_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
-    repro_path = fring_util.repro_path(options, image_path, image_name)
+for body_name, image_name, image_path in moon_util.enumerate_files(options, args, '_CALIB.IMG'):
+    repro_path = moon_util.repro_path(options, image_path, image_name)
     
-    if cur_obsid == None:
-        cur_obsid = obsid
-    if cur_obsid != obsid:
-        if len(obsid_list) != 0:
+    if cur_body_name == None:
+        cur_body_name = body_name
+    if cur_body_name != body_name:
+        if len(body_name_list) != 0:
             if options.verbose:
-                print 'Adding obsid', obsid_list[0]
-            mosaic_list.append((obsid_list, image_name_list, image_path_list, repro_path_list))
-        obsid_list = []
+                print 'Adding body_name', body_name_list[0]
+            mosaic_list.append((body_name_list, image_name_list, image_path_list, repro_path_list))
+        body_name_list = []
         image_name_list = []
         image_path_list = []
         repro_path_list = []
-        cur_obsid = obsid
+        cur_body_name = body_name
     if os.path.exists(repro_path+'.pickle'):
-        obsid_list.append(obsid)
+        body_name_list.append(body_name)
         image_name_list.append(image_name)
         image_path_list.append(image_path)
         repro_path_list.append(repro_path)
     
 # Final mosaic
-if len(obsid_list) != 0:
+if len(body_name_list) != 0:
     if options.verbose:
-        print 'Adding obsid', obsid_list[0]
-    mosaic_list.append((obsid_list, image_name_list, image_path_list, repro_path_list))
-    obsid_list = []
+        print 'Adding body_name', body_name_list[0]
+    mosaic_list.append((body_name_list, image_name_list, image_path_list, repro_path_list))
+    body_name_list = []
     image_name_list = []
     image_path_list = []
     repro_path_list = []
 
 for mosaic_info in mosaic_list:
-    mosaicdata = fring_util.MosaicData()
-    (mosaicdata.obsid_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
+    mosaicdata = moon_util.MosaicData()
+    (mosaicdata.body_name_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
      mosaicdata.repro_path_list) = mosaic_info
-    mosaicdata.obsid = mosaicdata.obsid_list[0]
+    mosaicdata.body_name = mosaicdata.body_name_list[0]
     make_mosaic(mosaicdata, options.no_mosaic, options.no_update_mosaic,
                 options.recompute_mosaic) 
 
-if options.display_mosaic:
-    for mosaic_info in mosaic_list:
-        mosaicdata = fring_util.MosaicData()
-        (mosaicdata.obsid_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
-         mosaicdata.repro_path_list) = mosaic_info
-        mosaicdata.obsid = mosaicdata.obsid_list[0]
-        display_mosaic(mosaicdata, mosaicdispdata) 
+    if options.display_mosaic:
+        for mosaic_info in mosaic_list:
+            (mosaicdata.body_name_list, mosaicdata.image_name_list, mosaicdata.image_path_list,
+             mosaicdata.repro_path_list) = mosaic_info
+            mosaicdata.body_name = mosaicdata.body_name_list[0]
+            display_mosaic(mosaicdata, mosaicdispdata) 

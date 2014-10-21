@@ -5,7 +5,6 @@ Created on Sep 19, 2011
 '''
 
 from optparse import OptionParser
-import pickle
 import os
 import os.path
 import sys
@@ -20,7 +19,7 @@ from cb_rings import *
 import cProfile, pstats, StringIO
 import cb_correlate
 
-#cb_correlate.DEBUG_CORRELATE_PLOT = True
+INTERACTIVE = False
 
 LONGITUDE_RESOLUTION = 0.005
 RADIUS_RESOLUTION = 5
@@ -95,6 +94,7 @@ def offset_one_image(offdata):
     
     if offset_u is not None:
         print 'FOUND %6.2f, %6.2f' % (offdata.the_offset[0], offdata.the_offset[1])
+        print offdata.off_metadata['used_objects_type'], offdata.off_metadata['model_overrides_stars']
 
 
 
@@ -199,6 +199,9 @@ def setup_offset_window(offdata, offdispdata, reproject):
 #    ret['mean_incidence'] = repro_mean_incidence
 #    ret['time'] = obs.midtime
 
+        if offdata.the_offset is None:
+            return
+        
         ret = rings_reproject(offdata.obs, offset_u=offdata.the_offset[0], offset_v=offdata.the_offset[1],
                       longitude_resolution=LONGITUDE_RESOLUTION,
                       radius_resolution=RADIUS_RESOLUTION,
@@ -217,18 +220,21 @@ def setup_offset_window(offdata, offdispdata, reproject):
         offdispdata.off_phase = ret['phase']
         
     if reproject:
-        pickle_fp = open('j:/Temp/'+offdata.image_name+'-repro.pickle', 'wb')
+        filename = 'j:/Temp/'+offdata.image_name+'-repro'
     else:
-        pickle_fp = open('j:/Temp/'+offdata.image_name+'.pickle', 'wb')
-    pickle.dump(offdata.obs.data, pickle_fp)
-    pickle.dump(offdispdata.off_radii, pickle_fp)
-    pickle.dump(offdispdata.off_longitudes, pickle_fp)
-    pickle.dump(offdispdata.off_resolution, pickle_fp)
-    pickle.dump(offdispdata.off_incidence, pickle_fp)
-    pickle.dump(offdispdata.off_emission, pickle_fp)
-    pickle.dump(offdispdata.off_phase, pickle_fp)
-    pickle_fp.close()
+        filename = 'j:/Temp/'+offdata.image_name
+    np.savez(filename, 
+             data=offdata.obs.data,
+             radii=offdispdata.off_radii,
+             longitudes=offdispdata.off_longitudes,
+             resolution=offdispdata.off_resolution,
+             incidence=offdispdata.off_incidence,
+             emission=offdispdata.off_emission,
+             phase=offdispdata.off_phase)
 
+    if not INTERACTIVE:
+        return
+    
     offdispdata.toplevel = Tk()
     offdispdata.toplevel.title(offdata.obsid + ' / ' + offdata.image_name)
     frame_toplevel = Frame(offdispdata.toplevel)
@@ -362,6 +368,8 @@ def setup_offset_window(offdata, offdispdata, reproject):
 
     frame_toplevel.pack()
 
+    mainloop()
+
 # Display the original image
 def display_offset(offdata, offdispdata, reproject):
     # The original image
@@ -370,8 +378,6 @@ def display_offset(offdata, offdispdata, reproject):
         offdata.obs = iss.from_file(offdata.image_path)
 
     setup_offset_window(offdata, offdispdata, reproject)
-
-    mainloop()
 
 
 #####################################################################################
@@ -383,6 +389,8 @@ def display_offset(offdata, offdispdata, reproject):
 offdispdata = OffDispData()
 
 def process(image_path, reproject=False):
+    print image_path
+    
     obsid = 'XXX'
     
     offdata = OffData()
@@ -414,11 +422,46 @@ def process(image_path, reproject=False):
         assert False
 
 do_profile = False
+##### TOM
+
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624900314_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624901034_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624901574_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621847296_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622394375_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621851000_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621958853_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621959213_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623167085_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623168213_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623169053_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623170247_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624728470_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624729501_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624903734_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1626159850_1626244971/N1626216495_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1625995143_1626159520/N1625998036_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627448056_1_CALIB.IMG',reproject=True)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627452306_1_CALIB.IMG',reproject=True)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627453806_1_CALIB.IMG',reproject=True)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627456806_1_CALIB.IMG',reproject=True)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627465056_1_CALIB.IMG',reproject=True)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270653_1_CALIB.IMG',reproject=True)
+
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214421_1_CALIB.IMG',reproject=False)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214600_1_CALIB.IMG',reproject=False)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214779_1_CALIB.IMG',reproject=False)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214958_1_CALIB.IMG',reproject=False)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632215137_1_CALIB.IMG',reproject=False)
+
+
+
 
 #process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622549816_1622632159/N1622592788_1_CALIB.IMG')
 #process(r't:\external\cassini\derived\COISS_2xxx\COISS_2052/data/1609906195_1610170084/N1610086205_1_CALIB.IMG')
 #process(r't:/clumps/data/ISS_075RF_FMOVIE002_VIMS/N1593945662_1_CALIB.IMG')
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270620_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270620_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054\data/1617917998_1618066143/W1617920879_1_CALIB.IMG')
 
 #process(r'T:\external\cassini\derived\COISS_2xxx/COISS_2056/data/1626245310_1626407985/N1626333579_1_CALIB.IMG')

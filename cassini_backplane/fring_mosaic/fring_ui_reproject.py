@@ -392,10 +392,11 @@ def _reproject_one_image(offrepdata):
         return
     
     try:
-        ret = rings_fring_reproject(obs, offset_u, offset_v,
-                                    options.longitude_resolution,
-                                    options.radius_inner, options.radius_outer,
-                                    options.radius_resolution)
+        ret = rings_reproject(obs, offset_u, offset_v,
+                              options.longitude_resolution,
+                              options.radius_resolution,
+                              options.radius_inner, options.radius_outer,
+                              fring=True)
     except:
         if options.verbose:
             print 'REPROJECTION FAILED'

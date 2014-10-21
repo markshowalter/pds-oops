@@ -200,14 +200,14 @@ def rings_fring_pixels(obs, offset_u=0, offset_v=0):
     return u_pixels, v_pixels
 
 def rings_reproject(obs, offset_u=0, offset_v=0,
-                  longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-                  radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
-                  radius_inner=None,
-                  radius_outer=None,
-                  zoom=RINGS_DEFAULT_REPRO_ZOOM,
-                  fring=False):
+            longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+            radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
+            radius_inner=None,
+            radius_outer=None,
+            zoom=RINGS_DEFAULT_REPRO_ZOOM,
+            fring=False):
 
-    logger = logging.getLogger(LOGGING_NAME+'.rings_fring_reproject')
+    logger = logging.getLogger(LOGGING_NAME+'.rings_reproject')
     
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
@@ -424,6 +424,4 @@ def rings_fring_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     mosaic_phase[good_longitude_mask] = repro_phase[good_longitude_mask] 
     mosaic_emission[good_longitude_mask] = repro_emission[good_longitude_mask] 
     mosaic_image_number[good_longitude_mask] = image_number 
-    if 'time' in repro_metadata:
-        mosaic_time[good_longitude_mask] = repro_metadata['time']
      

@@ -321,8 +321,7 @@ def master_find_offset(obs, create_overlay=False,
         if star_offset_u is not None:
             if ((abs(star_offset_u-model_offset_u) > 5 or    # XXX CONSTS
                  abs(star_offset_v-model_offset_v) > 5) and
-                metadata['num_good_stars'] < 6 and
-                trust_model):
+                metadata['num_good_stars'] < 6):
                 logger.debug('Star and model offsets disagree by too much - ignoring star result')
                 star_list = star_metadata['full_star_list']
                 for star in star_list:

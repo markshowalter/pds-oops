@@ -1,6 +1,7 @@
 import logging
 
-LOG_DEFAULT_LEVEL = logging.DEBUG
+#LOG_DEFAULT_LEVEL = logging.DEBUG
+LOG_DEFAULT_LEVEL = logging.ERROR
 LOG_OVERRIDE_CORRELATE = None #logging.ERROR
 LOG_OVERRIDE_MOONS     = None #logging.ERROR
 LOG_OVERRIDE_RINGS     = None #logging.ERROR
