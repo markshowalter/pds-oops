@@ -1,3 +1,7 @@
+#XXXXXXXX
+
+assert False
+
 import matplotlib        # Must be first!
 matplotlib.use('TkAgg')  # Required to allow the 3-D graphs to freely rotate
 

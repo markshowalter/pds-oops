@@ -149,6 +149,9 @@ def process_random_file(root_path):
 # Rings and Pandora - offset from real position as seen by stars
 #process_image('t:/external/cassini/derived/COISS_2xxx\COISS_2009\data\1484846724_1485147239\N1484916376_1_CALIB.IMG')
 
+# A ring- too straight, shadow
+#process_image(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG')
+
 while True:
     process_random_file('t:/external/cassini/derived/COISS_2xxx')
 

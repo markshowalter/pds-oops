@@ -172,5 +172,5 @@ def process(image_path):
     display_offset(offdata, offdispdata)
     
 #process(r'j:/Temp/N1624900314_1_CALIB.IMG-repro')
-process(r'j:/Temp/N1632214958_1_CALIB.IMG')
+process(r'C:\Rob\Dropbox\Shared-Tom-Woodrow\N1622394375_1_CALIB.IMG-repro')
 

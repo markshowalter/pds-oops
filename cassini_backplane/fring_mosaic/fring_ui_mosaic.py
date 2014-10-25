@@ -142,15 +142,15 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     print 'Making mosaic for', mosaicdata.obsid
     
-    mosaic_metadata = rings_fring_mosaic_init(options.longitude_resolution,
-                                              options.radius_inner, options.radius_outer,
-                               options.radius_resolution)
+    mosaic_metadata = rings_mosaic_init(options.longitude_resolution,
+                                        options.radius_inner, options.radius_outer,
+                                        options.radius_resolution)
     for i, repro_path in enumerate(mosaicdata.repro_path_list):
         repro_metadata = fring_util.read_repro(repro_path)
         if repro_metadata is not None:
             if options.verbose:
                 print 'Adding mosaic data for', repro_path
-            rings_fring_mosaic_add(mosaic_metadata, repro_metadata, i)
+            rings_mosaic_add(mosaic_metadata, repro_metadata, i)
 
     _update_mosaicdata(mosaicdata, mosaic_metadata)
 

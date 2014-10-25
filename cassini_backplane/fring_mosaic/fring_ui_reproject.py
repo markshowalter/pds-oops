@@ -396,7 +396,7 @@ def _reproject_one_image(offrepdata):
                               options.longitude_resolution,
                               options.radius_resolution,
                               options.radius_inner, options.radius_outer,
-                              fring=True)
+                              corotating='F')
     except:
         if options.verbose:
             print 'REPROJECTION FAILED'

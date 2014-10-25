@@ -18,8 +18,9 @@ from cb_offset import *
 from cb_rings import *
 import cProfile, pstats, StringIO
 import cb_correlate
+from cb_util_image import *
 
-INTERACTIVE = False
+INTERACTIVE = True
 
 LONGITUDE_RESOLUTION = 0.005
 RADIUS_RESOLUTION = 5
@@ -67,24 +68,26 @@ class OffDispData(object):
 # The primary entrance for finding pointing offset
 #
 
-def offset_one_image(offdata):
+def offset_one_image(offdata, offset_u, offset_v):
     # Recompute the automatic offset
     obs = iss.from_file(offdata.image_path)
     offdata.obs = obs
-    try:
-        offset_u, offset_v, offdata.off_metadata = master_find_offset(obs,
-                                                 create_overlay=True,
-                                                 star_overlay_box_width=5,
-                                                 star_overlay_box_thickness=2,
-                                                 allow_stars=True)                                                                             
-    except:
-        print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
-        print 'EXCEPTION:'
-        print sys.exc_info()
-        raise
-        offset_u = None
-        offset_v = None
-        offdata.off_metadata = {}
+    offdata.off_metadata = {}
+    if offset_u is None:
+        try:
+            offset_u, offset_v, offdata.off_metadata = master_find_offset(obs,
+                                                     create_overlay=True,
+                                                     star_overlay_box_width=5,
+                                                     star_overlay_box_thickness=2,
+                                                     allow_stars=False)                                                                             
+        except:
+            print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
+            print 'EXCEPTION:'
+            print sys.exc_info()
+            raise
+            offset_u = None
+            offset_v = None
+            offdata.off_metadata = {}
     if offset_u is None:
         offdata.the_offset = None
     else:
@@ -94,7 +97,8 @@ def offset_one_image(offdata):
     
     if offset_u is not None:
         print 'FOUND %6.2f, %6.2f' % (offdata.the_offset[0], offdata.the_offset[1])
-        print offdata.off_metadata['used_objects_type'], offdata.off_metadata['model_overrides_stars']
+        if 'used_objects_type' in offdata.off_metadata:
+            print offdata.off_metadata['used_objects_type'], offdata.off_metadata['model_overrides_stars']
 
 
 
@@ -137,6 +141,33 @@ def command_man_from_cassini(offdata, offdispdata):
         offdispdata.entry_x_offset.insert(0, '%6.2f'%offdata.manual_offset[0])
         offdispdata.entry_y_offset.insert(0, '%6.2f'%offdata.manual_offset[1])
     draw_offset_overlay(offdata, offdispdata)
+
+# Draw the offset curves
+def draw_offset_overlay(offrepdata, offrepdispdata):
+    # Blue - 0,0 offset
+    # Yellow - auto offset
+    # Green - manual offset
+    try:
+        offset_overlay = offrepdata.off_metadata['overlay'].copy()
+        if offset_overlay.shape[:2] != offrepdata.obs.data.shape:
+            # Correct for the expanded size of ext_data
+            diff_y = (offset_overlay.shape[0]-offrepdata.obs.data.shape[0])/2
+            diff_x = (offset_overlay.shape[1]-offrepdata.obs.data.shape[1])/2
+            offset_overlay = offset_overlay[diff_y:diff_y+offrepdata.obs.data.shape[0],
+                                            diff_x:diff_x+offrepdata.obs.data.shape[1],:]
+    except:
+        offset_overlay = np.zeros((offrepdata.obs.data.shape + (3,)))
+    if offrepdata.manual_offset is not None:
+        if offrepdata.the_offset is None:
+            x_diff = int(-offrepdata.manual_offset[0]) 
+            y_diff = int(-offrepdata.manual_offset[1])
+        else: 
+            x_diff = int(offrepdata.the_offset[0] - offrepdata.manual_offset[0])
+            y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
+        offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
+    
+    offrepdispdata.imdisp_offset.set_overlay(0, offset_overlay)
+    offrepdispdata.imdisp_offset.pack(side=LEFT)
 
 # <Enter> key pressed in a manual offset text entry box
 def command_enter_offset(event, offdata, offdispdata):
@@ -220,9 +251,9 @@ def setup_offset_window(offdata, offdispdata, reproject):
         offdispdata.off_phase = ret['phase']
         
     if reproject:
-        filename = 'j:/Temp/'+offdata.image_name+'-repro'
+        filename = 'c:/Temp/'+offdata.image_name+'-repro'
     else:
-        filename = 'j:/Temp/'+offdata.image_name
+        filename = 'c:/Temp/'+offdata.image_name
     np.savez(filename, 
              data=offdata.obs.data,
              radii=offdispdata.off_radii,
@@ -388,7 +419,7 @@ def display_offset(offdata, offdispdata, reproject):
 
 offdispdata = OffDispData()
 
-def process(image_path, reproject=False):
+def process(image_path, reproject=False, offset_u=None, offset_v=None):
     print image_path
     
     obsid = 'XXX'
@@ -403,7 +434,7 @@ def process(image_path, reproject=False):
         pr.enable()
 
     # Pointing offset
-    offset_one_image(offdata)
+    offset_one_image(offdata, offset_u, offset_v)
     
     # Display offset
     display_offset(offdata, offdispdata, reproject=reproject)
@@ -422,6 +453,7 @@ def process(image_path, reproject=False):
         assert False
 
 do_profile = False
+
 ##### TOM
 
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624900314_1_CALIB.IMG',reproject=True)
@@ -432,28 +464,28 @@ do_profile = False
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621851000_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621958853_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621959213_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623167085_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623168213_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623169053_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623170247_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG',reproject=True,offset_u=-70,offset_v=21)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623167085_1_CALIB.IMG',reproject=True,offset_u=-90,offset_v=29)#,offset_u=-30,offset_v=55)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623168213_1_CALIB.IMG',reproject=True,offset_u=-120,offset_v=36)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623169053_1_CALIB.IMG',reproject=True,offset_u=-118,offset_v=64)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623170247_1_CALIB.IMG',reproject=True,offset_u=-200,offset_v=49)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624728470_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624729501_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624903734_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1626159850_1626244971/N1626216495_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1625995143_1626159520/N1625998036_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1625995143_1626159520/N1625998036_1_CALIB.IMG',reproject=True,offset_u=5,offset_v=10)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627448056_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627452306_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627453806_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627456806_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627465056_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270653_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627452306_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627453806_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627456806_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627453556_1627522774/N1627465056_1_CALIB.IMG',reproject=True)
+# process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270653_1_CALIB.IMG',reproject=True)
 
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214421_1_CALIB.IMG',reproject=False)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214600_1_CALIB.IMG',reproject=False)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214779_1_CALIB.IMG',reproject=False)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214958_1_CALIB.IMG',reproject=False)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632215137_1_CALIB.IMG',reproject=False)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214958_1_CALIB.IMG',reproject=False)
+process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632215137_1_CALIB.IMG',reproject=False)
 
 
 

@@ -1,3 +1,7 @@
+#XXXXXXXX
+
+assert False
+
 import cb_logging
 import logging
 

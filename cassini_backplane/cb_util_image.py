@@ -1,21 +1,37 @@
+###############################################################################
+# cb_util_image.py
+#
+# Routines related to image manipulation.
+#
+# Exported routines:
+#    shift_image
+#    pad_image
+#    unpad_image
+#    compress_saturated_overlay
+#    uncompress_saturated_overlay
+#    filter_local_maximum
+#    filter_sub_median
+###############################################################################
+
 import cb_logging
 import logging
 
 import numpy as np
 import scipy.ndimage.filters as filt
-import scipy.ndimage.morphology as morphology
 
 LOGGING_NAME = 'cb.' + __name__
 
 
-#===============================================================================
+#==============================================================================
 # 
 # IMAGE MANIPULATION
 #
-#===============================================================================
+#==============================================================================
 
 def shift_image(image, offset_u, offset_v):
-    """Shift an image by an offset."""
+    """Shift an image by an offset.
+    
+    Pad the new area with zero and throw away the data moved off the edge."""
     if offset_u == 0 and offset_v == 0:
         return image
     
@@ -36,6 +52,7 @@ def shift_image(image, offset_u, offset_v):
     return image
 
 def pad_image(image, margin):
+    """Pad an image with a zero-filled (U,V) margin on each edge."""
     if margin[0] == 0 and margin[1] == 0:
         return image
     new_image = np.zeros((image.shape[0]+margin[1]*2,image.shape[1]+margin[0]*2),
@@ -45,12 +62,14 @@ def pad_image(image, margin):
     return new_image
 
 def unpad_image(image, margin):
+    """Remove a padded margin (U,V) from each edge."""
     if margin[0] == 0 and margin[1] == 0:
         return image
     return image[margin[1]:image.shape[0]-margin[1],
                  margin[0]:image.shape[1]-margin[0], ...]
 
 def compress_saturated_overlay(overlay):
+    """Compress a 2-D RGB array making each color a single bit."""
     # Compress an RGB overlay assuming everything is either 0 or 255
     ret = np.empty((overlay.shape[0]/2, overlay.shape[1]), dtype=np.uint8)
     ret[:,:] = ( (overlay[ ::2,:,0] > 127) |
@@ -62,6 +81,7 @@ def compress_saturated_overlay(overlay):
     return ret
 
 def uncompress_saturated_overlay(overlay):
+    """Uncompress a 2-D RGB array."""
     ret = np.empty((overlay.shape[0]*2, overlay.shape[1], 3), dtype=np.uint8)
     ret[ ::2,:,0] =  overlay & 1
     ret[ ::2,:,1] = (overlay & 2) >> 1
@@ -72,20 +92,50 @@ def uncompress_saturated_overlay(overlay):
     ret *= 255
     return ret
 
-#===============================================================================
+#==============================================================================
 # 
 # FILTERS
 #
-#===============================================================================
+#==============================================================================
 
 def filter_local_maximum(data, maximum_boxsize=3, median_boxsize=11,
                          maximum_blur=0, maximum_tolerance=1.,
                          minimum_boxsize=0, gaussian_blur=0.):
-    if median_boxsize:
-        flat = data - filt.median_filter(data, median_boxsize)
-    else:
-        flat = data
+    """Filter an image to find local maxima.
     
+    Process:
+        1) Create a mask consisting of the pixels that are local maxima
+           within maximum_boxsize
+        2) Find the minimum value for the area around each image pixel
+           using minimum_boxsize
+        3) Remove maxima that are not at least maximum_tolerange times
+           the local minimum
+        4) Blur the maximum pixels mask to make each a square area of
+           maximum_blur X maximum_blur
+        5) Compute the median-subtracted value for each image pixel
+           using median_boxsize
+        6) Copy the median-subtracted image pixels to a new zero-filled
+           image where the maximum mask is true
+        7) Gaussian blur this final result
+        
+    Inputs:
+        data                The image
+        maximum_boxsize     The box size to use when finding the maximum
+                            value for the area around each pixel.
+        median_boxsize      The box size to use when finding the median
+                            value for the area around each pixel.
+        maximum_blur        The amount to blur the maximum filter. If a pixel
+                            is marked as a maximum, then the pixels in a
+                            blur X blur square will also be marked as a
+                            maximum.
+        maximum_tolerance   The factor above the local minimum that a
+                            maximum pixel has to be in order to be included
+                            in the final result.
+        minimum_boxsize     The box size to use when finding the minimum
+                            value for the area around each pixel.
+        gaussian_blur       The amount to blur the final result.
+    """
+                            
     assert maximum_boxsize > 0
     max_filter = filt.maximum_filter(data, maximum_boxsize)
     mask = data == max_filter
@@ -98,6 +148,11 @@ def filter_local_maximum(data, maximum_boxsize=3, median_boxsize=11,
     if maximum_blur:
         mask = filt.maximum_filter(mask, maximum_blur)
         
+    if median_boxsize:
+        flat = data - filt.median_filter(data, median_boxsize)
+    else:
+        flat = data
+    
     filtered = np.zeros(data.shape, dtype=data.dtype)
     filtered[mask] = flat[mask]
     
@@ -107,6 +162,15 @@ def filter_local_maximum(data, maximum_boxsize=3, median_boxsize=11,
     return filtered
 
 def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
+    """Compute the median-subtracted value for each pixel.
+    
+    Inputs:
+        data                The image
+        median_boxsize      The box size to use when finding the median
+                            value for the area around each pixel.
+        gaussian_blur       The amount to blur the median value before
+                            subtracting it from the image.
+    """ 
     if not median_boxsize and not gaussian_blur:
         return data
     
@@ -119,35 +183,3 @@ def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
         sub = filt.gaussian_filter(sub, gaussian_blur)
 
     return data - sub
-
-
-def detect_local_maxima(arr):
-    # http://stackoverflow.com/questions/3684484/peak-detection-in-a-2d-array/3689710#3689710
-    # Modified to detect maxima instead of minima
-    """
-    Takes an array and detects the peaks using the local minimum filter.
-    """
-    # define an connected neighborhood
-    # http://www.scipy.org/doc/api_docs/SciPy.ndimage.morphology.html#generate_binary_structure
-    neighborhood = morphology.generate_binary_structure(len(arr.shape),2)
-    # apply the local minimum filter; all locations of minimum value 
-    # in their neighborhood are set to 1
-    # http://www.scipy.org/doc/api_docs/SciPy.ndimage.filters.html#minimum_filter
-    local_max = (filt.maximum_filter(arr, footprint=neighborhood)==arr)
-    # local_min is a mask that contains the peaks we are 
-    # looking for, but also the background.
-    # In order to isolate the peaks we must remove the background from the mask.
-    # 
-    # we create the mask of the background
-    background = (arr==0)
-    # 
-    # a little technicality: we must erode the background in order to 
-    # successfully subtract it from local_min, otherwise a line will 
-    # appear along the background border (artifact of the local minimum filter)
-    # http://www.scipy.org/doc/api_docs/SciPy.ndimage.morphology.html#binary_erosion
-    eroded_background = morphology.binary_erosion(background, structure=neighborhood, border_value=1)
-    # 
-    # we obtain the final mask, containing only peaks, 
-    # by removing the background from the local_min mask
-    detected_maxima = local_max - eroded_background
-    return np.where(detected_maxima)       

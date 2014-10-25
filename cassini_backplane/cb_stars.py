@@ -1,9 +1,22 @@
+###############################################################################
+# cb_stars.py
+#
+# Routines related to stars.
+#
+# Exported routines:
+#    star_list_for_obs
+#    star_create_model
+#    star_perform_photometry
+#    star_make_good_bad_overlay
+#    star_find_offset
+###############################################################################
+
 import cb_logging
 import logging
 
 import numpy as np
 import numpy.ma as ma
-from polymath import *
+import polymath
 import scipy.ndimage.filters as filt
 import copy
 
@@ -12,18 +25,14 @@ from psfmodel.gaussian import GaussianPSF
 from imgdisp import draw_circle, draw_rect
 from starcat import (UCAC4StarCatalog,
                      SCLASS_TO_B_MINUS_V, SCLASS_TO_SURFACE_TEMP)
-from cb_config import (STAR_CATALOG_ROOT, ISS_PSF_SIGMA,
-                       MAX_POINTING_ERROR, LARGE_BODY_LIST,
-                       MIN_DETECTABLE_DN)
+from cb_config import *
 from cb_correlate import *
-from cb_util_image import *
-from cb_util_flux import *
 from cb_rings import *
+from cb_util_flux import *
+from cb_util_image import *
 from cb_util_oops import *
 
-
 STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
-#STAR_CATALOG.debug_level = 100
 
 LOGGING_NAME = 'cb.' + __name__
 
@@ -32,19 +41,25 @@ DEFAULT_STAR_CLASS = 'G0'
 STAR_MIN_BRIGHTNESS_GUARANTEED_VIS = 200.
 
 #===============================================================================
+#
+# FIND STARS IN THE FOV AND RETURN THEM.
 # 
 #===============================================================================
 
 def _aberrate_star(obs, star):
+    """Compute the RA,DEC position of a star with stellar aberration."""
+    # XXX There must be a better way to do this.
     x = 1e30 * np.cos(star.ra) * np.cos(star.dec)
     y = 1e30 * np.sin(star.ra) * np.cos(star.dec) 
     z = 1e30 * np.sin(star.dec)
-    pos = Vector3((x,y,z))
+    pos = polymath.Vector3((x,y,z))
 
-    path = oops.path.LinearPath((pos, Vector3.ZERO), obs.midtime, 'SSB')  
+    path = oops.path.LinearPath((pos, polymath.Vector3.ZERO), obs.midtime,
+                                'SSB')  
                       
-    event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
-                  obs.path, obs.frame)
+    event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
+                                     polymath.Vector3.ZERO),
+                       obs.path, obs.frame)
     _, event = path.photon_to_event(event)
     abb_ra, abb_dec = event.ra_and_dec(apparent=True)
 
@@ -54,13 +69,16 @@ def _aberrate_star(obs, star):
 def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
                        mag_min, mag_max, extend_fov,
                        **kwargs):
+    """Return a list of stars with the given constraints.
+    
+    See star_list_for_obs for full details."""
     logger = logging.getLogger(LOGGING_NAME+'._star_list_for_obs')
 
     logger.debug('Mag range %7.4f to %7.4f', mag_min, mag_max)
     
     min_dn = MIN_DETECTABLE_DN[obs.detector]
     
-    # Get a list of all reasonable stars with the given magnitude range
+    # Get a list of all reasonable stars with the given magnitude range.
     
     orig_star_list = [x for x in 
               STAR_CATALOG.find_stars(allow_double=True,
@@ -70,15 +88,14 @@ def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
                                       vmag_min=mag_min, vmag_max=mag_max,
                                       **kwargs)]
 
-    # Fake the temperature if it's not known, and eliminate stars
-    # we just don't want to deal with.
+    # Fake the temperature if it's not known, and eliminate stars we just
+    # don't want to deal with.
 
     discard_class = 0
     discard_dn = 0
         
     star_list = []
     for star in orig_star_list:
-        _aberrate_star(obs, star)
         star.conflicts = None
         star.temperature_faked = False
         if star.temperature is None:
@@ -97,6 +114,7 @@ def _star_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
             # M stars are too dim and too red to be seen
             discard_class += 1
             continue
+        _aberrate_star(obs, star)
         star_list.append(star)
 
     # Eliminate stars that are not actually in the FOV, including some
@@ -142,16 +160,21 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9, extend_fov=(0,0),
                            the list of stars to ones not too close to the edge
                            of the image.
         extend_fov         The amount beyond the image in the (U,V) dimension
-                           to return stars (U/V value will be negative or
-                           greater than the FOV shape)
+                           to return stars (a star's U/V value will be negative
+                           or greater than the FOV shape).
         **kwargs           Passed to find_stars to restrict the types of stars
                            returned.
                            
     Returns:
-        star_list          The list of Star objects.
-                           .u and .v give the U,V coordinate.
-                           .faked_temperature is a bool indicating if the
-                               temperature and spectral class had to be faked. 
+        star_list          The list of Star objects with additional attributes
+                           for each Star:
+                           
+           .u and .v           The U,V coordinate including stellar aberration.
+           .faked_temperature  A bool indicating if the temperature and
+                               spectral class had to be faked.
+           .dn                 The estimated integrated DN count given the
+                               star's class, magnitude, and the filters being
+                               used.
     """
     logger = logging.getLogger(LOGGING_NAME+'.star_list_for_obs')
     
@@ -160,10 +183,8 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9, extend_fov=(0,0),
     ra_min, ra_max, dec_min, dec_max = compute_ra_dec_limits(obs,
                                              extend_fov=extend_fov)
 
-    # XXX THIS COULD BE MADE MUCH MORE EFFICIENT
-    # PAY ATTENTION TO WHERE RA/DEC IS POINTING - SGR? OUT OF PLANE?
-    # ESTIMATE MAG NEEDED ON FIRST TRY
-    
+    # Try to be efficient by limiting the magnitudes searched so we don't
+    # return a huge number of dimmer stars and then only need a few of them.
     magnitude_list = [0., 12., 13., 14., 15.]
     
     mag_vmax = compute_dimmest_visible_star_vmag(obs)+1
@@ -181,10 +202,6 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9, extend_fov=(0,0),
                                        ra_min, ra_max, dec_min, dec_max,
                                        mag_min, mag_max,
                                        extend_fov, **kwargs)
-#        if len(star_list) == 0:
-#            # Didn't find anything so just give up on finding anything dimmer
-#            break
-        
         full_star_list += star_list
         
         logger.debug('Got %d stars, total %d', len(star_list),
@@ -193,10 +210,10 @@ def star_list_for_obs(obs, max_stars=30, psf_size=9, extend_fov=(0,0),
         if len(full_star_list) >= max_stars:
             break
 
+    # Sort the list with the brightest stars first.
     full_star_list.sort(key=lambda x: x.dn, reverse=True)
-            
-    if len(full_star_list) > max_stars:
-        full_star_list = full_star_list[:max_stars]
+                
+    full_star_list = full_star_list[:max_stars]
 
     logger.debug('Returned star list:')
     for star in full_star_list:
