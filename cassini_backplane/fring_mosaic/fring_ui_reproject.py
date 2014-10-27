@@ -529,29 +529,30 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
             x_diff = int(offrepdata.the_offset[0] - offrepdata.manual_offset[0])
             y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
         offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
-    
-    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
-    x_pixels = x_pixels.astype('int')
-    y_pixels = y_pixels.astype('int')
-    offset_overlay[y_pixels, x_pixels, 2] = 255
-
-    if offrepdata.the_offset is not None:
-        # Auto offset - red
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.the_offset[0],
-                                        offset_v=offrepdata.the_offset[1])
-        x_pixels = x_pixels.astype('int')
-        y_pixels = y_pixels.astype('int')
-        offset_overlay[y_pixels, x_pixels, 0] = 255
-
-    if offrepdata.manual_offset is not None:
-        # Auto offset - green
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.manual_offset[0],
-                                        offset_v=offrepdata.manual_offset[1])
-        x_pixels = x_pixels.astype('int')
-        y_pixels = y_pixels.astype('int')
-        offset_overlay[y_pixels, x_pixels, 1] = 255
+ 
+# XXX   
+#    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
+#    x_pixels = x_pixels.astype('int')
+#    y_pixels = y_pixels.astype('int')
+#    offset_overlay[y_pixels, x_pixels, 2] = 255
+#
+#    if offrepdata.the_offset is not None:
+#        # Auto offset - red
+#        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+#                                        offset_u=offrepdata.the_offset[0],
+#                                        offset_v=offrepdata.the_offset[1])
+#        x_pixels = x_pixels.astype('int')
+#        y_pixels = y_pixels.astype('int')
+#        offset_overlay[y_pixels, x_pixels, 0] = 255
+#
+#    if offrepdata.manual_offset is not None:
+#        # Auto offset - green
+#        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+#                                        offset_u=offrepdata.manual_offset[0],
+#                                        offset_v=offrepdata.manual_offset[1])
+#        x_pixels = x_pixels.astype('int')
+#        y_pixels = y_pixels.astype('int')
+#        offset_overlay[y_pixels, x_pixels, 1] = 255
 
     offrepdispdata.imdisp_offset.set_overlay(0, offset_overlay)
     offrepdispdata.imdisp_offset.pack(side=LEFT)
@@ -666,8 +667,10 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     frame_toplevel = Frame(offrepdispdata.toplevel)
     
     # The original image and overlaid ring curves
-    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(512,512),
+    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(1024,1024),
                                              allow_enlarge=True, auto_update=True)
+    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
+    
 
     # The reprojected image
     if offrepdata.repro_img is None:
