@@ -20,15 +20,15 @@ color_foreground = (0,0,0)
 markersize = 8
 
 if POSTER:
-    markersize = 10
+    markersize = 8
     matplotlib.rc('figure', facecolor=color_background)
     matplotlib.rc('axes', facecolor=color_background, edgecolor=color_foreground, labelcolor=color_foreground)
     matplotlib.rc('xtick', color=color_foreground, labelsize=18)
-    matplotlib.rc('xtick.major', size=12)
-    matplotlib.rc('xtick.minor', size=8)
+    matplotlib.rc('xtick.major', size=0)
+    matplotlib.rc('xtick.minor', size=0)
     matplotlib.rc('ytick', color=color_foreground, labelsize=18)
-    matplotlib.rc('ytick.major', size=12)
-    matplotlib.rc('ytick.minor', size=8)
+    matplotlib.rc('ytick.major', size=0)
+    matplotlib.rc('ytick.minor', size=0)
     matplotlib.rc('font', size=18)
     matplotlib.rc('legend', fontsize=24)
 
@@ -167,27 +167,30 @@ def plot_obsid(obsid, image_name_list, offset_path_list):
         fig = plt.figure(figsize=(11.55,5))
     else:
         fig = plt.figure(figsize=(17,11))
-        
+    
+    u_color = '#3399ff'
+    v_color = '#0000cc'
+    
     ax = fig.add_subplot(211)
-    plt.plot(offset_u_list, '-', color='red', ms=5)
-    plt.plot(offset_v_list, '-', color='green', ms=5)
+    plt.plot(offset_u_list, '-', color=u_color, ms=5)
+    plt.plot(offset_v_list, '-', color=v_color, ms=5)
     for i in xrange(len(offset_u_list)):
         if offset_u_list[i] is not None and offset_v_list[i] is not None:
             if used_objects_type_list[i] == 'stars':
                 num_used_stars += 1
-                plt.plot(i, offset_u_list[i], '*', mec='red', mfc='red', ms=markersize*1.25)
-                plt.plot(i, offset_v_list[i], '*', mec='green', mfc='green', ms=markersize*1.25)
+                plt.plot(i, offset_u_list[i], '*', mec=u_color, mfc=u_color, ms=markersize*1.25)
+                plt.plot(i, offset_v_list[i], '*', mec=v_color, mfc=v_color, ms=markersize*1.25)
             elif used_objects_type_list[i] == 'model':
                 num_used_model += 1
-                plt.plot(i, offset_u_list[i], 'o', mec='red', mfc='none', ms=markersize, mew=1)
-                plt.plot(i, offset_v_list[i], 'o', mec='green', mfc='none', ms=markersize, mew=1)
+                plt.plot(i, offset_u_list[i], 'o', mec=u_color, mfc='none', ms=markersize, mew=1)
+                plt.plot(i, offset_v_list[i], 'o', mec=v_color, mfc='none', ms=markersize, mew=1)
             elif used_objects_type_list[i] == 'override':
                 num_used_model += 1
-                plt.plot(i, offset_u_list[i], 'o', mec='red', mfc='red', ms=markersize, mew=1)
-                plt.plot(i, offset_v_list[i], 'o', mec='green', mfc='green', ms=markersize, mew=1)
+                plt.plot(i, offset_u_list[i], 'o', mec=u_color, mfc=u_color, ms=markersize, mew=1)
+                plt.plot(i, offset_v_list[i], 'o', mec=v_color, mfc=v_color, ms=markersize, mew=1)
             else:
-                plt.plot(i, offset_u_list[i], '^', mec='red', mfc='none', ms=markersize*1.5, mew=2)
-                plt.plot(i, offset_v_list[i], '^', mec='green', mfc='none', ms=markersize*1.5, mew=2)
+                plt.plot(i, offset_u_list[i], '^', mec=u_color, mfc='none', ms=markersize*1.5, mew=2)
+                plt.plot(i, offset_v_list[i], '^', mec=v_color, mfc='none', ms=markersize*1.5, mew=2)
     plt.xlim(x_min, x_max)
     ax.set_xticklabels('')
     if POSTER:
@@ -197,26 +200,35 @@ def plot_obsid(obsid, image_name_list, offset_path_list):
     if not POSTER:
         plt.title('X/Y Offset')
     
+    ax.yaxis.set_label_coords(-0.055, 0.5)
+    
+    stars_color = '#ff8000'
+    good_color = '#336600'
+    
     ax = fig.add_subplot(212)
-    plt.plot(num_stars_list, '-o', color='red', mec='red', mfc='red', ms=markersize*.75)
-    plt.plot(num_good_stars_list, '-o', color='black', mec='black', mfc='black', ms=markersize*.75)
+    plt.plot(num_stars_list, '-o', color=stars_color, mec=stars_color, mfc=stars_color, ms=markersize*.5)
+    plt.plot(num_good_stars_list, '-o', color=good_color, mec=good_color, mfc=good_color, ms=markersize*.55)
     plt.xlim(x_min, x_max)
     plt.ylim(-0.5, np.max(num_stars_list)+0.5)
-    plt.xlabel('Image Number')
     plt.ylabel('# of Stars')
+    plt.xlabel('Image Number')
     if POSTER:
+        ax.get_xaxis().set_ticks([0,174])
         ax.get_yaxis().set_ticks([0,10,20,30])
+        plt.xticks([0,174],['1','175'])
     if not POSTER:
         plt.title('Total Stars vs. Good Stars')
+
+    ax.yaxis.set_label_coords(-0.055, 0.5)
     
     if not POSTER:
         plt.suptitle(obsid)
     
-    plt.subplots_adjust(left=0.025, right=0.975, top=0.925, bottom=0.025, hspace=0.15)
+    plt.subplots_adjust(left=0.025, right=0.975, top=1, bottom=0.0, hspace=0.18)
     if POSTER:
-        plt.savefig('j:/Temp/plots/'+obsid+'.png', bbox_inches='tight', dpi=300)
+        plt.savefig('c:/Temp/plots/'+obsid+'.png', bbox_inches='tight', dpi=300)
     else:
-        plt.savefig('j:/Temp/plots/'+obsid+'.png', bbox_inches='tight')
+        plt.savefig('c:/Temp/plots/'+obsid+'.png', bbox_inches='tight')
     
     plt.close()
     
