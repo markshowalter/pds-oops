@@ -13,7 +13,6 @@ import logging
 
 import numpy as np
 import scipy.fftpack as fftpack
-
 import matplotlib.pyplot as plt
 from imgdisp import ImageDisp
 import Tkinter
@@ -201,6 +200,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
         if DEBUG_CORRELATE_PLOT:
             plt.jet()
             plt.imshow(slice, interpolation='none')
+            print slice
             plt.contour(slice)
             plt.plot((search_size_max_u,search_size_max_u),
                      (0,2*search_size_max_v),'k')
@@ -289,11 +289,12 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
                 logger.debug(
          'Peak # %d - Offset at edge of previous blackout area - BAD',
                     len(ret_list)+1)
+                ret_list.append(None)
                 break
         else:
             ret_list.append((offset_u, offset_v, peak_val))
     
-    # Now remove all the Nones form the returned list.
+    # Now remove all the Nones from the returned list.
     while None in ret_list:
         ret_list.remove(None)
         

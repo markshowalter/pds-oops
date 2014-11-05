@@ -19,8 +19,9 @@
 import cb_logging
 import logging
 
-import oops
 import numpy as np
+
+import oops
 
 from cb_util_image import *
 

@@ -667,9 +667,9 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     frame_toplevel = Frame(offrepdispdata.toplevel)
     
     # The original image and overlaid ring curves
-    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(1024,1024),
+    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(512,512),
                                              allow_enlarge=True, auto_update=True)
-    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
+#    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
     
 
     # The reprojected image

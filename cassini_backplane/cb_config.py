@@ -4,6 +4,8 @@
 # Global configuration parameters.  
 ###############################################################################
 
+import os
+
 import oops
 
 #####################
@@ -21,6 +23,12 @@ COISS_2XXX_DERIVED_ROOT = 't:/external/cassini/derived/COISS_2xxx'
 
 # Cassini ISS moon maps.
 COISS_3XXX_ROOT = 't:/external/cassini/volumes/COISS_3xxx'
+
+# Contains solar flux, filter transmission convolved with quantum efficiency
+CISSCAL_CALIB_PATH = os.getenv('CISSCAL_CALIB_PATH')
+
+# Contains filter transmission and PSF data
+CASSINI_CALIB_PATH = os.getenv('CASSINI_CALIB_PATH')
 
 
 ########################
@@ -54,4 +62,4 @@ LARGE_BODY_LIST = ['SATURN', 'ATLAS', 'PROMETHEUS', 'PANDORA',
 
 # These are bodies that shouldn't be used for navigation because they
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
-FUZZY_BODY_LIST = ['TITAN', 'PANDORA', 'HYPERION']
+FUZZY_BODY_LIST = ['TITAN', 'PANDORA', 'HYPERION'] # XXX

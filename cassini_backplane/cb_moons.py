@@ -1,15 +1,35 @@
+###############################################################################
+# cb_moons.py
+#
+# Routines related to moons.
+#
+# Exported routines:
+#    XXX
+#    moons_create_model
+#
+#    moons_generate_latitudes
+#    moons_generate_longitudes
+#    moons_latitude_longitude_to_pixels
+#
+#    moons_reproject
+#    moons_mosaic_init
+#    moons_mosaic_add
+###############################################################################
+
 import cb_logging
 import logging
+
+import os
 
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
-import os
-from pdstable import PdsTable
+import matplotlib.pyplot as plt
+
 import oops
 import gravity
 import cspice
-import matplotlib.pyplot as plt
+from pdstable import PdsTable
 
 from cb_config import *
 from cb_util_oops import *
@@ -35,7 +55,7 @@ CARTOGRAPHIC_BODIES = {
 CARTOGRAPHIC_FILE_CACHE = {}
 
 #===============================================================================
-# 
+# XXX ALL THIS IS TEMPORARY STUFF
 #===============================================================================
 
 def _spice_body_spherical(spice_id, radius):
@@ -296,6 +316,7 @@ def moons_generate_latitudes(start_num=0,
                               end_num=None,
                               latitude_resolution=
                                     MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION):
+    """Generate a list of latitudes (deg)."""
     if end_num is None:
         end_num = int(180. / latitude_resolution)-1
     return np.arange(start_num, end_num+1) * latitude_resolution - 90.
@@ -304,11 +325,13 @@ def moons_generate_longitudes(start_num=0,
                               end_num=None,
                               longitude_resolution=
                                     MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+    """Generate a list of longitudes (deg)."""
     if end_num is None:
         end_num = int(360. / longitude_resolution)-1
     return np.arange(start_num, end_num+1) * longitude_resolution
 
 def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude):
+    """Convert latitude (deg),longitude (deg) pairs to U,V."""
     latitude = np.asarray(latitude)
     longitude = np.asarray(longitude)
     
@@ -330,6 +353,39 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
             latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
             longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
             zoom=MOONS_DEFAULT_REPRO_ZOOM):
+    """Reproject the moon into a rectangular latitude/longitude space.
+    
+    Inputs:
+        obs                      The Observation.
+        body_name                The name of the moon.
+        offset_u                 The offsets in U,V to apply to the image
+        offset_v                 when computing the latitude and longitude
+                                 values.
+        latitude_resolution      The latitude resolution of the new image
+                                 (deg/pix).
+        longitude_resolution     The longitude resolution of the new image
+                                 (deg/pix).
+        zoom                     The amount to magnify the original image for
+                                 pixel value interpolation.
+                                 
+    Returns:
+        A dictionary containing
+        
+        'full_mask'        The mask of pixels that contain reprojected data.
+        'lat_idx_range'    The range (min,max) of latitudes in the returned
+                           image.
+        'long_idx_range'   The range (min,max) of longitudes in the returned
+                           image.
+        'time'             The midtime of the observation (TDB).
+                           
+            The following only contain latitudes and longitudes in the ranges
+            specified above. All angles are in degrees.
+        'img'              The reprojected image [latitude,longitude].
+        'resolution'       The radial resolution [latitude,longitude].
+        'phase'            The phase angle [latitude,longitude].
+        'emission'         The emission angle [latitude,longitude].
+        'incidence'        The incidence angle [latitude,longitude].
+    """
     logger = logging.getLogger(LOGGING_NAME+'.moons_reproject')
 
     # We need to be careful not to use obs.bp from this point forward because
@@ -494,21 +550,29 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     
     return ret
 
-def add_to_mosaic(mosaic, mosaic_resolution, repro_img, repro_resolution):
-    better_resolution_mask = (repro_resolution < mosaic_resolution)
-    ok_value_mask = np.logical_and(-100 < repro_img, repro_img < 100)
-    new_mosaic_mask = np.logical_and(better_resolution_mask, ok_value_mask)
-    
-    mosaic[new_mosaic_mask] = repro_img[new_mosaic_mask]
-    mosaic_resolution[new_mosaic_mask] = repro_resolution[new_mosaic_mask]
-
-    overlay = (repro_img-np.min(repro_img)) / (np.max(repro_img)-np.min(repro_img))
-    im = imgdisp.ImageDisp([mosaic], [overlay],
-                           canvas_size=(1024,768), allow_enlarge=True)
-    tk.mainloop()
-
 def moons_mosaic_init(latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
                     longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+    """Create the data structure for a moon mosaic.
+
+    Inputs:
+        latitude_resolution      The latitude resolution of the new image
+                                 (deg/pix).
+        longitude_resolution     The longitude resolution of the new image
+                                 (deg/pix).
+                                 
+    Returns:
+        A dictionary containing an empty mosaic
+
+        'img'              The full mosaic image.
+        'full_mask'        The valid-pixel mask (all False).
+        'resolution'       The per-pixel resolution.
+        'phase'            The per-pixel phase angle.
+        'emission'         The per-pixel emission angle.
+        'incidence'        The per-pixel incidence angle.
+        'image_number'     The per-pixel image number giving the image
+                           used to fill the data for each pixel.
+        'time'             The per-pixel time (TDB).
+    """
 
     latitude_pixels = int(180. / latitude_resolution)
     longitude_pixels = int(360. / longitude_resolution)
@@ -526,6 +590,11 @@ def moons_mosaic_init(latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTIO
     return ret
 
 def moons_mosaic_add(mosaic_metadata, repro_metadata, image_number):
+    """Add a reprojected image to an existing mosaic.
+    
+    For each valid pixel in the reprojected image, it is copied to the
+    mosaic if it has better resolution.
+    """
     mosaic_img = mosaic_metadata['img']
     mosaic_mask = mosaic_metadata['full_mask']
     

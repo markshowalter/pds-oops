@@ -29,6 +29,7 @@ import os
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
+
 import polymath
 import oops
 import cspice
@@ -524,8 +525,8 @@ def rings_mosaic_init(
 def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     """Add a reprojected image to an existing mosaic.
     
-    For each valid longitude in the reproject image, it is copied to the
-    mosaic if it each has more valid radial data, or the same amount of radial
+    For each valid longitude in the reprojected image, it is copied to the
+    mosaic if it has more valid radial data, or the same amount of radial
     data but the resolution is better.
     """
     mosaic_metadata['mean_incidence'] = repro_metadata['mean_incidence']
