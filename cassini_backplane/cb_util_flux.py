@@ -30,7 +30,7 @@ import oops
 from cb_config import *
 from cb_util_oops import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 #===============================================================================
@@ -96,7 +96,7 @@ _CISSCAL_DETECTOR_OPTICS_AREA = {'NAC': 264.84, 'WAC': 29.32} # Aperture cm^2
 
 def _read_cisscal_calib_file(filename):
     """Read a CISSCAL calibration table."""
-    logger = logging.getLogger(LOGGING_NAME+'.read_cisscal_calib_file')
+    logger = logging.getLogger(_LOGGING_NAME+'.read_cisscal_calib_file')
     logger.debug('Reading "%s"', filename)
 
     fp = open(filename, 'r')
@@ -128,7 +128,7 @@ def _cisscal_filter_transmission(obs):
         filter_filename = ('iss' + obs.detector.lower()[:2] + 
                            obs.filter1.lower())
         filter_filename += obs.filter2.lower() + '_systrans.tab'
-        systrans_filename = os.path.join(CISSCAL_CALIB_PATH, 'efficiency',
+        systrans_filename = os.path.join(CISSCAL_CALIB_ROOT, 'efficiency',
                                          'systrans', filter_filename)
         systrans_list = _read_cisscal_calib_file(systrans_filename)
         systrans_wl = [x[0] for x in systrans_list] # Wavelength in nm
@@ -146,7 +146,7 @@ def _cisscal_qe_correction(obs):
     key = obs.detector
     if key not in _CISSCAL_QE_CORRECTION_CACHE:    
         qecorr_filename = os.path.join(
-                               CISSCAL_CALIB_PATH, 'correction',
+                               CISSCAL_CALIB_ROOT, 'correction',
                                obs.detector.lower()+'_qe_correction.tab')
         qecorr_list = _read_cisscal_calib_file(qecorr_filename)
         qecorr_wl = [x[0] for x in qecorr_list] # Wavelength in nm
@@ -166,7 +166,7 @@ def _cisscal_solar_flux():
     
     if _CISSCAL_SOLAR_FLUX_CACHE is None:    
         # Flux is in photons / cm^2 / s / angstrom at 1 AU
-        solarflux_filename = os.path.join(CISSCAL_CALIB_PATH, 'efficiency',
+        solarflux_filename = os.path.join(CISSCAL_CALIB_ROOT, 'efficiency',
                                           'solarflux.tab')
         solarflux_list = _read_cisscal_calib_file(solarflux_filename)
         solarflux_wl = [x[0]/10. for x in solarflux_list] # Wavelength in nm
@@ -183,7 +183,7 @@ def _compute_cisscal_efficiency(obs):
     """Compute the efficiency factor without solar flux."""
     # From cassimg__dividebyefficiency.pro
 
-    logger = logging.getLogger(LOGGING_NAME+'._compute_cisscal_efficiency')
+    logger = logging.getLogger(_LOGGING_NAME+'._compute_cisscal_efficiency')
 
     # Read in filter transmission
     systrans_wl, systrans_xmit = _cisscal_filter_transmission(obs)
@@ -220,7 +220,7 @@ def _compute_cisscal_solar_flux_efficiency(obs):
     """Compute the efficiency factor including solar flux."""
     # From cassimg__dividebyefficiency.pro
 
-    logger = logging.getLogger(LOGGING_NAME+
+    logger = logging.getLogger(_LOGGING_NAME+
                                '._compute_cisscal_solar_flux_efficiency')
     
     # Read in filter transmission
@@ -284,7 +284,7 @@ def calibrate_iof_image_as_flux(obs):
     """
     # We undo step 4 and then redo it with no stellar flux
 
-    logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_flux')
+    logger = logging.getLogger(_LOGGING_NAME+'.calibrate_iof_image_as_flux')
 
     key = (obs.detector, obs.filter1, obs.filter2)
     if key in _IOF_FLUX_CONVERSION_FACTOR_CACHE:
@@ -318,7 +318,7 @@ def calibrate_iof_image_as_dn(obs, data=None):
     
     The input observation data is in I/F.
     """
-    logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_dn')
+    logger = logging.getLogger(_LOGGING_NAME+'.calibrate_iof_image_as_dn')
 
     if data is None:
         # Can be overriden if we want to calibrate some other data block
@@ -381,13 +381,13 @@ _CASSINI_FILTER_TRANSMISSION = {}
 def _cassini_filter_transmission(detector, filter):
     """Return the (wavelengths, transmission) for the given Cassini filter."""
 
-    logger = logging.getLogger(LOGGING_NAME+
+    logger = logging.getLogger(_LOGGING_NAME+
                                '.cassini_filter_transmission')
 
     if len(_CASSINI_FILTER_TRANSMISSION) == 0:
         for iss_det in ['NAC', 'WAC']:
             base_dirname = iss_det[0].lower() + '_c_trans_sum'
-            filename = os.path.join(CASSINI_CALIB_PATH, base_dirname,
+            filename = os.path.join(CASSINI_CALIB_ROOT, base_dirname,
                                     'all_filters.tab') 
             logger.debug('Reading "%s"', filename)
             filter_fp = open(filename, 'r')
@@ -637,7 +637,7 @@ def _compute_stellar_spectrum(obs, star):
     Returned value is in photons / cm^2 / s
     """
     
-    logger = logging.getLogger(LOGGING_NAME+'.compute_stellar_spectrum')
+    logger = logging.getLogger(_LOGGING_NAME+'.compute_stellar_spectrum')
 
     # Planck is in photons / cm^2 / s / nm / steradian
     # However, it might as well be photons / cm^2 / s / nm because we're just
@@ -680,7 +680,7 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     The spectrum is in photons / cm^2 / s / nm
     """
 
-    logger = logging.getLogger(LOGGING_NAME+'._compute_dn_from_spectrum')
+    logger = logging.getLogger(_LOGGING_NAME+'._compute_dn_from_spectrum')
 
     # Read in filter transmission
     systrans_wl, systrans_xmit = _cisscal_filter_transmission(obs)

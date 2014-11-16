@@ -28,6 +28,7 @@ cmd_line = sys.argv[1:]
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
                 'MIMAS',
+                '--recompute-mosaic',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
@@ -107,7 +108,7 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     #  mosaic_metadata_filename (body_name_list, image_name_list, image_path_list)
     #  large_png_filename (full size mosaic graphic)
     #  small_png_filename (reduced size mosaic graphic)
-    (mosaicdata.data_path, mosaicdata.metadata_path,
+    (mosaicdata.data_path, 
      mosaicdata.png_path) = moon_util.mosaic_paths(options, mosaicdata.body_name)
     
     if options.verbose:
@@ -157,19 +158,20 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     _update_mosaicdata(mosaicdata, mosaic_metadata)
 
     # Save mosaic image array in binary
-    np.save(mosaicdata.data_path, mosaicdata.img)
-    
-    # Save metadata
-#XXX    metadata = mosaic_metadata.copy() # Everything except img
-#    del metadata['img']
-#    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
-#    pickle.dump(metadata, mosaic_metadata_fp)
-#    pickle.dump(mosaicdata.body_name_list, mosaic_metadata_fp)
-#    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
-#    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
-#    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
-#    mosaic_metadata_fp.close()
-    
+#    np.savez(mosaicdata.data_path, 
+#             img=mosaicdata.img)
+#             full_mask = mosaic_metadata['full_mask'],
+#             resolution = mosaic_metadata['resolution'],
+#             image_number = mosaic_metadata['image_number'],
+#             time = mosaic_metadata['time'], 
+#             emission = mosaic_metadata['emission'],
+#             incidence = mosaic_metadata['incidence'],
+#             phase = mosaic_metadata['phase'])
+#             body_name_list = mosaicdata.body_name_list,
+#             image_name_list = mosaicdata.image_name_list,
+#             image_path_list = mosaicdata.image_path_list,
+#             repro_path_list = mosaicdata.repro_path_list)
+
 #XXX    blackpoint = max(np.min(mosaicdata.img), 0)
 #    whitepoint = np.max(mosaicdata.img)
 #    img = mosaicdata.img
@@ -294,7 +296,7 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
     mosaicdispdata.label_image.grid(row=gridrow, column=gridcolumn+1, sticky=W)
     gridrow += 1
     
-    label = Label(addon_control_frame, text='body_name:')
+    label = Label(addon_control_frame, text='Body:')
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
     mosaicdispdata.label_body_name = Label(addon_control_frame, text='')
     mosaicdispdata.label_body_name.grid(row=gridrow, column=gridcolumn+1, sticky=W)
@@ -347,20 +349,16 @@ def setup_mosaic_window(mosaicdata, mosaicdispdata):
     
 def display_mosaic(mosaicdata, mosaicdispdata):
     if mosaicdata.img is None:
-        (mosaicdata.data_path, mosaicdata.metadata_path,
-         mosaicdata.png_path) = moon_util.mosaic_paths(options, mosaicdata.body_name)
+        (mosaicdata.data_path, mosaicdata.png_path) = moon_util.mosaic_paths(options, mosaicdata.body_name)
         
-        img = np.load(mosaicdata.data_path+'.npy')
+        metadata = dict(np.load(mosaicdata.data_path+'.npz'))
         
-        mosaic_metadata_fp = open(mosaicdata.metadata_path, 'rb')
-        metadata = pickle.load(mosaic_metadata_fp)
-        metadata['img'] = img
+#        mosaicdata.body_name_list = metadata.pop('body_name_list')
+#        mosaicdata.image_name_list = metadata.pop('image_name_list')
+#        mosaicdata.image_path_list = metadata.pop('image_path_list')
+#        mosaicdata.repro_path_list = metadata.pop('repro_path_list')
+
         _update_mosaicdata(mosaicdata, metadata)
-        mosaicdata.body_name_list = pickle.load(mosaic_metadata_fp)
-        mosaicdata.image_name_list = pickle.load(mosaic_metadata_fp)
-        mosaicdata.image_path_list = pickle.load(mosaic_metadata_fp)
-        mosaicdata.repro_path_list = pickle.load(mosaic_metadata_fp)
-        mosaic_metadata_fp.close()
 
     setup_mosaic_window(mosaicdata, mosaicdispdata)
     

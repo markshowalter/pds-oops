@@ -12,7 +12,7 @@ LOG_OVERRIDE_CORRELATE = None #logging.ERROR
 LOG_OVERRIDE_MOONS     = None #logging.ERROR
 LOG_OVERRIDE_RINGS     = None #logging.ERROR
 LOG_OVERRIDE_STARS     = None #logging.ERROR
-LOG_OVERRIDE_UTIL_FLUX = None#logging.ERROR
+LOG_OVERRIDE_UTIL_FLUX = logging.ERROR
 LOG_OVERRIDE_UTIL_OOPS = None
 
 root_logger = logging.getLogger('cb')

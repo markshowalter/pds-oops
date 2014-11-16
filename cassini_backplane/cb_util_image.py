@@ -19,7 +19,7 @@ import logging
 import numpy as np
 import scipy.ndimage.filters as filt
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 #==============================================================================

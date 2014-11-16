@@ -523,7 +523,7 @@ do_profile = False
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2053/data/1614457968_1614561850/N1614551201_1_CALIB.IMG',x1=540,y1=538,x2=539,y2=499,x3=540,y3=537,x4=540,y4=497)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1618067253_1618407253/N1618072263_1_CALIB.IMG',x1=545,y1=555,x2=544,y2=517,x3=545,y3=555,x4=543,y4=514)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1618067253_1618407253/N1618072306_1_CALIB.IMG',x1=546,y1=554,x2=545,y2=516,x3=546,y3=554,x4=545,y4=515)
-process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1619427338_1619724488/N1619668649_1_CALIB.IMG',x1=594,y1=427,x2=594,y2=383)#,x3=546,y3=544,x4=546,y4=514)
+#process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1619427338_1619724488/N1619668649_1_CALIB.IMG',x1=594,y1=427,x2=594,y2=383)#,x3=546,y3=544,x4=546,y4=514)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1619427338_1619724488/N1619668692_1_CALIB.IMG',x1=599,y1=426,x2=598,y2=385,x3=598,y3=427,x4=599,y4=384)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2053/data/1613001873_1613171522/N1613101631_1_CALIB.IMG',x1=541,y1=549,x2=541,y2=515,x3=541,y3=549,x4=542,y4=512)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2052/data/1612493048_1612547115/N1612537044_1_CALIB.IMG',x1=551,y1=534,x2=550,y2=510,x3=552,y3=534,x4=550,y4=510)
@@ -566,18 +566,29 @@ process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1619427338_1619
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621850497_1_CALIB.IMG',x1=621,y1=571,x2=628,y2=481,x3=621,y3=571,x4=627,y4=480)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1622043391_1622198245/N1622138672_1_CALIB.IMG',x1=617,y1=426,x2=616,y2=374,x3=617,y3=426,x4=617,y4=373)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1622043391_1622198245/N1622138715_1_CALIB.IMG',x1=618,y1=426,x2=618,y2=371,x3=618,y3=426,x4=619,y4=373)
-process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623667817_1623919770/N1623757093_1_CALIB.IMG',x1=582,y1=483,x2=538,y2=423)#,x3=584,y3=480,x4=539,y4=423)
+#process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623667817_1623919770/N1623757093_1_CALIB.IMG',x1=582,y1=483,x2=538,y2=423)#,x3=584,y3=480,x4=539,y4=423)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623667817_1623919770/N1623757136_1_CALIB.IMG',x1=589,y1=481,x2=544,y2=424,x3=589,y3=482,x4=544,y4=424)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG',x1=514,y1=586,x2=608,y2=527,x3=514,y3=586,x4=611,y4=524)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883509_1_CALIB.IMG',x1=514,y1=585,x2=609,y2=524,x3=513,y3=586,x4=610,y4=524)'''
 
+#### EARL
 
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1619427338_1619724488/W1619670961_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623252400_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623252443_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623253931_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623249700_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623251196_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623251231_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623251347_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623253896_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623249743_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623224496_1623283102/W1623251231_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/W1624906052_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/W1624906667_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2057/data/1630290242_1630383004/W1630381069_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2057/data/1632306929_1632459671/W1632310016_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2057/data/1632306929_1632459671/W1632310049_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2057/data/1632306929_1632459671/W1632310115_1_CALIB.IMG')
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1618584113_1618605703/N1618587853_1_CALIB.IMG')
 
-
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622549816_1622632159/N1622592788_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2052/data/1609906195_1610170084/N1610086205_1_CALIB.IMG')
-#process(r't:/clumps/data/ISS_075RF_FMOVIE002_VIMS/N1593945662_1_CALIB.IMG')
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1630191052_1630290194/N1630270620_1_CALIB.IMG',reproject=True)
-#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054\data/1617917998_1618066143/W1617920879_1_CALIB.IMG')
-
-#process(r'T:\external\cassini\derived\COISS_2xxx/COISS_2056/data/1626245310_1626407985/N1626333579_1_CALIB.IMG')

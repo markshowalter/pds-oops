@@ -19,7 +19,7 @@ import Tkinter
 
 from cb_util_image import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 DEBUG_CORRELATE_PLOT = False
 DEBUG_CORRELATE_IMGDISP = False
@@ -149,7 +149,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
         peak_value         The correlation value at the peak in the range
                            [-1,1].
     """
-    logger = logging.getLogger(LOGGING_NAME+'._find_correlated_offset')
+    logger = logging.getLogger(_LOGGING_NAME+'._find_correlated_offset')
 
     if np.shape(search_size_min) == ():
         search_size_min_u = search_size_min
@@ -334,7 +334,7 @@ def find_correlation_and_offset(image, model, search_size_min=0,
         offset_v           The offset in the V direction.
         peak_value         The correlation value at the peak.    
     """
-    logger = logging.getLogger(LOGGING_NAME+'.find_correlation_and_offset')
+    logger = logging.getLogger(_LOGGING_NAME+'.find_correlation_and_offset')
 
     image = image.astype('float')
     model = model.astype('float')

@@ -39,13 +39,8 @@ from tabulation import Tabulation
 from cb_config import *
 from cb_util_oops import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
-RING_VOYAGER_IF_TABLE = PdsTable(os.path.join(SUPPORT_FILES_ROOT,
-                                              'IS2_P0001_V01_KM002.LBL'))
-RING_VOYAGER_IF_DATA = Tabulation(
-       RING_VOYAGER_IF_TABLE.column_dict['RING_INTERCEPT_RADIUS'],
-       RING_VOYAGER_IF_TABLE.column_dict['I_OVER_F'])
 
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
@@ -63,7 +58,29 @@ FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
 #
 #==============================================================================
 
-def rings_create_model(obs, extend_fov=(0,0)):
+_RING_VOYAGER_IF_DATA = None
+
+def _compute_ring_model(source):
+    if source == 'voyager':
+        global _RING_VOYAGER_IF_DATA
+        if not _RING_VOYAGER_IF_DATA:
+            if_table = PdsTable(os.path.join(SUPPORT_FILES_ROOT,
+                                             'IS2_P0001_V01_KM002.LBL'))
+            _RING_VOYAGER_IF_DATA = Tabulation(
+                   if_table.column_dict['RING_INTERCEPT_RADIUS'],
+                   if_table.column_dict['I_OVER_F'])
+        return _RING_VOYAGER_IF_DATA
+
+    if source == 'uvis':
+        occ_root = os.path.join(COUVIS_8XXX_ROOT, 'COISS_8001', 'DATA',
+                                'EASYDATA')
+
+
+        
+        assert False
+
+
+def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     """Create a model for the rings.
     
     If there are no rings in the image or they are entirely in shadow,
@@ -72,8 +89,10 @@ def rings_create_model(obs, extend_fov=(0,0)):
     The rings model is created by interpolating from the Voyager I/F
     profile. Portions in Saturn's shadow are removed.
     """
-    logger = logging.getLogger(LOGGING_NAME+'.rings_create_model')
+    logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model')
 
+    assert source in ('uvis', 'voyager')
+    
     set_obs_ext_bp(obs, extend_fov)
     
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
@@ -314,7 +333,7 @@ def rings_reproject(
                            longitudes (it shouldn't change over the ring 
                            plane).
     """
-    logger = logging.getLogger(LOGGING_NAME+'.rings_reproject')
+    logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
     assert corotating in (None, 'F')
     

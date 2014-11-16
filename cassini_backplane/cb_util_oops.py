@@ -25,7 +25,7 @@ import oops
 
 from cb_util_image import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 #===============================================================================
@@ -129,7 +129,7 @@ def compute_ra_dec_limits(obs, extend_fov=(0,0)):
     Returns:
         ra_min, ra_max, dec_min, dec_max (radians)
     """
-    logger = logging.getLogger(LOGGING_NAME+'.ra_dec_limits')
+    logger = logging.getLogger(_LOGGING_NAME+'.ra_dec_limits')
     
     set_obs_ext_corner_bp(obs, extend_fov)
 

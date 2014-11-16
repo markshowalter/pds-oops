@@ -120,18 +120,16 @@ def mosaic_paths(options, body_name):
     mosaic_res_data = ('_%06.3f_%05.3f' % (options.latitude_resolution,
                                            options.longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-data')
-    metadata_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+body_name+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path)
+    return (data_path, large_png_path)
 
 def mosaic_paths_spec(latitude_resolution, longitude_resolution,
                       body_name):
     mosaic_res_data = ('_%06.3f_%05.3f' % (latitude_resolution,
                                            longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-data')
-    metadata_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+body_name+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path)
+    return (data_path, large_png_path)
 
 #def bkgnd_paths(options, body_name):
 #    bkgnd_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,

@@ -27,6 +27,7 @@ import scipy.ndimage.interpolation as ndinterp
 import matplotlib.pyplot as plt
 
 import oops
+import polymath
 import gravity
 import cspice
 from pdstable import PdsTable
@@ -34,7 +35,7 @@ from pdstable import PdsTable
 from cb_config import *
 from cb_util_oops import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION = 0.1
 MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.1
@@ -250,7 +251,7 @@ def moons_create_model(obs, body_name, lambert=True,
                        u_min=0, u_max=10000, v_min=0, v_max=10000,
                        extend_fov=(0,0),
                        force_spherical=True, use_cartographic=True):
-    logger = logging.getLogger(LOGGING_NAME+'.moons_create_model')
+    logger = logging.getLogger(_LOGGING_NAME+'.moons_create_model')
 
     body_name = body_name.upper()
 
@@ -330,19 +331,29 @@ def moons_generate_longitudes(start_num=0,
         end_num = int(360. / longitude_resolution)-1
     return np.arange(start_num, end_num+1) * longitude_resolution
 
-def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude):
+def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
+                                       lat_type='centric'):
     """Convert latitude (deg),longitude (deg) pairs to U,V."""
-    latitude = np.asarray(latitude)
-    longitude = np.asarray(longitude)
+    assert lat_type in ('centric', 'graphic')
+
+    latitude = polymath.Scalar.as_scalar(latitude) * oops.RPD
+    longitude = polymath.Scalar.as_scalar(longitude) * oops.RPD
     
     if len(longitude) == 0:
         return np.array([]), np.array([])
-    
+
     moon_surface = oops.Body.lookup(body_name).surface
-    obs_event = oops.Event(obs.midtime, (Vector3.ZERO,Vector3.ZERO),
+    
+    if lat_type == 'centric':
+        latitude = moon_surface.lat_from_centric(latitude)
+    else:
+        latitude = moon_surface.lat_from_graphic(latitude)
+        
+    obs_event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
+                                         polymath.Vector3.ZERO),
                            obs.path, obs.frame)
-    _, obs_event = moon_surface.photon_to_event_by_coords(obs_event,
-                                      (longitude*oops.RPD, latitude*oops.RPD))
+    _, obs_event = moon_surface.photon_to_event_by_coords(
+                                          obs_event, (longitude, latitude))
 
     uv = obs.fov.uv_from_los(-obs_event.arr)
     u, v = uv.to_scalars()
@@ -352,7 +363,7 @@ def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude):
 def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
             latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
             longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-            zoom=MOONS_DEFAULT_REPRO_ZOOM):
+            zoom=MOONS_DEFAULT_REPRO_ZOOM, lat_type='centric'):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -386,7 +397,7 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
         'emission'         The emission angle [latitude,longitude].
         'incidence'        The incidence angle [latitude,longitude].
     """
-    logger = logging.getLogger(LOGGING_NAME+'.moons_reproject')
+    logger = logging.getLogger(_LOGGING_NAME+'.moons_reproject')
 
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
@@ -417,8 +428,11 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
 
     # A pixel is OK if it falls on the body, the lambert model is
     # bright enough and the emission angle is large enough
-    ok_body_mask_inv = np.logical_or(body_mask_inv, lambert < MOONS_REPRO_MIN_LAMBERT)
-    ok_body_mask_inv = np.logical_or(ok_body_mask_inv, bp_emission_deg > MOONS_REPRO_MAX_EMISSION)
+    ok_body_mask_inv = np.logical_or(body_mask_inv, 
+                                     lambert < MOONS_REPRO_MIN_LAMBERT)
+    ok_body_mask_inv = np.logical_or(ok_body_mask_inv, 
+                                     bp_emission_deg > 
+                                         MOONS_REPRO_MAX_EMISSION)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
     
     # Divide the data by the lambert model in an attempt to account for
@@ -464,21 +478,28 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     # Actual longitude (deg)
     long_bins_act = long_bins * longitude_resolution
 
-    logger.debug('Latitude range %8.2f %8.2f', np.min(bp_latitude[ok_body_mask]), 
+    logger.debug('Latitude range %8.2f %8.2f', 
+                 np.min(bp_latitude[ok_body_mask]), 
                  np.max(bp_latitude[ok_body_mask]))
-    logger.debug('Latitude bin range %8.2f %8.2f', np.min(lat_bins_act), 
+    logger.debug('Latitude bin range %8.2f %8.2f', 
+                 np.min(lat_bins_act), 
                  np.max(lat_bins_act))
-    logger.debug('Longitude range %6.2f %6.2f', np.min(bp_longitude[ok_body_mask]), 
+    logger.debug('Longitude range %6.2f %6.2f', 
+                 np.min(bp_longitude[ok_body_mask]), 
                  np.max(bp_longitude[ok_body_mask]))
-    logger.debug('Longitude bin range %6.2f %6.2f', np.min(long_bins_act),
+    logger.debug('Longitude bin range %6.2f %6.2f', 
+                 np.min(long_bins_act),
                  np.max(long_bins_act))
-    logger.debug('Resolution range %7.2f %7.2f', np.min(resolution[ok_body_mask]),
+    logger.debug('Resolution range %7.2f %7.2f', 
+                 np.min(resolution[ok_body_mask]),
                  np.max(resolution[ok_body_mask]))
-    logger.debug('Data range %f %f', np.min(adj_data), np.max(adj_data))
+    logger.debug('Data range %f %f', 
+                 np.min(adj_data), 
+                 np.max(adj_data))
 
-    u_pixels, v_pixels = moons_latitude_longitude_to_pixels(obs, body_name,
-                                                            lat_bins_act,
-                                                            long_bins_act)
+    u_pixels, v_pixels = moons_latitude_longitude_to_pixels(
+                            obs, body_name, lat_bins_act, long_bins_act,
+                            lat_type=lat_type)
         
     zoom_data = ndinterp.zoom(adj_data, zoom) # XXX Default to order=3 - OK?
 
@@ -497,44 +518,55 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     bad_data_mask_zoom = ndinterp.zoom(bad_data_mask, zoom, order=0)
     zoom_data[bad_data_mask_zoom] = 0.
     
-    interp_data = zoom_data[(good_v*zoom).astype('int'), (good_u*zoom).astype('int')]
+    interp_data = zoom_data[(good_v*zoom).astype('int'), 
+                            (good_u*zoom).astype('int')]
     
-    repro_img = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_img = ma.zeros((latitude_pixels, longitude_pixels), 
+                         dtype=np.float32)
     repro_img.mask = True
     repro_img[good_lat,good_long] = interp_data
 
     good_u = good_u.astype('int')
     good_v = good_v.astype('int')
     
-    repro_res = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_res = ma.zeros((latitude_pixels, longitude_pixels), 
+                         dtype=np.float32)
     repro_res.mask = True
     repro_res[good_lat,good_long] = resolution[good_v,good_u]
     full_mask = ma.getmaskarray(repro_res)
 
-    repro_phase = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_phase = ma.zeros((latitude_pixels, longitude_pixels), 
+                           dtype=np.float32)
     repro_phase.mask = True
     repro_phase[good_lat,good_long] = bp_phase[good_v,good_u]
 
-    repro_emission = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_emission = ma.zeros((latitude_pixels, longitude_pixels), 
+                              dtype=np.float32)
     repro_emission.mask = True
     repro_emission[good_lat,good_long] = bp_emission_deg[good_v,good_u]
 
-    repro_incidence = ma.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    repro_incidence = ma.zeros((latitude_pixels, longitude_pixels), 
+                               dtype=np.float32)
     repro_incidence.mask = True
     repro_incidence[good_lat,good_long] = bp_incidence[good_v,good_u]
 
     full_mask = full_mask[min_latitude_pixel:max_latitude_pixel+1,
                           min_longitude_pixel:max_longitude_pixel+1]
-    repro_img = ma.filled(repro_img[min_latitude_pixel:max_latitude_pixel+1,
-                                    min_longitude_pixel:max_longitude_pixel+1], 0.)
-    repro_res = ma.filled(repro_res[min_latitude_pixel:max_latitude_pixel+1,
-                                    min_longitude_pixel:max_longitude_pixel+1], 0.)
-    repro_phase = ma.filled(repro_phase[min_latitude_pixel:max_latitude_pixel+1,
-                                    min_longitude_pixel:max_longitude_pixel+1], 0.)
-    repro_emission = ma.filled(repro_emission[min_latitude_pixel:max_latitude_pixel+1,
-                                    min_longitude_pixel:max_longitude_pixel+1], 0.)
-    repro_incidence = ma.filled(repro_incidence[min_latitude_pixel:max_latitude_pixel+1,
-                                    min_longitude_pixel:max_longitude_pixel+1], 0.)
+    repro_img = ma.filled(
+              repro_img[min_latitude_pixel:max_latitude_pixel+1,
+                        min_longitude_pixel:max_longitude_pixel+1], 0.)
+    repro_res = ma.filled(
+              repro_res[min_latitude_pixel:max_latitude_pixel+1,
+                        min_longitude_pixel:max_longitude_pixel+1], 0.)
+    repro_phase = ma.filled(
+              repro_phase[min_latitude_pixel:max_latitude_pixel+1,
+                          min_longitude_pixel:max_longitude_pixel+1], 0.)
+    repro_emission = ma.filled(
+              repro_emission[min_latitude_pixel:max_latitude_pixel+1,
+                             min_longitude_pixel:max_longitude_pixel+1], 0.)
+    repro_incidence = ma.filled(
+              repro_incidence[min_latitude_pixel:max_latitude_pixel+1,
+                              min_longitude_pixel:max_longitude_pixel+1], 0.)
 
     ret = {}
     
@@ -550,8 +582,9 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     
     return ret
 
-def moons_mosaic_init(latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
-                    longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+def moons_mosaic_init(
+      latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
+      longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
     """Create the data structure for a moon mosaic.
 
     Inputs:
@@ -578,14 +611,22 @@ def moons_mosaic_init(latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTIO
     longitude_pixels = int(360. / longitude_resolution)
     
     ret = {}
-    ret['img'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
-    ret['full_mask'] = np.ones((latitude_pixels, longitude_pixels), dtype=np.bool)
-    ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
-    ret['phase'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
-    ret['emission'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
-    ret['incidence'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
-    ret['image_number'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.int32)
-    ret['time'] = np.zeros((latitude_pixels, longitude_pixels), dtype=np.float32)
+    ret['img'] = np.zeros((latitude_pixels, longitude_pixels), 
+                          dtype=np.float32)
+    ret['full_mask'] = np.ones((latitude_pixels, longitude_pixels), 
+                               dtype=np.bool)
+    ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
+                                 dtype=np.float32)
+    ret['phase'] = np.zeros((latitude_pixels, longitude_pixels), 
+                            dtype=np.float32)
+    ret['emission'] = np.zeros((latitude_pixels, longitude_pixels), 
+                               dtype=np.float32)
+    ret['incidence'] = np.zeros((latitude_pixels, longitude_pixels), 
+                                dtype=np.float32)
+    ret['image_number'] = np.zeros((latitude_pixels, longitude_pixels), 
+                                   dtype=np.int32)
+    ret['time'] = np.zeros((latitude_pixels, longitude_pixels), 
+                           dtype=np.float32)
     
     return ret
 
@@ -603,31 +644,37 @@ def moons_mosaic_add(mosaic_metadata, repro_metadata, image_number):
 
     repro_mask = np.ones(mosaic_img.shape, dtype=np.bool) 
     repro_mask[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-               repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['full_mask']
+               repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['full_mask']
         
     repro_img = np.zeros(mosaic_img.shape) 
     repro_img[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['img']
+              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['img']
     
     mosaic_res = mosaic_metadata['resolution']
     repro_res = np.zeros(mosaic_res.shape)
     repro_res[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['resolution']
+              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['resolution']
     
     mosaic_phase = mosaic_metadata['phase']
     repro_phase = np.zeros(mosaic_phase.shape)
     repro_phase[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-                repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['phase']
+                repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['phase']
     
     mosaic_emission = mosaic_metadata['emission']
     repro_emission = np.zeros(mosaic_emission.shape)
     repro_emission[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['emission']
+                   repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['emission']
     
     mosaic_incidence = mosaic_metadata['incidence']
     repro_incidence = np.zeros(mosaic_incidence.shape)
     repro_incidence[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
-              repro_long_idx_range[0]:repro_long_idx_range[1]+1] = repro_metadata['incidence']
+                    repro_long_idx_range[0]:repro_long_idx_range[1]+1] = \
+                                repro_metadata['incidence']
     
     mosaic_image_number = mosaic_metadata['image_number']
     mosaic_time = mosaic_metadata['time']
@@ -635,7 +682,8 @@ def moons_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     # Calculate where the new resolution is better
     better_resolution_mask = repro_res < mosaic_res
     replace_mask = np.logical_and(np.logical_not(repro_mask),
-                                  np.logical_or(better_resolution_mask, mosaic_mask))
+                                  np.logical_or(better_resolution_mask, 
+                                                mosaic_mask))
 
     mosaic_img[replace_mask] = repro_img[replace_mask]
     mosaic_res[replace_mask] = repro_res[replace_mask] 

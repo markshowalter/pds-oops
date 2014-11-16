@@ -5,6 +5,7 @@
 ###############################################################################
 
 import os
+import os.path
 
 import oops
 
@@ -21,14 +22,19 @@ SUPPORT_FILES_ROOT = 't:/external/cb_support'
 # Cassini ISS calibrated files.
 COISS_2XXX_DERIVED_ROOT = 't:/external/cassini/derived/COISS_2xxx'
 
+COISS_ROOT = 't:/external/cassini/volumes'
+
 # Cassini ISS moon maps.
-COISS_3XXX_ROOT = 't:/external/cassini/volumes/COISS_3xxx'
+COISS_3XXX_ROOT = os.path.join(COISS_ROOT, 'COISS_3xxx')
+
+# Cassini UVIS.
+COUVIS_8XXX_ROOT = os.path.join(COISS_ROOT, 'COUVIS_8xxx_lien_resolution')
 
 # Contains solar flux, filter transmission convolved with quantum efficiency
-CISSCAL_CALIB_PATH = os.getenv('CISSCAL_CALIB_PATH')
+CISSCAL_CALIB_ROOT = os.getenv('CISSCAL_CALIB_PATH')
 
 # Contains filter transmission and PSF data
-CASSINI_CALIB_PATH = os.getenv('CASSINI_CALIB_PATH')
+CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
 
 
 ########################

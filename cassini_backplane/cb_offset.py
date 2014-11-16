@@ -23,7 +23,7 @@ from cb_rings import *
 from cb_stars import *
 from cb_util_image import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 def _normalize(data):
@@ -103,7 +103,7 @@ def master_find_offset(obs, create_overlay=False,
             'final_offset_v'   None if offset finding failed.
             
     """
-    logger = logging.getLogger(LOGGING_NAME+'.master_find_offset')
+    logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
     
     logger.debug('Date %s X %d Y %d TEXP %.3f %s+%s %s SAMPLING %s GAIN %d',
                  cspice.et2utc(obs.midtime, 'C', 0),
