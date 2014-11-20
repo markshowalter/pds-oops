@@ -54,7 +54,9 @@ def master_find_offset(obs, create_overlay=False,
                        allow_stars=True,
                        allow_saturn=True,
                        allow_moons=True,
-                       allow_rings=True):
+                       allow_rings=True,
+                       use_lambert=True,
+                       use_cartographic=True):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -71,6 +73,9 @@ def master_find_offset(obs, create_overlay=False,
                                  moons.
         allow_rings              True to allow finding the offset based on
                                  rings.
+        use_lambert              True to use Lambert shading for moons.
+        use_cartographic         True to allow the use of cartographic surface
+                                 maps for moons.
 
     Returns:
         offset_u, offset_v, metadata
@@ -235,14 +240,15 @@ def master_find_offset(obs, create_overlay=False,
                 continue
             body = large_body_dict[body_name]
             
-            model = moons_create_model(obs, body_name, lambert=True,
+            model = moons_create_model(obs, body_name,
                                        u_min=body['u_min'],
                                        u_max=body['u_max'],
                                        v_min=body['v_min'],
                                        v_max=body['v_max'],
                                        extend_fov=extend_fov,
-                                       force_spherical=True,
-                                       use_cartographic=False)
+                                       lambert=use_lambert,
+                                       force_spherical=False,
+                                       use_cartographic=use_cartographic)
             if body_name == 'SATURN':
                 saturn_model = model
             else:

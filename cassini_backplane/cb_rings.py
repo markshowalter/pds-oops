@@ -60,7 +60,7 @@ FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
 
 _RING_VOYAGER_IF_DATA = None
 
-def _compute_ring_model(source):
+def _compute_ring_radial_data(source):
     if source == 'voyager':
         global _RING_VOYAGER_IF_DATA
         if not _RING_VOYAGER_IF_DATA:
@@ -108,7 +108,8 @@ def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     radii[radii < RINGS_MIN_RADIUS] = 0
     radii[radii > RINGS_MAX_RADIUS] = 0
     
-    model = RING_VOYAGER_IF_DATA(radii)
+    radial_data = _compute_ring_radial_data('voyager')
+    model = radial_data(radii)
 
     saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
                                                    'saturn').vals
@@ -441,7 +442,7 @@ def rings_reproject(
 
     repro_res = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
     repro_res.mask = True
-    repro_res[good_rad,good_long] = bp_resolution[good_v,good_u]
+    repro_res[good_rad,good_long] = bp_resolution[v_pixels,u_pixels]
     repro_mean_res = ma.mean(repro_res, axis=0)
     # Mean will mask if ALL radii are masked are a particular longitude
 
@@ -451,19 +452,19 @@ def rings_reproject(
 
     repro_phase = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
     repro_phase.mask = True
-    repro_phase[good_rad,good_long] = bp_phase[good_v,good_u]
+    repro_phase[good_rad,good_long] = bp_phase[v_pixels,u_pixels]
     repro_mean_phase = ma.mean(repro_phase, axis=0)
 
     repro_emission = ma.zeros((radius_pixels, longitude_pixels), 
                               dtype=np.float32)
     repro_emission.mask = True
-    repro_emission[good_rad,good_long] = bp_emission[good_v,good_u]
+    repro_emission[good_rad,good_long] = bp_emission[v_pixels,u_pixels]
     repro_mean_emission = ma.mean(repro_emission, axis=0)
 
     repro_incidence = ma.zeros((radius_pixels, longitude_pixels), 
                                dtype=np.float32)
     repro_incidence.mask = True
-    repro_incidence[good_rad,good_long] = bp_incidence[good_v,good_u]
+    repro_incidence[good_rad,good_long] = bp_incidence[v_pixels,u_pixels]
     repro_mean_incidence = ma.mean(repro_incidence) # scalar
 
     repro_img = ma.filled(repro_img[:,good_long_mask], 0.)

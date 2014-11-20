@@ -176,6 +176,8 @@ def process_image(filename, interactive=True, **kwargs):
     toplevel.title(filename)
     frame_toplevel = Frame(toplevel)
 
+    overlay[:,:,0] = (ext_data-np.min(ext_data)) / (np.max(ext_data)-np.min(ext_data)) * 255.
+    
     imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,768), 
                         parent=frame_toplevel, allow_enlarge=True,
                         auto_update=True, origin=(ext_u,ext_v))
@@ -396,7 +398,7 @@ def process_random_file(root_path):
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2072\data\1704630602_1704833275\N1704832756_1_CALIB.IMG')
 
 # Saturn plus rings and moons - should ignore Saturn for match - rings shadowed on Saturn
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2034\data\1564337660_1564348958\W1564345216_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2034\data\1564337660_1564348958\W1564345216_1_CALIB.IMG')
 
 # Saturn closeup with rings edge on
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2021\data\1520611263_1520675998\N1520674835_1_CALIB.IMG')
@@ -443,8 +445,9 @@ process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2034\data\156433766
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2004/data/1465674475_1465709620/N1465677386_2_CALIB.IMG', interactive=True)
 
 # Mimas
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2014/data/1501618408_1501647096/N1501630117_1_CALIB.IMG', interactive=True)
+#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2014/data/1501618408_1501647096/N1501630117_1_CALIB.IMG', interactive=True, use_lambert=False)
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542756630_1_CALIB.IMG', interactive=True)
+process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542758143_1_CALIB.IMG', interactive=True, use_lambert=False)
 
 # Enceladus
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2009/data/1487182149_1487415680/N1487300482_1_CALIB.IMG', interactive=True)

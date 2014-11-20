@@ -174,6 +174,10 @@ def process(image_path):
 #process(r'j:/Temp/N1624900314_1_CALIB.IMG-repro')
 #process(r'C:\Rob\Dropbox\Shared-Tom-Woodrow\N1622394375_1_CALIB.IMG-repro')
 
+###### TOM
+
+process(r'j:/Temp/N1621959213_1_CALIB.IMG-repro')
+
 ###### LORI
 
 #process(r'j:/Temp/N1613101588_1_CALIB.IMG')
@@ -186,7 +190,7 @@ def process(image_path):
 #process(r'j:/Temp/N1614551201_1_CALIB.IMG')
 #process(r'j:/Temp/N1618072263_1_CALIB.IMG')
 #process(r'j:/Temp/N1618072306_1_CALIB.IMG')
-process(r'j:/Temp/N1619668649_1_CALIB.IMG')
+#process(r'j:/Temp/N1619668649_1_CALIB.IMG')
 #process(r'j:/Temp/N1619668692_1_CALIB.IMG')
 #process(r'j:/Temp/N1613101631_1_CALIB.IMG')
 #process(r'j:/Temp/N1612537044_1_CALIB.IMG')
@@ -229,7 +233,7 @@ process(r'j:/Temp/N1619668649_1_CALIB.IMG')
 #process(r'j:/Temp/N1621850497_1_CALIB.IMG')
 #process(r'j:/Temp/N1622138672_1_CALIB.IMG')
 #process(r'j:/Temp/N1622138715_1_CALIB.IMG')
-process(r'j:/Temp/N1623757093_1_CALIB.IMG')
+#process(r'j:/Temp/N1623757093_1_CALIB.IMG')
 #process(r'j:/Temp/N1623757136_1_CALIB.IMG')
 #process(r'j:/Temp/N1624883466_1_CALIB.IMG')
 #process(r'j:/Temp/N1624883509_1_CALIB.IMG')

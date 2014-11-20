@@ -25,6 +25,7 @@ import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import matplotlib.pyplot as plt
+import PIL.Image
 
 import oops
 import polymath
@@ -121,13 +122,13 @@ def _define_body_spherical(spice_id, parent, barycenter, radius):
     if "BARYCENTER" in body.keywords and parent is not None:
         body.add_keywords(parent)
 
-#_define_body_spherical('MIMAS', 'SATURN', 'SATURN', 198.2)
-#_define_body_spherical('ENCELADUS', 'SATURN', 'SATURN', 252.1)
-#_define_body_spherical('TETHYS', 'SATURN', 'SATURN', 531.1)
-#_define_body_spherical('DIONE', 'SATURN', 'SATURN', 561.4)
-#_define_body_spherical('RHEA', 'SATURN', 'SATURN', 763.8)
-#_define_body_spherical('IAPETUS', 'SATURN', 'SATURN BARYCENTER', 734.5)
-#_define_body_spherical('PHOEBE', 'SATURN', 'SATURN BARYCENTER', 106.5)
+_define_body_spherical('MIMAS', 'SATURN', 'SATURN', 198.2)
+_define_body_spherical('ENCELADUS', 'SATURN', 'SATURN', 252.1)
+_define_body_spherical('TETHYS', 'SATURN', 'SATURN', 531.1)
+_define_body_spherical('DIONE', 'SATURN', 'SATURN', 561.4)
+_define_body_spherical('RHEA', 'SATURN', 'SATURN', 763.8)
+_define_body_spherical('IAPETUS', 'SATURN', 'SATURN BARYCENTER', 734.5)
+_define_body_spherical('PHOEBE', 'SATURN', 'SATURN BARYCENTER', 106.5)
 
 
 #===============================================================================
@@ -142,12 +143,14 @@ def mask_to_array(mask, shape):
     new_mask[:,:] = mask
     return new_mask
 
-def _moons_create_cartographic(bp, body_name, force_spherical=True):
-    if force_spherical:
-        body_name_spherical = body_name + '_SPHERICAL'
-    else:
-        body_name_spherical = body_name
-        
+def _moons_read_iss_map(body_name):
+#        minimum_latitude = good_row['MINIMUM_LATITUDE']
+#        maximum_latitude = good_row['MAXIMUM_LATITUDE']
+#        westernmost_longitude = good_row['WESTERNMOST_LONGITUDE']
+#        easternmost_longitude = good_row['EASTERNMOST_LONGITUDE']
+#        map_projection_rotation = good_row['MAP_PROJECTION_ROTATION']
+#        map_scale = good_row['MAP_SCALE']
+    body_data = {}
     iss_dir = CARTOGRAPHIC_BODIES[body_name]
     img_index_filename = os.path.join(COISS_3XXX_ROOT, iss_dir, 'index',
                                       'img_index.lbl')
@@ -163,73 +166,112 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True):
     assert good_row['COORDINATE_SYSTEM_NAME'] == 'PLANETOGRAPHIC'
     assert good_row['COORDINATE_SYSTEM_TYPE'] == 'BODY-FIXED ROTATING'
     
-    center_longitude = good_row['CENTER_LONGITUDE']
-    center_latitude = good_row['CENTER_LATITUDE']
-    minimum_latitude = good_row['MINIMUM_LATITUDE']
-    maximum_latitude = good_row['MAXIMUM_LATITUDE']
-    westernmost_longitude = good_row['WESTERNMOST_LONGITUDE']
-    easternmost_longitude = good_row['EASTERNMOST_LONGITUDE']
-    positive_longitude_direction = good_row['POSITIVE_LONGITUDE_DIRECTION'].lower()
+    body_data['center_longitude'] = good_row['CENTER_LONGITUDE']
+    body_data['center_latitude'] = good_row['CENTER_LATITUDE']
+    pos_long_direction = good_row['POSITIVE_LONGITUDE_DIRECTION'].lower()
     # XXX POSITIVE_LONGITUDE_DIRECTION should be a string, but it's marked
     # XXX as a float. This is bogus and has been reported.
-    positive_longitude_direction = positive_longitude_direction[-4:]
-    line_first_pixel = good_row['LINE_FIRST_PIXEL']-1
-    assert line_first_pixel == 0 # Computation below would be wrong
-    line_last_pixel = good_row['LINE_LAST_PIXEL']-1
-    line_projection_offset = good_row['LINE_PROJECTION_OFFSET']
-    nline = line_last_pixel - line_first_pixel + 1
-    sample_first_pixel = good_row['SAMPLE_FIRST_PIXEL']-1
-    assert sample_first_pixel == 0 # Computation below would be wrong
-    sample_last_pixel = good_row['SAMPLE_LAST_PIXEL']-1
-    sample_projection_offset = good_row['SAMPLE_PROJECTION_OFFSET']
-    nsamp = sample_last_pixel - sample_first_pixel + 1
-    map_projection_rotation = good_row['MAP_PROJECTION_ROTATION']
-    map_resolution = good_row['MAP_RESOLUTION']
-    map_scale = good_row['MAP_SCALE']
+    body_data['pos_long_direction'] = pos_long_direction[-4:]
+    body_data['line_first_pixel'] = good_row['LINE_FIRST_PIXEL']-1
+    assert body_data['line_first_pixel'] == 0 # Comp below would be wrong
+    body_data['line_last_pixel'] = good_row['LINE_LAST_PIXEL']-1
+    body_data['line_proj_offset'] = good_row['LINE_PROJECTION_OFFSET']
+    body_data['sample_first_pixel'] = good_row['SAMPLE_FIRST_PIXEL']-1
+    assert body_data['sample_first_pixel'] == 0 # Comp below would be wrong
+    body_data['sample_last_pixel'] = good_row['SAMPLE_LAST_PIXEL']-1
+    body_data['sample_proj_offset'] = good_row['SAMPLE_PROJECTION_OFFSET']
+    body_data['map_resolution'] = good_row['MAP_RESOLUTION']
     map_filename = os.path.join(COISS_3XXX_ROOT, iss_dir,
                                 good_row['FILE_SPECIFICATION_NAME'])
+    map_data = np.fromfile(map_filename, dtype='uint8')
+    body_data['nline'] = (body_data['line_last_pixel'] -
+                          body_data['line_first_pixel'] + 1)
+    body_data['nsamp'] = (body_data['sample_last_pixel'] -
+                          body_data['sample_first_pixel'] + 1)
+    nline = body_data['nline']
+    nsamp = body_data['nsamp']
+    read_nline = len(map_data) // nsamp
+    map_data = map_data.reshape((read_nline, nsamp))
+    body_data['map_data'] = map_data[read_nline-nline:,:]
+    
+    return body_data
 
+def _moons_read_schenk_jpg(body_name):
+    body_data = {}
+    img_filename = os.path.join(SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
+    img = PIL.Image.open(img_filename)
+    nx, ny = img.size
+    body_data['line_first_pixel'] = 0
+    body_data['line_last_pixel'] = ny-1
+    body_data['sample_first_pixel'] = 0
+    body_data['sample_last_pixel'] = nx-1
+    body_data['center_latitude'] = 0.
+    body_data['center_longitude'] = 177.
+    body_data['pos_long_direction'] = 'west'
+    body_data['line_proj_offset'] = ny / 2.
+    body_data['sample_proj_offset'] = nx / 2.
+    body_data['map_resolution'] = nx / 360.
+    body_data['nline'] = (body_data['line_last_pixel'] -
+                          body_data['line_first_pixel'] + 1)
+    body_data['nsamp'] = (body_data['sample_last_pixel'] -
+                          body_data['sample_first_pixel'] + 1)
+    data = np.asarray(img)
+    data = data[:,:,1] # Green channel
+    body_data['map_data'] = data
+
+    return body_data
+    
+def _moons_create_cartographic(bp, body_name, force_spherical=True,
+                               source='schenk_jpg'):
+    if force_spherical:
+        body_name_spherical = body_name + '_SPHERICAL'
+    else:
+        body_name_spherical = body_name
+    
+    if (body_name_spherical, source) in CARTOGRAPHIC_FILE_CACHE:
+        body_data = CARTOGRAPHIC_FILE_CACHE[(body_name_spherical, source)]
+    else:
+        if source == 'iss':
+            body_data = _moons_read_iss_map(body_name)
+        elif source == 'schenk_jpg':
+            body_data = _moons_read_schenk_jpg(body_name)
+        CARTOGRAPHIC_FILE_CACHE[(body_name_spherical, source)] = body_data
+
+    nline = body_data['nline']
+    nsamp = body_data['nsamp']
+    map_data = body_data['map_data']
+    pos_long_direction = body_data['pos_long_direction']
+    line_proj_offset = body_data['line_proj_offset']
+    sample_proj_offset = body_data['sample_proj_offset']
+    center_longitude = body_data['center_longitude']
+    center_latitude = body_data['center_latitude']
+    map_resolution = body_data['map_resolution']
+    line_first_pixel = body_data['line_first_pixel']
+    line_last_pixel = body_data['line_last_pixel']
+    sample_first_pixel = body_data['sample_first_pixel']
+    sample_last_pixel = body_data['sample_last_pixel']
+    
     latitude = bp.latitude(body_name_spherical,
-                           lat_type='graphic').vals.astype('float') * oops.DPR
+                           lat_type='centric').vals.astype('float') * oops.DPR # XXX
     longitude = bp.longitude(body_name_spherical,
-                             direction=positive_longitude_direction)
+                             direction=pos_long_direction)
     longitude = longitude.vals.astype('float') * oops.DPR
 
-    if map_filename in CARTOGRAPHIC_FILE_CACHE:
-        map_data = CARTOGRAPHIC_FILE_CACHE[map_filename]
-    else:
-        map_data = np.fromfile(map_filename, dtype='uint8')
-        read_nline = len(map_data) // nsamp
-        map_data = map_data.reshape((read_nline, nsamp))
-        map_data = map_data[read_nline-nline:,:]
-        CARTOGRAPHIC_FILE_CACHE[map_filename] = map_data
-        
-    print 'CENTER LAT', latitude[latitude.shape[0]//2, latitude.shape[1]//2], 'LONG', longitude[latitude.shape[0]//2, latitude.shape[1]//2]
-    print np.min(latitude), np.max(latitude)
-    print np.min(longitude), np.max(longitude)
+    print 'LAT RANGE', np.min(latitude), np.max(latitude)
+    print 'LONG RANGE', np.min(longitude), np.max(longitude)
     
-    import matplotlib.pyplot as plt
-#    plt.imshow(latitude)
-#    plt.show()
-#    
-#    plt.imshow(longitude)
-#    plt.show()
-    
-    print line_projection_offset, center_latitude, map_resolution
-    line = (line_projection_offset -
+    print 'LINE OFF', line_proj_offset, 'CTR LAT', center_latitude,
+    print 'MAP RES', map_resolution
+    line = (line_proj_offset -
             (latitude - center_latitude) * map_resolution)
 
-    print sample_projection_offset, center_longitude, map_resolution
-    sample = ((sample_projection_offset -
+    print 'SAMP OFF', sample_proj_offset, 'CTR LONG', center_longitude,
+    print 'MAP RES', map_resolution
+    sample = ((sample_proj_offset -
                (longitude - center_longitude) * map_resolution) % nsamp)
 
     line = line.astype('int')
     sample = sample.astype('int')
-    
-#    plt.imshow(line)
-#    plt.show()
-#    plt.imshow(sample)
-#    plt.show()
     
     line_mask = np.logical_or(line < line_first_pixel,
                               line > line_last_pixel)
@@ -240,8 +282,6 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True):
     line[mask] = 0
     sample[mask] = 0
     
-#    plt.imshow(map_data)
-#    plt.show()
     model = map_data[line, sample] 
     model[mask] = 0
     
