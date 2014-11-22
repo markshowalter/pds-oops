@@ -55,8 +55,10 @@ def master_find_offset(obs, create_overlay=False,
                        allow_saturn=True,
                        allow_moons=True,
                        allow_rings=True,
-                       use_lambert=True,
-                       use_cartographic=True):
+                       moons_use_lambert=True,
+                       moons_use_cartographic=True,
+                       moons_cartographic_source='iss',
+                       rings_model_source='uvis'):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -73,9 +75,12 @@ def master_find_offset(obs, create_overlay=False,
                                  moons.
         allow_rings              True to allow finding the offset based on
                                  rings.
-        use_lambert              True to use Lambert shading for moons.
-        use_cartographic         True to allow the use of cartographic surface
+        moons_use_lambert        True to use Lambert shading for moons.
+        moons_use_cartographic   True to allow the use of cartographic surface
                                  maps for moons.
+        moons_cartographic_source  The source data to use for cartographic
+                                 surfaces (see cb_moons).
+        rings_model_source       The source for ring data (see cb_rings).
 
     Returns:
         offset_u, offset_v, metadata
@@ -179,7 +184,7 @@ def master_find_offset(obs, create_overlay=False,
                              body_name) # XXX
                 entirely_body = True
                 metadata['body_only'] = body_name
-                return None, None, metadata
+#                return None, None, metadata # XXX
 
     # See if the main rings take up the entire image    
     entirely_rings = False    
@@ -246,9 +251,10 @@ def master_find_offset(obs, create_overlay=False,
                                        v_min=body['v_min'],
                                        v_max=body['v_max'],
                                        extend_fov=extend_fov,
-                                       lambert=use_lambert,
+                                       lambert=moons_use_lambert,
                                        force_spherical=False,
-                                       use_cartographic=use_cartographic)
+                                       use_cartographic=moons_use_cartographic,
+                                       source=moons_cartographic_source)
             if body_name == 'SATURN':
                 saturn_model = model
             else:
@@ -258,7 +264,10 @@ def master_find_offset(obs, create_overlay=False,
     # TRY TO MAKE A MODEL FROM THE RINGS IN THE IMAGE
     #
     if allow_rings and not entirely_body:
-        rings_model = rings_create_model(obs, extend_fov=extend_fov)
+        rings_model, rings_metadata = rings_create_model(
+                                         obs, extend_fov=extend_fov,
+                                         source=rings_model_source)
+        metadata.update(rings_metadata)
 
     #
     # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET
@@ -320,8 +329,9 @@ def master_find_offset(obs, create_overlay=False,
                 model_offset_list = find_correlation_and_offset(
                                            obs.data,
                                            offset_model, search_size_min=0,
-                                           search_size_max=(search_size_max_u, 
-                                                            search_size_max_v),
+                                           search_size_max=(15,15),
+#                                           search_size_max=(search_size_max_u, 
+#                                                            search_size_max_v), # XXX
                                            filter=_model_filter) # XXX
                 new_model_offset_u = None
                 if len(model_offset_list):

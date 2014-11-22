@@ -45,6 +45,12 @@ _LOGGING_NAME = 'cb.' + __name__
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
 
+RINGS_UVIS_OCCULTATION = 'UVIS_HSP_2008_231_BETCEN_I_TAU_01KM'
+
+# These are bodies that might cast shadows on the ring plane near equinox
+RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS', 
+                          'JANUS', 'MIMAS', 'ENCELADUS', 'TETHYS'] # XXX
+
 RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02
 RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5.
 RINGS_DEFAULT_REPRO_ZOOM = 5
@@ -59,6 +65,7 @@ FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
 #==============================================================================
 
 _RING_VOYAGER_IF_DATA = None
+_RING_UVIS_OCC_DATA = None
 
 def _compute_ring_radial_data(source):
     if source == 'voyager':
@@ -72,12 +79,19 @@ def _compute_ring_radial_data(source):
         return _RING_VOYAGER_IF_DATA
 
     if source == 'uvis':
-        occ_root = os.path.join(COUVIS_8XXX_ROOT, 'COISS_8001', 'DATA',
-                                'EASYDATA')
-
-
+        global _RING_UVIS_OCC_DATA
+        if not _RING_UVIS_OCC_DATA:
+            occ_root = os.path.join(COUVIS_8XXX_ROOT, 'COUVIS_8001', 'DATA',
+                                    'EASYDATA')
+            occ_file = os.path.join(occ_root, RINGS_UVIS_OCCULTATION+'.LBL')
+            label = PdsTable(occ_file)
+            data = (1.-np.e**-label.column_dict['NORMAL OPTICAL DEPTH'])
+            _RING_UVIS_OCC_DATA = Tabulation(
+                   label.column_dict['RING_RADIUS'],
+                   data)
+        return _RING_UVIS_OCC_DATA
         
-        assert False
+    assert False
 
 
 def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
@@ -92,6 +106,8 @@ def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model')
 
     assert source in ('uvis', 'voyager')
+    
+    metadata = {}
     
     set_obs_ext_bp(obs, extend_fov)
     
@@ -108,18 +124,36 @@ def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     radii[radii < RINGS_MIN_RADIUS] = 0
     radii[radii > RINGS_MAX_RADIUS] = 0
     
-    radial_data = _compute_ring_radial_data('voyager')
+    radial_data = _compute_ring_radial_data(source)
     model = radial_data(radii)
 
+    shadow_body_list = []
+    
     saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
                                                    'saturn').vals
-    model[saturn_shadow] = 0
+    if np.any(saturn_shadow):
+        logger.debug('Rings shadowed by SATURN')
+        shadow_body_list.append('SATURN')
+        model[saturn_shadow] = 0
+
+    # XXX Equinox only
+    # XXX There must be a way to make this more efficient in the case
+    # when a moon isn't in a position to cast a shadow
+    for body_name in RINGS_SHADOW_BODY_LIST:
+        shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
+                                                body_name).vals
+        if np.any(shadow):
+            logger.debug('Rings shadowed by '+body_name)
+            shadow_body_list.append(body_name)
+            model[shadow] = 0
+    
+    metadata['rings_shadow_bodies'] = shadow_body_list
     
     if not np.any(model):
         logger.debug('Rings are entirely shadowed - returning null model')
-        return None
+        return None, metadata
     
-    return model
+    return model, metadata
 
 
 #==============================================================================
@@ -355,6 +389,9 @@ def rings_reproject(
                    oops.DPR)
     bp_incidence = (bp.incidence_angle('saturn:ring').vals.astype('float') * 
                     oops.DPR)
+    saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
+    data = obs.data.copy()
+    data[saturn_shadow] = 0
     
     # The number of pixels in the final reprojection
     radius_pixels = int(np.ceil((radius_outer-radius_inner+1) / 
@@ -406,7 +443,7 @@ def rings_reproject(
                  np.max(long_bins_act))
     logger.debug('Resolution range %7.2f %7.2f', np.min(bp_resolution),
                  np.max(bp_resolution))
-    logger.debug('Data range %f %f', np.min(obs.data), np.max(obs.data))
+    logger.debug('Data range %f %f', np.min(data), np.max(data))
 
     u_pixels, v_pixels = rings_longitude_radius_to_pixels(
                                                   obs, long_bins_act,
@@ -415,15 +452,15 @@ def rings_reproject(
 
     # Zoom the data and restrict the bins and pixels to ones actually in the
     # final reprojection.
-    zoom_data = ndinterp.zoom(obs.data, zoom) # XXX Default to order=3 - OK?
+    zoom_data = ndinterp.zoom(data, zoom) # XXX Default to order=3 - OK?
 
     u_zoom = (u_pixels*zoom).astype('int')
     v_zoom = (v_pixels*zoom).astype('int')
     
     goodumask = np.logical_and(u_pixels >= 0, 
-                               u_zoom <= obs.data.shape[1]*zoom-1)
+                               u_zoom <= data.shape[1]*zoom-1)
     goodvmask = np.logical_and(v_pixels >= 0, 
-                               v_zoom <= obs.data.shape[0]*zoom-1)
+                               v_zoom <= data.shape[0]*zoom-1)
     goodmask = np.logical_and(goodumask, goodvmask)
     
     u_pixels = u_pixels[goodmask].astype('int')

@@ -200,7 +200,6 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
         if DEBUG_CORRELATE_PLOT:
             plt.jet()
             plt.imshow(slice, interpolation='none')
-            print slice
             plt.contour(slice)
             plt.plot((search_size_max_u,search_size_max_u),
                      (0,2*search_size_max_v),'k')
@@ -219,7 +218,6 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
             plt.show()
         
         if DEBUG_CORRELATE_IMGDISP:
-            print slice.shape
             toplevel = Tkinter.Tk()
             frame_toplevel = Tkinter.Frame(toplevel)
             imdisp = ImageDisp([slice], parent=frame_toplevel,

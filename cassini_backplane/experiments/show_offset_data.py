@@ -89,9 +89,6 @@ def process_image(filename, interactive=True, **kwargs):
     print obs.filter1, obs.filter2
 
     offset_u, offset_v, metadata = master_find_offset(obs, create_overlay=True,
-#                                                      allow_moons=True,
-#                                                      allow_rings=False,
-#                                                      allow_saturn=False,
                                                       **kwargs)
 
     metadata['img'] = obs.data
@@ -176,7 +173,7 @@ def process_image(filename, interactive=True, **kwargs):
     toplevel.title(filename)
     frame_toplevel = Frame(toplevel)
 
-    overlay[:,:,0] = (ext_data-np.min(ext_data)) / (np.max(ext_data)-np.min(ext_data)) * 255.
+#    overlay[:,:,0] = (ext_data-np.min(ext_data)) / (np.max(ext_data)-np.min(ext_data)) * 255.
     
     imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,768), 
                         parent=frame_toplevel, allow_enlarge=True,
@@ -215,13 +212,13 @@ def process_image(filename, interactive=True, **kwargs):
 
     label = Label(imgdisp.addon_control_frame, text='Used Objects:', anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label = Label(imgdisp.addon_control_frame, text=str(metadata['used_objects_type']),
+    label = Label(imgdisp.addon_control_frame, text=str(metadata['used_objects_type'].upper()),
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
 
     contents_str = ''
     for s in metadata['model_contents']:
-        contents_str += s[0]
+        contents_str += s[0].upper()
         
     label = Label(imgdisp.addon_control_frame, text='Model Contents:', anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
@@ -248,6 +245,17 @@ def process_image(filename, interactive=True, **kwargs):
     label = Label(imgdisp.addon_control_frame, text=str(metadata['rings_only']),
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky=W)
+
+    shadow_bodies = ''
+    
+    for body_name in metadata['rings_shadow_bodies']:
+        shadow_bodies += body_name.upper()[:2] + ' '
+        
+    label = Label(imgdisp.addon_control_frame, text='Rings Shadows:', anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
+    label = Label(imgdisp.addon_control_frame, text=shadow_bodies,
+                  anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky=W)
 
     gridrow += 1
 
@@ -447,12 +455,12 @@ def process_random_file(root_path):
 # Mimas
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2014/data/1501618408_1501647096/N1501630117_1_CALIB.IMG', interactive=True, use_lambert=False)
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542756630_1_CALIB.IMG', interactive=True)
-process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542758143_1_CALIB.IMG', interactive=True, use_lambert=False)
+#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542758143_1_CALIB.IMG', interactive=True, use_lambert=False)
 
 # Enceladus
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2009/data/1487182149_1487415680/N1487300482_1_CALIB.IMG', interactive=True)
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2019/data/1516036945_1516171123/N1516168806_1_CALIB.IMG', interactive=True)
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2047/data/1597149262_1597186268/N1597179218_2_CALIB.IMG', interactive=True)
+process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2009/data/1487182149_1487415680/N1487300482_1_CALIB.IMG', interactive=True)
+process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2019/data/1516036945_1516171123/N1516168806_1_CALIB.IMG', interactive=True)
+process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2047/data/1597149262_1597186268/N1597179218_2_CALIB.IMG', interactive=True)
 
 # Tethys
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2007/data/1477601077_1477653092/N1477639356_1_CALIB.IMG', interactive=True)
@@ -500,6 +508,19 @@ process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/154274966
 # Star field doesn't meet photometry
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2071\data\1696329488_1696440486\N1696331406_1_CALIB.IMG')
 
+
+# High-res rings - unlit
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2007/data/1477517306_1477600896/N1477600536_1_CALIB.IMG', rings_model_source='uvis')
+
+# High-res rings - lit
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2004/data/1466584989_1467427246/N1467351187_2_CALIB.IMG', rings_model_source='uvis') 
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2044/data/1585780929_1585829570/N1585802590_1_CALIB.IMG', rings_model_source='uvis')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2054/data/1617917998_1618066143/N1617918718_1_CALIB.IMG', rings_model_source='uvis')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2056/data/1627301233_1627319153/N1627310905_1_CALIB.IMG')
+
+# Pan shadow
+#process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2053/data/1613001873_1613171522/N1613101588_1_CALIB.IMG', rings_model_source='uvis', allow_stars=False)
+  
 #while True:
 #    process_random_file('t:/external/cassini/derived/COISS_2xxx')
 

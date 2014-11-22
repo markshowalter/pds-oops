@@ -290,7 +290,8 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True,
 def moons_create_model(obs, body_name, lambert=True,
                        u_min=0, u_max=10000, v_min=0, v_max=10000,
                        extend_fov=(0,0),
-                       force_spherical=True, use_cartographic=True):
+                       force_spherical=True, use_cartographic=True,
+                       source='iss'):
     logger = logging.getLogger(_LOGGING_NAME+'.moons_create_model')
 
     body_name = body_name.upper()
@@ -335,7 +336,8 @@ def moons_create_model(obs, body_name, lambert=True,
 
     if use_cartographic and body_name in CARTOGRAPHIC_BODIES:
         cart_model = _moons_create_cartographic(restr_bp, body_name,
-                                                force_spherical=force_spherical)
+                                                force_spherical=force_spherical,
+                                                source=source)
         restr_model *= cart_model 
 
     # Take the full-resolution object and put it back in the right place in a
