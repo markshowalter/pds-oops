@@ -757,7 +757,7 @@ class ImageDisp(Frame):
         else:
             self.label_val.config(text='Mouse val: %12.7f' % val)
         if callback_func is not None:
-            callback_func(x, y)
+            callback_func(x-self.origin[0], y-self.origin[1])
         
     def _b1press_callback_handler(self, event, img_num, callback_func):
         """Internal - callback for button-one press."""
