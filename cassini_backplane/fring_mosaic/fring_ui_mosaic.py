@@ -13,6 +13,7 @@ import numpy as np
 import sys
 import cspice
 import subprocess
+import vicar
 import scipy.ndimage.interpolation as interp
 import colorsys
 from imgdisp import ImageDisp, FloatEntry
@@ -99,6 +100,11 @@ def _update_mosaicdata(mosaicdata, metadata):
     full_longitudes[np.logical_not(mosaicdata.long_mask)] = -10
     mosaicdata.longitudes = full_longitudes
 
+def save_vicar(mosaicdata):
+    v = vicar.VicarImage()
+    v.set_array(mosaicdata.img)
+    v.to_file('j:/Temp/'+mosaicdata.obsid+'.IMG')
+    
 def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     # Input files: image_path_list (includes repro suffix)
     # Output files:
@@ -168,6 +174,8 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
     pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
     mosaic_metadata_fp.close()
+    
+    save_vicar(mosaicdata)    
     
     blackpoint = max(np.min(mosaicdata.img), 0)
     whitepoint = np.max(mosaicdata.img)

@@ -66,6 +66,8 @@ def callback_b1press(x, y, offdispdata):
         if offdispdata.last_xy is not None:
             print 'DIST', np.sqrt((ring_x-offdispdata.last_xy[0])**2+
                                   (ring_y-offdispdata.last_xy[1])**2)
+            print 'ANGLE', longitude-np.arctan2(ring_y-offdispdata.last_xy[1],
+                                      ring_x-offdispdata.last_xy[0]) * 180./np.pi
         offdispdata.last_xy = (ring_x, ring_y)
         
 
@@ -176,7 +178,10 @@ def process(image_path):
 
 ###### TOM
 
-process(r'j:/Temp/N1621959213_1_CALIB.IMG-repro')
+#process(r'j:/Temp/N1621959213_1_CALIB.IMG-repro')
+
+#process(r'j:/Temp/N1627295896_1_CALIB.IMG-repro') 
+#process(r'j:/Temp/N1617919678_1_CALIB.IMG-repro')
 
 ###### LORI
 
@@ -221,7 +226,7 @@ process(r'j:/Temp/N1621959213_1_CALIB.IMG-repro')
 #process(r'j:/Temp/N1621846656_1_CALIB.IMG')
 #process(r'j:/Temp/N1621846976_1_CALIB.IMG')
 #process(r'j:/Temp/N1621847296_1_CALIB.IMG')
-#process(r'j:/Temp/N1621847616_1_CALIB.IMG')
+process(r'j:/Temp/N1621847616_1_CALIB.IMG')
 #process(r'j:/Temp/N1621847936_1_CALIB.IMG')
 #process(r'j:/Temp/N1621848256_1_CALIB.IMG')
 #process(r'j:/Temp/N1621848576_1_CALIB.IMG')
@@ -235,6 +240,5 @@ process(r'j:/Temp/N1621959213_1_CALIB.IMG-repro')
 #process(r'j:/Temp/N1622138715_1_CALIB.IMG')
 #process(r'j:/Temp/N1623757093_1_CALIB.IMG')
 #process(r'j:/Temp/N1623757136_1_CALIB.IMG')
-#process(r'j:/Temp/N1624883466_1_CALIB.IMG')
+process(r'j:/Temp/N1624883466_1_CALIB.IMG')
 #process(r'j:/Temp/N1624883509_1_CALIB.IMG')
-

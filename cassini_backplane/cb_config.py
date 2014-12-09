@@ -14,15 +14,15 @@ import oops
 #####################
 
 # The UCAC4 star catalog.
-STAR_CATALOG_ROOT = 't:/external/ucac4'
+STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG']
 
 # CB support files such as Voyager ring profiles.
-SUPPORT_FILES_ROOT = 't:/external/cb_support'
+SUPPORT_FILES_ROOT = os.environ['CB_SUPPORT_ROOT']
 
 # Cassini ISS calibrated files.
-COISS_2XXX_DERIVED_ROOT = 't:/external/cassini/derived/COISS_2xxx'
+COISS_2XXX_DERIVED_ROOT = os.environ['COISS_2XXX_DERIVED_ROOT']
 
-COISS_ROOT = 't:/external/cassini/volumes'
+COISS_ROOT = os.environ['COISS_ROOT']
 
 # Cassini ISS moon maps.
 COISS_3XXX_ROOT = os.path.join(COISS_ROOT, 'COISS_3xxx')

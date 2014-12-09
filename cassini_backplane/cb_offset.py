@@ -58,7 +58,7 @@ def master_find_offset(obs, create_overlay=False,
                        moons_use_lambert=True,
                        moons_use_cartographic=True,
                        moons_cartographic_source='iss',
-                       rings_model_source='uvis'):
+                       rings_model_source='voyager'):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -349,7 +349,7 @@ def master_find_offset(obs, create_overlay=False,
                                  new_model_offset_v, new_peak)
                     if (abs(new_model_offset_u) > 2 or
                         abs(new_model_offset_v) > 2 or
-                        new_peak < peak*0.95): # Need slush for roundoff error
+                        new_peak < peak*0.75): # Need slush for roundoff error
                         logger.debug('Secondary model correlation offset bad'+
                                      ' - Not trusting result')
                         model_offset_u = None

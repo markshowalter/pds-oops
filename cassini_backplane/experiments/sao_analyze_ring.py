@@ -20,7 +20,7 @@ import cProfile, pstats, StringIO
 import cb_correlate
 from cb_util_image import *
 
-INTERACTIVE = False
+INTERACTIVE = True
 
 LONGITUDE_RESOLUTION = 0.005
 RADIUS_RESOLUTION = 5
@@ -210,18 +210,21 @@ def callback_b1press(x, y, offdispdata):
         if offdispdata.last_xy is not None:
             print 'DIST', np.sqrt((ring_x-offdispdata.last_xy[0])**2+
                                   (ring_y-offdispdata.last_xy[1])**2)
+            print 'ANGLE', np.arctan2(ring_y-offdispdata.last_xy[1],
+                                      ring_x-offdispdata.last_xy[0])
         offdispdata.last_xy = (ring_x, ring_y)
         
 
 # Setup the offset window with no data
-def setup_offset_window(offdata, offdispdata, reproject, **kwargs):
+def setup_offset_window(offdata, offdispdata, reproject, radius_inner=135000.,
+                        radius_outer=138000.,**kwargs):
     if not reproject:
         if offdata.the_offset is not None:
             offdata.obs.fov = oops.fov.OffsetFOV(offdata.obs.fov, uv_offset=offdata.the_offset)
         set_obs_bp(offdata.obs)
         
         offdispdata.off_radii = offdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-        offdispdata.off_longitudes = offdata.obs.bp.ring_longitude('saturn:ring', reference='aries').vals.astype('float') * oops.DPR
+        offdispdata.off_longitudes = offdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
         offdispdata.off_resolution = offdata.obs.bp.ring_radial_resolution('saturn:ring').vals.astype('float')
         offdispdata.off_incidence = offdata.obs.bp.incidence_angle('saturn:ring').vals.astype('float') * oops.DPR
         offdispdata.off_emission = offdata.obs.bp.emission_angle('saturn:ring').vals.astype('float') * oops.DPR
@@ -261,10 +264,10 @@ def setup_offset_window(offdata, offdispdata, reproject, **kwargs):
         ret = rings_reproject(offdata.obs, offset_u=offdata.the_offset[0], offset_v=offdata.the_offset[1],
                       longitude_resolution=LONGITUDE_RESOLUTION,
                       radius_resolution=RADIUS_RESOLUTION,
-                      radius_inner=135000.,
-                      radius_outer=138000.)
+                      radius_inner=radius_inner,
+                      radius_outer=radius_outer)
         offdata.obs.data = ret['img']
-        radii = rings_generate_radii(135000.,138000.,radius_resolution=RADIUS_RESOLUTION)
+        radii = rings_generate_radii(radius_inner,radius_outer,radius_resolution=RADIUS_RESOLUTION)
         offdispdata.off_radii = np.zeros(offdata.obs.data.shape)
         offdispdata.off_radii[:,:] = radii[:,np.newaxis]
         longitudes = rings_generate_longitudes(longitude_resolution=LONGITUDE_RESOLUTION)
@@ -488,7 +491,7 @@ do_profile = False
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622394375_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621851000_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621958853_1_CALIB.IMG',reproject=True)
-process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621959213_1_CALIB.IMG',reproject=True)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621959213_1_CALIB.IMG',reproject=True)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG',reproject=True,offset_u=-70,offset_v=21)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623167085_1_CALIB.IMG',reproject=True,offset_u=-90,offset_v=29)#,offset_u=-30,offset_v=55)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623168213_1_CALIB.IMG',reproject=True,offset_u=-120,offset_v=36)
@@ -510,6 +513,9 @@ process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214779_1_CALIB.IMG',reproject=False)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632214958_1_CALIB.IMG',reproject=False)
 #process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632170323_1632227130/N1632215137_1_CALIB.IMG',reproject=False)
+
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295896_1_CALIB.IMG',reproject=True,radius_inner=117300,radius_outer=118000)
+#process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/N1617919678_1_CALIB.IMG',reproject=True,radius_inner=117300,radius_outer=118000)
 
 ###### LORI
 
@@ -554,7 +560,7 @@ process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621846656_1_CALIB.IMG',x1=613,y1=558,x2=621,y2=468,x3=613,y3=557,x4=621,y4=468)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621846976_1_CALIB.IMG',x1=614,y1=559,x2=621,y2=467,x3=614,y3=557,x4=622,y4=467)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847296_1_CALIB.IMG',x1=612,y1=559,x2=618,y2=468,x3=611,y3=560,x4=619,y4=468)
-#process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847616_1_CALIB.IMG',x1=613,y1=558,x2=620,y2=470,x3=613,y3=559,x4=619,y4=469)
+ #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847616_1_CALIB.IMG',x1=613,y1=558,x2=620,y2=470,x3=613,y3=559,x4=619,y4=469)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847936_1_CALIB.IMG',x1=610,y1=561,x2=616,y2=473,x3=609,y3=560,x4=616,y4=473)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621848256_1_CALIB.IMG',x1=608,y1=563,x2=615,y2=472,x3=608,y3=563,x4=615,y4=473)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621848576_1_CALIB.IMG',x1=605,y1=563,x2=612,y2=473,x3=603,y3=560,x4=611,y4=473)
@@ -568,7 +574,7 @@ process(r'T:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1622043391_1622198245/N1622138715_1_CALIB.IMG',x1=618,y1=426,x2=618,y2=371,x3=618,y3=426,x4=619,y4=373)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623667817_1623919770/N1623757093_1_CALIB.IMG',x1=582,y1=483,x2=538,y2=423)#,x3=584,y3=480,x4=539,y4=423)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1623667817_1623919770/N1623757136_1_CALIB.IMG',x1=589,y1=481,x2=544,y2=424,x3=589,y3=482,x4=544,y4=424)
-#process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG',x1=514,y1=586,x2=608,y2=527,x3=514,y3=586,x4=611,y4=524)
+process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG',x1=514,y1=586,x2=608,y2=527,x3=514,y3=586,x4=611,y4=524)
 #process(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883509_1_CALIB.IMG',x1=514,y1=585,x2=609,y2=524,x3=513,y3=586,x4=610,y4=524)'''
 
 #### EARL

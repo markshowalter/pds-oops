@@ -53,7 +53,12 @@ RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS',
 
 RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02
 RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5.
-RINGS_DEFAULT_REPRO_ZOOM = 5
+RINGS_DEFAULT_REPRO_ZOOM_AMT = 5
+RINGS_DEFAULT_REPRO_ZOOM_ORDER = 3
+
+RINGS_LONGITUDE_SLOP = 1e-6 # Must be smaller than any longitude or radius
+RINGS_RADIUS_SLOP = 1e-6    # resolution we will be using
+RINGS_MAX_LONGITUDE = 360.-RINGS_LONGITUDE_SLOP*2
 
 FRING_DEFAULT_REPRO_RADIUS_INNER = 139500. - 140220.
 FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
@@ -94,7 +99,7 @@ def _compute_ring_radial_data(source):
     assert False
 
 
-def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
+def rings_create_model(obs, extend_fov=(0,0), source='voyager'):
     """Create a model for the rings.
     
     If there are no rings in the image or they are entirely in shadow,
@@ -108,7 +113,8 @@ def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     assert source in ('uvis', 'voyager')
     
     metadata = {}
-    
+    metadata['rings_shadow_bodies'] = []
+
     set_obs_ext_bp(obs, extend_fov)
     
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
@@ -119,7 +125,7 @@ def rings_create_model(obs, extend_fov=(0,0), source='uvis'):
     
     if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
         logger.debug('No main rings in image - returning null model')
-        return None 
+        return None, metadata
 
     radii[radii < RINGS_MIN_RADIUS] = 0
     radii[radii > RINGS_MAX_RADIUS] = 0
@@ -287,24 +293,27 @@ def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
     
     return u.vals, v.vals
 
-def rings_generate_longitudes(start_num=0,
-                              end_num=None,
+def rings_generate_longitudes(longitude_start=0.,
+                              longitude_end=RINGS_MAX_LONGITUDE,
                               longitude_resolution=
                                     RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
-    """Generate a list of longitudes (deg)."""
-    if end_num is None:
-        end_num = int(360. / longitude_resolution)-1
-    return np.arange(start_num, end_num+1) * longitude_resolution
+    """Generate a list of longitudes (deg).
+    
+    The list will be on longitude_resolution boundaries and is guaranteed to
+    not contain a longitude less than longitude_start or greater than
+    longitude_end."""
+    longitude_start = (np.ceil(longitude_start/longitude_resolution) *
+                       longitude_resolution)
+    longitude_end = (np.floor(longitude_end/longitude_resolution) *
+                     longitude_resolution)
+    return np.arange(longitude_start, longitude_end+RINGS_LONGITUDE_SLOP,
+                     longitude_resolution)
 
 def rings_generate_radii(radius_inner, radius_outer,
                          radius_resolution=
-                             RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-                         start_num=0, end_num=None):
+                             RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
     """Generate a list of radii (km)."""
-    if end_num is None:
-        end_num = int(np.ceil(((radius_outer-radius_inner+1) /
-                               radius_resolution)))-1
-    return np.arange(start_num, end_num+1) * radius_resolution + radius_inner
+    return np.arange(radius_inner, radius_outer+RINGS_RADIUS_SLOP, radius_resolution)
 
 
 #==============================================================================
@@ -319,8 +328,13 @@ def rings_reproject(
             radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
             radius_inner=None,
             radius_outer=None,
-            zoom=RINGS_DEFAULT_REPRO_ZOOM,
-            corotating=None):
+            zoom_amt=RINGS_DEFAULT_REPRO_ZOOM_AMT,
+            zoom_order=RINGS_DEFAULT_REPRO_ZOOM_ORDER,
+            corotating=None,
+            longitude_range=None,
+            uv_range=None,
+            compress_longitude=True,
+            mask_fill_value=0.):
     """Reproject the rings in an image into a rectangular longitude/radius
     space.
     
@@ -342,6 +356,17 @@ def rings_reproject(
         corotating               The name of the ring to use to compute
                                  co-rotating longitude. None if inertial
                                  longitude should be used.
+        longitude_range          None, or a tuple (start,end) specifying the
+                                 longitude limits to reproject.
+        uv_range                 None, or a tuple (start_u,end_u,start_v,end_v)
+                                 that defines the part of the image to be
+                                 reprojected.
+        compress_longitude       True to compress the returned image to contain
+                                 only valid longitudes. False to return the
+                                 entire range 0-360 or as specified by
+                                 longitude_range.
+        mask_fill_value          What to replace masked values with. None means
+                                 leave the values masked.
                                  
     Returns:
         A dictionary containing
@@ -372,13 +397,32 @@ def rings_reproject(
     
     assert corotating in (None, 'F')
     
+    if longitude_range is None:
+        longitude_start = 0.
+        longitude_end = RINGS_MAX_LONGITUDE
+    else:
+        longitude_start, longitude_end = longitude_range
+        
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
-    orig_fov = obs.fov
-    obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=(offset_u, offset_v))
+    orig_fov = None
+    if offset_u != 0 and offset_v != 0:
+        orig_fov = obs.fov
+        obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=(offset_u, offset_v))
     
     # Get all the info for each pixel
-    bp = oops.Backplane(obs)
+    meshgrid = None
+    start_u = 0
+    end_u = obs.data.shape[1]-1
+    start_v = 0
+    end_v = obs.data.shape[0]-1
+    if uv_range is not None:
+        start_u, end_u, start_v, end_v = uv_range
+        meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                     origin=(start_u+.5, start_v+.5), 
+                                     limit=(end_u+.5, end_v+.5), swap=True)
+
+    bp = oops.Backplane(obs, meshgrid)
     bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
     bp_longitude = (bp.ring_longitude('saturn:ring').vals.astype('float') * 
                     oops.DPR)
@@ -394,29 +438,32 @@ def rings_reproject(
     data[saturn_shadow] = 0
     
     # The number of pixels in the final reprojection
-    radius_pixels = int(np.ceil((radius_outer-radius_inner+1) / 
+    radius_pixels = int(np.ceil((radius_outer-radius_inner+RINGS_RADIUS_SLOP) / 
                                 radius_resolution))
-    longitude_pixels = int(360. / longitude_resolution)
+    longitude_pixels = int(np.ceil((longitude_end-longitude_start+RINGS_LONGITUDE_SLOP) /
+                                   longitude_resolution))
+    longitude_start_pixel = int(longitude_start / longitude_resolution)
 
     if corotating == 'F':
         # Convert longitude to co-rotating
         bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
                                                           obs.midtime)
     
-    # Restrict the longitude range for some attempt at efficiency
-    min_longitude_pixel = (np.floor(np.min(bp_longitude) / 
+    # Restrict the longitude range for some attempt at efficiency.
+    # This fails to be efficient if the longitude range wraps around.
+    min_longitude_pixel = (np.floor(max(longitude_start, np.min(bp_longitude))/ 
                                     longitude_resolution)).astype('int')
     min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
-    max_longitude_pixel = (np.ceil(np.max(bp_longitude) / 
+    max_longitude_pixel = (np.ceil(min(longitude_end, np.max(bp_longitude)) / 
                                    longitude_resolution)).astype('int')
     max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
     num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
     
     # Longitude bin numbers
-    long_bins = np.tile(np.arange(min_longitude_pixel, max_longitude_pixel+1),
-                        radius_pixels)
+    long_bins = np.tile(np.arange(num_longitude_pixel), radius_pixels)
     # Actual longitude for each bin (deg)
-    long_bins_act = long_bins * longitude_resolution
+    long_bins_act = (long_bins * longitude_resolution + 
+                     min_longitude_pixel * longitude_resolution)
 
     # Radius bin numbers
     rad_bins = np.repeat(np.arange(radius_pixels), num_longitude_pixel)
@@ -449,26 +496,26 @@ def rings_reproject(
                                                   obs, long_bins_act,
                                                   rad_bins_act,
                                                   corotating=corotating)
-
+    
     # Zoom the data and restrict the bins and pixels to ones actually in the
     # final reprojection.
-    zoom_data = ndinterp.zoom(data, zoom) # XXX Default to order=3 - OK?
+    zoom_data = ndinterp.zoom(data, zoom_amt, order=zoom_order)
 
-    u_zoom = (u_pixels*zoom).astype('int')
-    v_zoom = (v_pixels*zoom).astype('int')
+    u_zoom = (u_pixels*zoom_amt).astype('int')
+    v_zoom = (v_pixels*zoom_amt).astype('int')
     
-    goodumask = np.logical_and(u_pixels >= 0, 
-                               u_zoom <= data.shape[1]*zoom-1)
-    goodvmask = np.logical_and(v_pixels >= 0, 
-                               v_zoom <= data.shape[0]*zoom-1)
+    goodumask = np.logical_and(u_pixels >= start_u, 
+                               u_zoom <= (end_u+1)*zoom_amt-1)
+    goodvmask = np.logical_and(v_pixels >= start_v, 
+                               v_zoom <= (end_v+1)*zoom_amt-1)
     goodmask = np.logical_and(goodumask, goodvmask)
     
-    u_pixels = u_pixels[goodmask].astype('int')
-    v_pixels = v_pixels[goodmask].astype('int')
+    u_pixels = u_pixels[goodmask].astype('int') - start_u
+    v_pixels = v_pixels[goodmask].astype('int') - start_v
     u_zoom = u_zoom[goodmask]
     v_zoom = v_zoom[goodmask]
     good_rad = rad_bins[goodmask]
-    good_long = long_bins[goodmask]
+    good_long = long_bins[goodmask] + min_longitude_pixel
     
     interp_data = zoom_data[v_zoom, u_zoom]
     
@@ -504,21 +551,30 @@ def rings_reproject(
     repro_incidence[good_rad,good_long] = bp_incidence[v_pixels,u_pixels]
     repro_mean_incidence = ma.mean(repro_incidence) # scalar
 
-    repro_img = ma.filled(repro_img[:,good_long_mask], 0.)
-    repro_res = ma.filled(repro_res[:,good_long_mask], 0.)
-    repro_phase = ma.filled(repro_phase[:,good_long_mask], 0.)
-    repro_emission = ma.filled(repro_emission[:,good_long_mask], 0.)
-    repro_incidence = ma.filled(repro_incidence[:,good_long_mask], 0.)
-    
-    repro_mean_res = repro_mean_res[good_long_mask]
-    repro_mean_phase = repro_mean_phase[good_long_mask]
-    repro_mean_emission = repro_mean_emission[good_long_mask]
+    if compress_longitude:
+        repro_img = repro_img[:,good_long_mask]
+        repro_res = repro_res[:,good_long_mask]
+        repro_phase = repro_phase[:,good_long_mask]
+        repro_emission = repro_emission[:,good_long_mask]
+        repro_incidence = repro_incidence[:,good_long_mask]
 
-    assert ma.count_masked(repro_mean_res) == 0
-    assert ma.count_masked(repro_mean_phase) == 0
-    assert ma.count_masked(repro_mean_emission) == 0
-    
-    obs.fov = orig_fov
+        repro_mean_res = repro_mean_res[good_long_mask]
+        repro_mean_phase = repro_mean_phase[good_long_mask]
+        repro_mean_emission = repro_mean_emission[good_long_mask]
+
+        assert ma.count_masked(repro_mean_res) == 0
+        assert ma.count_masked(repro_mean_phase) == 0
+        assert ma.count_masked(repro_mean_emission) == 0
+
+    if mask_fill_value is not None:
+        repro_img = ma.filled(repro_img, mask_fill_value)
+        repro_res = ma.filled(repro_res, mask_fill_value)
+        repro_phase = ma.filled(repro_phase, mask_fill_value)
+        repro_emission = ma.filled(repro_emission, mask_fill_value)
+        repro_incidence = ma.filled(repro_incidence, mask_fill_value)
+
+    if orig_fov is not None:   
+        obs.fov = orig_fov
 
     ret = {}    
     ret['long_mask'] = good_long_mask
