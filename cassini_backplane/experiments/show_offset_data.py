@@ -22,10 +22,15 @@ def callback_mousemove(x, y, metadata):
     x = int(x)
     y = int(y)
     
+    ext_u = metadata['ext_u']
+    ext_v = metadata['ext_v']
+    x += ext_u
+    y += ext_v
+
     if (x < 0 or x >= metadata['img'].shape[1] or
         y < 0 or y >= metadata['img'].shape[0]):
         return
-    
+        
     if 'ring_longitude' in metadata:
         metadata['label_ring_longitude'].config(text=('%7.3f'%metadata['ring_longitude'][y,x]))
     if 'ring_radius' in metadata:
@@ -454,9 +459,9 @@ def process_random_file(root_path):
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2004/data/1465674475_1465709620/N1465677386_2_CALIB.IMG', interactive=True)
 
 # Mimas
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2014/data/1501618408_1501647096/N1501630117_1_CALIB.IMG', interactive=True, use_lambert=False)
+#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2014/data/1501618408_1501647096/N1501630117_1_CALIB.IMG', interactive=True, moons_use_lambert=False, force_offset=(-27,6))
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542756630_1_CALIB.IMG', interactive=True)
-#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542758143_1_CALIB.IMG', interactive=True, use_lambert=False)
+#process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2027/data/1542749662_1542807100/N1542758143_1_CALIB.IMG', interactive=True, moons_use_lambert=False)
 
 # Enceladus
 #process_image(r't:/external/cassini/derived/COISS_2xxx/COISS_2009/data/1487182149_1487415680/N1487300482_1_CALIB.IMG', interactive=True)
@@ -521,8 +526,8 @@ def process_random_file(root_path):
 
 # Pan shadow
 #process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2053/data/1613001873_1613171522/N1613101588_1_CALIB.IMG', rings_model_source='voyager', allow_stars=False)
-process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847616_1_CALIB.IMG', rings_model_source='voyager', allow_stars=False)
-process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG', rings_model_source='voyager', allow_stars=False)
+#process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2054/data/1621652147_1621937939/N1621847616_1_CALIB.IMG', rings_model_source='voyager', allow_stars=False)
+#process_image(r'T:/external/cassini/derived/COISS_2xxx/COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG', rings_model_source='voyager', allow_stars=False)
   
 #while True:
 #    process_random_file('t:/external/cassini/derived/COISS_2xxx')

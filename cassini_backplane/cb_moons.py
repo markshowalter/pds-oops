@@ -252,10 +252,10 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True,
     sample_last_pixel = body_data['sample_last_pixel']
     
     latitude = bp.latitude(body_name_spherical,
-                           lat_type='graphic').vals.astype('float') * oops.DPR # XXX
+                           lat_type='centric').vals.astype('float') * oops.DPR - 0.5 # XXX
     longitude = bp.longitude(body_name_spherical,
                              direction=pos_long_direction)
-    longitude = longitude.vals.astype('float') * oops.DPR - 4
+    longitude = longitude.vals.astype('float') * oops.DPR - 0.6
 
     print 'LAT RANGE', np.min(latitude), np.max(latitude)
     print 'LONG RANGE', np.min(longitude), np.max(longitude)

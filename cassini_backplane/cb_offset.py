@@ -58,7 +58,8 @@ def master_find_offset(obs, create_overlay=False,
                        moons_use_lambert=True,
                        moons_use_cartographic=True,
                        moons_cartographic_source='iss',
-                       rings_model_source='voyager'):
+                       rings_model_source='voyager',
+                       force_offset=None):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -81,6 +82,10 @@ def master_find_offset(obs, create_overlay=False,
         moons_cartographic_source  The source data to use for cartographic
                                  surfaces (see cb_moons).
         rings_model_source       The source for ring data (see cb_rings).
+        force_offset             None to find the offset automatically or
+                                 a tuple (offset_u,offset_v) to force the
+                                 result offset. This is useful for creating
+                                 an overlay with a known offset.
 
     Returns:
         offset_u, offset_v, metadata
@@ -208,7 +213,8 @@ def master_find_offset(obs, create_overlay=False,
     star_offset_u = None
     star_offset_v = None
         
-    if allow_stars and not entirely_rings and not entirely_body:
+    if (allow_stars and not entirely_rings and not entirely_body and
+        not force_offset):
         star_offset_u, star_offset_v, star_metadata = star_find_offset(obs,
                                                        extend_fov=extend_fov)
         metadata.update(star_metadata)
@@ -289,6 +295,9 @@ def master_find_offset(obs, create_overlay=False,
     metadata['model_contents'] = used_model_str_list
     if len(model_list) == 0:
         logger.debug('Nothing to model - no offset found')
+    elif force_offset:
+        model_offset_u, model_offset_v = force_offset
+        logger.debug('FORCING OFFSET U,V %d,%d', model_offset_u, model_offset_v)
     else:
         final_model = _combine_models(model_list)
 
