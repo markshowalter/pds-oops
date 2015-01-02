@@ -8,8 +8,8 @@ import logging
 
 LOG_DEFAULT_LEVEL = logging.DEBUG
 #LOG_DEFAULT_LEVEL = logging.ERROR
+LOG_OVERRIDE_BODIES    = None #logging.ERROR
 LOG_OVERRIDE_CORRELATE = None #logging.ERROR
-LOG_OVERRIDE_MOONS     = None #logging.ERROR
 LOG_OVERRIDE_RINGS     = None #logging.ERROR
 LOG_OVERRIDE_STARS     = None #logging.ERROR
 LOG_OVERRIDE_UTIL_FLUX = logging.ERROR
@@ -39,8 +39,8 @@ if LOG_OVERRIDE_CORRELATE:
     logger.propagate = False
     logger.setLevel(LOG_OVERRIDE_CORRELATE)
 
-if LOG_OVERRIDE_MOONS:
-    logger = logging.getLogger('cb.cb_moons')
+if LOG_OVERRIDE_BODIES:
+    logger = logging.getLogger('cb.cb_bodies')
     logger.propagate = False
     logger.setLevel(LOG_OVERRIDE_MOONS)
     

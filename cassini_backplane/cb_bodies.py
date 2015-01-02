@@ -1,19 +1,19 @@
 ###############################################################################
-# cb_moons.py
+# cb_bodies.py
 #
-# Routines related to moons.
+# Routines related to bodies.
 #
 # Exported routines:
 #    XXX
-#    moons_create_model
+#    bodies_create_model
 #
-#    moons_generate_latitudes
-#    moons_generate_longitudes
-#    moons_latitude_longitude_to_pixels
+#    bodies_generate_latitudes
+#    bodies_generate_longitudes
+#    bodies_latitude_longitude_to_pixels
 #
-#    moons_reproject
-#    moons_mosaic_init
-#    moons_mosaic_add
+#    bodies_reproject
+#    bodies_mosaic_init
+#    bodies_mosaic_add
 ###############################################################################
 
 import cb_logging
@@ -38,11 +38,13 @@ from cb_util_oops import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
-MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION = 0.1
-MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.1
-MOONS_DEFAULT_REPRO_ZOOM = 2
-MOONS_REPRO_MIN_LAMBERT = 0.2
-MOONS_REPRO_MAX_EMISSION = 60.
+BODIES_POSITION_SLOP = 50
+
+BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION = 0.1
+BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.1
+BODIES_DEFAULT_REPRO_ZOOM = 2
+BODIES_REPRO_MIN_LAMBERT = 0.2
+BODIES_REPRO_MAX_EMISSION = 60.
 
 CARTOGRAPHIC_BODIES = {
     'DIONE': 'COISS_3003',
@@ -143,7 +145,7 @@ def mask_to_array(mask, shape):
     new_mask[:,:] = mask
     return new_mask
 
-def _moons_read_iss_map(body_name):
+def _bodies_read_iss_map(body_name):
 #        minimum_latitude = good_row['MINIMUM_LATITUDE']
 #        maximum_latitude = good_row['MAXIMUM_LATITUDE']
 #        westernmost_longitude = good_row['WESTERNMOST_LONGITUDE']
@@ -196,7 +198,7 @@ def _moons_read_iss_map(body_name):
     
     return body_data
 
-def _moons_read_schenk_jpg(body_name):
+def _bodies_read_schenk_jpg(body_name):
     body_data = {}
     img_filename = os.path.join(SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
     img = PIL.Image.open(img_filename)
@@ -221,7 +223,7 @@ def _moons_read_schenk_jpg(body_name):
 
     return body_data
     
-def _moons_create_cartographic(bp, body_name, force_spherical=True,
+def _bodies_create_cartographic(bp, body_name, force_spherical=True,
                                source='schenk_jpg'):
     if force_spherical:
         body_name_spherical = body_name + '_SPHERICAL'
@@ -232,9 +234,9 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True,
         body_data = CARTOGRAPHIC_FILE_CACHE[(body_name_spherical, source)]
     else:
         if source == 'iss':
-            body_data = _moons_read_iss_map(body_name)
+            body_data = _bodies_read_iss_map(body_name)
         elif source == 'schenk_jpg':
-            body_data = _moons_read_schenk_jpg(body_name)
+            body_data = _bodies_read_schenk_jpg(body_name)
         CARTOGRAPHIC_FILE_CACHE[(body_name_spherical, source)] = body_data
 
     nline = body_data['nline']
@@ -287,22 +289,22 @@ def _moons_create_cartographic(bp, body_name, force_spherical=True,
     
     return model
 
-def moons_create_model(obs, body_name, lambert=True,
+def bodies_create_model(obs, body_name, lambert=True,
                        u_min=0, u_max=10000, v_min=0, v_max=10000,
                        extend_fov=(0,0),
                        force_spherical=True, use_cartographic=True,
                        source='iss'):
-    logger = logging.getLogger(_LOGGING_NAME+'.moons_create_model')
+    logger = logging.getLogger(_LOGGING_NAME+'.bodies_create_model')
 
     body_name = body_name.upper()
 
     set_obs_ext_bp(obs, extend_fov)
     set_obs_ext_data(obs, extend_fov)
     
-    u_min -= 1
-    u_max += 1
-    v_min -= 1
-    v_max += 1
+    u_min -= BODIES_POSITION_SLOP
+    u_max += BODIES_POSITION_SLOP
+    v_min -= BODIES_POSITION_SLOP
+    v_max += BODIES_POSITION_SLOP
     
     u_min = np.clip(u_min, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
     u_max = np.clip(u_max, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
@@ -335,7 +337,7 @@ def moons_create_model(obs, body_name, lambert=True,
         restr_model = restr_body_mask.astype('float')
 
     if use_cartographic and body_name in CARTOGRAPHIC_BODIES:
-        cart_model = _moons_create_cartographic(restr_bp, body_name,
+        cart_model = _bodies_create_cartographic(restr_bp, body_name,
                                                 force_spherical=force_spherical,
                                                 source=source)
         restr_model *= cart_model 
@@ -355,25 +357,25 @@ def moons_create_model(obs, body_name, lambert=True,
 # 
 #===============================================================================
 
-def moons_generate_latitudes(start_num=0,
+def bodies_generate_latitudes(start_num=0,
                               end_num=None,
                               latitude_resolution=
-                                    MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION):
+                                    BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION):
     """Generate a list of latitudes (deg)."""
     if end_num is None:
         end_num = int(180. / latitude_resolution)-1
     return np.arange(start_num, end_num+1) * latitude_resolution - 90.
 
-def moons_generate_longitudes(start_num=0,
+def bodies_generate_longitudes(start_num=0,
                               end_num=None,
                               longitude_resolution=
-                                    MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+                                    BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
     """Generate a list of longitudes (deg)."""
     if end_num is None:
         end_num = int(360. / longitude_resolution)-1
     return np.arange(start_num, end_num+1) * longitude_resolution
 
-def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
+def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
                                        lat_type='centric'):
     """Convert latitude (deg),longitude (deg) pairs to U,V."""
     assert lat_type in ('centric', 'graphic')
@@ -402,10 +404,10 @@ def moons_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
     
     return u.vals, v.vals
     
-def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
-            latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
-            longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-            zoom=MOONS_DEFAULT_REPRO_ZOOM, lat_type='centric'):
+def bodies_reproject(obs, body_name, offset_u=0, offset_v=0,
+            latitude_resolution=BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
+            longitude_resolution=BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+            zoom=BODIES_DEFAULT_REPRO_ZOOM, lat_type='centric'):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -439,7 +441,7 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
         'emission'         The emission angle [latitude,longitude].
         'incidence'        The incidence angle [latitude,longitude].
     """
-    logger = logging.getLogger(_LOGGING_NAME+'.moons_reproject')
+    logger = logging.getLogger(_LOGGING_NAME+'.bodies_reproject')
 
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
@@ -471,10 +473,10 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     # A pixel is OK if it falls on the body, the lambert model is
     # bright enough and the emission angle is large enough
     ok_body_mask_inv = np.logical_or(body_mask_inv, 
-                                     lambert < MOONS_REPRO_MIN_LAMBERT)
+                                     lambert < BODIES_REPRO_MIN_LAMBERT)
     ok_body_mask_inv = np.logical_or(ok_body_mask_inv, 
                                      bp_emission_deg > 
-                                         MOONS_REPRO_MAX_EMISSION)
+                                         BODIES_REPRO_MAX_EMISSION)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
     
     # Divide the data by the lambert model in an attempt to account for
@@ -539,7 +541,7 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
                  np.min(adj_data), 
                  np.max(adj_data))
 
-    u_pixels, v_pixels = moons_latitude_longitude_to_pixels(
+    u_pixels, v_pixels = bodies_latitude_longitude_to_pixels(
                             obs, body_name, lat_bins_act, long_bins_act,
                             lat_type=lat_type)
         
@@ -624,9 +626,9 @@ def moons_reproject(obs, body_name, offset_u=0, offset_v=0,
     
     return ret
 
-def moons_mosaic_init(
-      latitude_resolution=MOONS_DEFAULT_REPRO_LATITUDE_RESOLUTION,
-      longitude_resolution=MOONS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+def bodies_mosaic_init(
+      latitude_resolution=BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
+      longitude_resolution=BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
     """Create the data structure for a moon mosaic.
 
     Inputs:
@@ -672,7 +674,7 @@ def moons_mosaic_init(
     
     return ret
 
-def moons_mosaic_add(mosaic_metadata, repro_metadata, image_number):
+def bodies_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     """Add a reprojected image to an existing mosaic.
     
     For each valid pixel in the reprojected image, it is copied to the

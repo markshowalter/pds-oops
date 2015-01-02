@@ -113,7 +113,7 @@ def rings_create_model(obs, extend_fov=(0,0), source='voyager'):
     assert source in ('uvis', 'voyager')
     
     metadata = {}
-    metadata['rings_shadow_bodies'] = []
+    metadata['shadow_bodies'] = []
 
     set_obs_ext_bp(obs, extend_fov)
     
@@ -153,7 +153,7 @@ def rings_create_model(obs, extend_fov=(0,0), source='voyager'):
             shadow_body_list.append(body_name)
             model[shadow] = 0
     
-    metadata['rings_shadow_bodies'] = shadow_body_list
+    metadata['shadow_bodies'] = shadow_body_list
     
     if not np.any(model):
         logger.debug('Rings are entirely shadowed - returning null model')
@@ -406,7 +406,7 @@ def rings_reproject(
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
     orig_fov = None
-    if offset_u != 0 and offset_v != 0:
+    if offset_u != 0 or offset_v != 0:
         orig_fov = obs.fov
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=(offset_u, offset_v))
     
@@ -620,7 +620,8 @@ def rings_mosaic_init(
                            used to fill the data for each longitude.
         'time'             The per-longitude time (TDB).
     """
-    radius_pixels = int((radius_outer-radius_inner) / radius_resolution)
+    radius_pixels = int(np.ceil((radius_outer-radius_inner+RINGS_RADIUS_SLOP) / 
+                                radius_resolution))
     longitude_pixels = int(360. / longitude_resolution)
     
     ret = {}
@@ -652,6 +653,7 @@ def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     # data.
     mosaic_img = mosaic_metadata['img']
     repro_img = np.zeros(mosaic_img.shape) 
+    print repro_img.shape, repro_good_long.shape, repro_metadata['img'].shape
     repro_img[:,repro_good_long] = repro_metadata['img']
     mosaic_res = mosaic_metadata['mean_resolution']
     repro_res = np.zeros(mosaic_res.shape) + 1e300

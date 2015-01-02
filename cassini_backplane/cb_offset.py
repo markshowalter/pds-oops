@@ -16,9 +16,9 @@ import scipy.ndimage.filters as filt
 
 import oops
 
+from cb_bodies import *
 from cb_config import MAX_POINTING_ERROR, LARGE_BODY_LIST, FUZZY_BODY_LIST
 from cb_correlate import *
-from cb_moons import *
 from cb_rings import *
 from cb_stars import *
 from cb_util_image import *
@@ -36,64 +36,78 @@ def _normalize(data):
     new_data[data == 0.] = 0.
     return new_data
 
-def _combine_models(model_list):
+def _combine_models(model_list, solid=False):
     """Combine models by normalizing the sum of the normalized models."""
     new_model = np.zeros(model_list[0].shape, dtype=np.float32)
     for model in model_list:
-        new_model += _normalize(model)
+        if solid:
+            new_model[model != 0] = model[model != 0]
+        else:
+            new_model += _normalize(model)
 
     return _normalize(new_model)
 
 def _model_filter(image):
     """The filter to use on an image when looking for moons and rings."""
-    return filter_sub_median(image, median_boxsize=0, gaussian_blur=1.2)
+    return filter_sub_median(image, median_boxsize=11, gaussian_blur=1.2)
     
-def master_find_offset(obs, create_overlay=False,
+def master_find_offset(obs, 
+                   create_overlay=False,
+                   
+                   allow_stars=True,
                        star_overlay_box_width=None,
-                       star_overlay_box_thickness=None, 
-                       allow_stars=True,
-                       allow_saturn=True,
-                       allow_moons=True,
-                       allow_rings=True,
+                       star_overlay_box_thickness=None,
+                       star_config=None,
+                        
+                   allow_saturn=True,
+
+                   allow_moons=True,
                        moons_use_lambert=True,
-                       moons_use_cartographic=True,
+                       moons_use_cartographic=False,
                        moons_cartographic_source='iss',
+                   
+                   allow_rings=True,
                        rings_model_source='voyager',
-                       force_offset=None):
+
+                   force_offset=None):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
         obs                      The Observation.
         create_overlay           True to create a visual overlay.
+
+        allow_stars              True to allow finding the offset based on
+                                 stars.
         star_overlay_box_width   Parameters to pass to 
         star_overlay_box_thickness  star_make_good_bad_overlay to make star
                                  overlay symbols.
-        allow_stars              True to allow finding the offset based on
-                                 stars.
+        star_config              Config parameters for stars.
+
         allow_saturn             True to allow finding the offset based on
                                  Saturn.
+
         allow_moons              True to allow finding the offset based on
                                  moons.
-        allow_rings              True to allow finding the offset based on
-                                 rings.
         moons_use_lambert        True to use Lambert shading for moons.
         moons_use_cartographic   True to allow the use of cartographic surface
                                  maps for moons.
         moons_cartographic_source  The source data to use for cartographic
                                  surfaces (see cb_moons).
+
+        allow_rings              True to allow finding the offset based on
+                                 rings.
         rings_model_source       The source for ring data (see cb_rings).
+
         force_offset             None to find the offset automatically or
                                  a tuple (offset_u,offset_v) to force the
                                  result offset. This is useful for creating
                                  an overlay with a known offset.
 
     Returns:
-        offset_u, offset_v, metadata
-        
-        offset_u           The (integer) offsets in the U/V directions.
-        offset_v
         metadata           A dictionary containing information about the
                            offset result:
+            'offset_u'   The final (U,V) offset. 
+            'offset_v'   None if offset finding failed.
             'ext_data'         The original obs.data extended by the maximum
                                search size.
             'overlay'          The visual overlay (if create_overlay is True).
@@ -101,21 +115,22 @@ def master_find_offset(obs, create_overlay=False,
                                search size (if create_overlay is True).
             'large_bodies'     A list of the large bodies present in the image.
             'body_only'        False if the image doesn't consist entirely of
-                               a single body. Otherwise the name of the body.
+                               a single body and nothing else.
+                               Otherwise the name of the body.
             'rings_only'       True if the image consists entirely of the main
-                               rings.
+                               rings and nothing else.
             'used_objects_type' The type of objects used to create the final
                                model: None, 'stars', or 'model'.
             'model_contents'   A list of object types used to create the
-                               non-star model: 'saturn', 'rings', 'moons'.
+                               non-star model: 'rings', 'bodies'.
             'model_overrides_stars' True if the non-star model was more trusted
                                than the star model.
-            'star_offset_u'    The (U,V) offset determined by star matching.
-            'star_offset_v'    None if star matching failed.
+            'star_metadata'    The metadata from star matching. None if star
+                               matching not performed.
+            'ring_metadata'    The metadata from ring modeling. None if ring
+                               modeling not performed.
             'model_offset_u'   The (U,V) offset determined by model matching.
             'model_offset_v'   None if model matching failed.
-            'final_offset_u'   The final (U,V) offset. 
-            'final_offset_v'   None if offset finding failed.
             
     """
     logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
@@ -135,8 +150,7 @@ def master_find_offset(obs, create_overlay=False,
     
     set_obs_ext_data(obs, extend_fov)
 
-    moons_model_dict = {}            
-    saturn_model = None
+    bodies_model_list = []            
     rings_model = None
     final_model = None
     
@@ -148,6 +162,8 @@ def master_find_offset(obs, create_overlay=False,
         
     offset_u = None
     offset_v = None
+    
+    # Initialize the metadata to at least have something for each key
     metadata = {}
     metadata['ext_data'] = obs.ext_data
     metadata['ext_overlay'] = overlay
@@ -155,6 +171,14 @@ def master_find_offset(obs, create_overlay=False,
     metadata['used_objects_type'] = None
     metadata['model_contents'] = []
     metadata['model_overrides_stars'] = False
+    metadata['body_only'] = False
+    metadata['rings_only'] = False
+    metadata['star_metadata'] = None
+    metadata['ring_metadata'] = None
+    metadata['model_offset_u'] = None
+    metadata['model_offset_v'] = None
+    metadata['offset_u'] = None
+    metadata['offset_v'] = None
     
     #
     # FIGURE OUT WHAT KINDS OF THINGS ARE IN THIS IMAGE
@@ -167,57 +191,49 @@ def master_find_offset(obs, create_overlay=False,
     # closeup of a single body
     
     large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
+    large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
+    large_bodies_by_range.sort(key=lambda x: x[1]['range'], reverse=True)
     
     logger.debug('Large body inventory %s', large_body_dict.keys())
 
     set_obs_ext_corner_bp(obs, extend_fov)
     
-    large_bodies_meta = []
-    for body_name in large_body_dict:
-        large_bodies_meta.append(body_name)
-    metadata['large_bodies'] = large_bodies_meta
-    metadata['body_only'] = False
-    metadata['rings_only'] = False
+    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
     
     entirely_body = False
-    if len(large_body_dict) > 0:
+    if len(large_bodies_by_range) > 0:
         # See if any of the bodies take up the entire image    
-        for body_name in large_body_dict:
+        for body_name, inv in large_bodies_by_range:
             body_mask = obs.ext_corner_bp.where_intercepted(body_name).vals
             if np.all(body_mask):
-                logger.debug('Image appears to be entirely %s - aborting',
-                             body_name) # XXX
-                entirely_body = True
-                metadata['body_only'] = body_name
-#                return None, None, metadata # XXX
+                logger.debug('Image appears to be entirely %s', body_name)
+                return _master_find_offset_entirely_body(obs, metadata, body_name)
 
     # See if the main rings take up the entire image    
     entirely_rings = False    
     radii = obs.ext_corner_bp.ring_radius('saturn:ring').vals.astype('float')
     radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
                                 radii < RINGS_MAX_RADIUS)
-    if np.all(radii_good):
+    if np.all(radii_good) and len(large_bodies_by_range) == 0:
         logger.debug('Image appears to be entirely rings')
-        entirely_rings = True
-        
-    metadata['rings_only'] = entirely_rings
+        return _master_find_offset_entirely_rings(obs, metadata)
     
     #
     # TRY TO FIND THE OFFSET USING STARS ONLY. STARS ARE ALWAYS OUR BEST
     # CHOICE.
     #
-    # If the image is entirely a single body or rings then by definition we
-    # can't see any stars.
+    # If the image is entirely rings then by definition we can't see any stars.
+    # XXX Might want to allow stars to show through ring gaps.
     #
 
     star_offset_u = None
     star_offset_v = None
         
-    if (allow_stars and not entirely_rings and not entirely_body and
-        not force_offset):
+    if (allow_stars and not force_offset):
         star_offset_u, star_offset_v, star_metadata = star_find_offset(obs,
-                                                       extend_fov=extend_fov)
-        metadata.update(star_metadata)
+                                                       extend_fov=extend_fov,
+                                                       star_config=star_config)
+        metadata['star_metadata'] = star_metadata
         if star_offset_u is None:
             logger.debug('Final star offset N/A')
         else:
@@ -233,47 +249,42 @@ def master_find_offset(obs, create_overlay=False,
                               overlay_box_width=star_overlay_box_width,
                               overlay_box_thickness=star_overlay_box_thickness)
 
-    metadata['star_offset_u'] = star_offset_u
-    metadata['star_offset_v'] = star_offset_v
-    
     set_obs_ext_bp(obs, extend_fov)
     model_offset_u = None
     model_offset_v = None
     
     #
-    # TRY TO MAKE A MODEL FROM THE MOONS IN THE IMAGE
+    # TRY TO MAKE A MODEL FROM THE BODIES IN THE IMAGE
     #
     if (allow_saturn or allow_moons) and not entirely_rings:
-        for body_name in large_body_dict:
+        for body_name, inv in large_bodies_by_range:
             if body_name == 'SATURN' and not allow_saturn:
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
-            body = large_body_dict[body_name]
+            if body_name in FUZZY_BODY_LIST:
+                continue
             
-            model = moons_create_model(obs, body_name,
-                                       u_min=body['u_min'],
-                                       u_max=body['u_max'],
-                                       v_min=body['v_min'],
-                                       v_max=body['v_max'],
-                                       extend_fov=extend_fov,
-                                       lambert=moons_use_lambert,
-                                       force_spherical=False,
-                                       use_cartographic=moons_use_cartographic,
-                                       source=moons_cartographic_source)
-            if body_name == 'SATURN':
-                saturn_model = model
-            else:
-                moons_model_dict[body_name] = model
+            model = bodies_create_model(obs, body_name,
+                                        u_min=inv['u_min'],
+                                        u_max=inv['u_max'],
+                                        v_min=inv['v_min'],
+                                        v_max=inv['v_max'],
+                                        extend_fov=extend_fov,
+                                        lambert=moons_use_lambert,
+                                        force_spherical=False,
+                                        use_cartographic=moons_use_cartographic,
+                                        source=moons_cartographic_source)
+            bodies_model_list.append(model)
     
     #
     # TRY TO MAKE A MODEL FROM THE RINGS IN THE IMAGE
     #
-    if allow_rings and not entirely_body:
-        rings_model, rings_metadata = rings_create_model(
+    if allow_rings:
+        rings_model, ring_metadata = rings_create_model(
                                          obs, extend_fov=extend_fov,
                                          source=rings_model_source)
-        metadata.update(rings_metadata)
+        metadata['ring_metadata'] = ring_metadata
 
     #
     # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET
@@ -281,17 +292,14 @@ def master_find_offset(obs, create_overlay=False,
 
     model_list = []
     used_model_str_list = []
-    if saturn_model is not None:
-        model_list = model_list + [saturn_model]
-        used_model_str_list.append('saturn')
+    # XXX Deal with moons on the far side of the rings
     if rings_model is not None:
         model_list = model_list + [rings_model]
         used_model_str_list.append('rings')
-    if len(moons_model_dict) > 0:
-        for body_name in moons_model_dict:
-            if body_name not in FUZZY_BODY_LIST:
-                model_list = model_list + [moons_model_dict[body_name]]
-        used_model_str_list.append('moons')
+    if len(bodies_model_list) > 0:
+        for model in bodies_model_list:
+            model_list.append(model)
+        used_model_str_list.append('bodies')
     metadata['model_contents'] = used_model_str_list
     if len(model_list) == 0:
         logger.debug('Nothing to model - no offset found')
@@ -299,10 +307,10 @@ def master_find_offset(obs, create_overlay=False,
         model_offset_u, model_offset_v = force_offset
         logger.debug('FORCING OFFSET U,V %d,%d', model_offset_u, model_offset_v)
     else:
-        final_model = _combine_models(model_list)
+        final_model = _combine_models(model_list, solid=True)
 
         # XXX
-        if (rings_model is None and len(moons_model_dict) < 3 and
+        if (rings_model is None and len(bodies_model_list) < 3 and
             float(np.count_nonzero(final_model)) / final_model.size < 0.0005):
             logger.debug('Too few moons, no rings, model has too little coverage')
             model_offset_u = None
@@ -358,7 +366,7 @@ def master_find_offset(obs, create_overlay=False,
                                  new_model_offset_v, new_peak)
                     if (abs(new_model_offset_u) > 2 or
                         abs(new_model_offset_v) > 2 or
-                        new_peak < peak*0.75): # Need slush for roundoff error
+                        new_peak < peak*.75): # Need slush for roundoff error
                         logger.debug('Secondary model correlation offset bad'+
                                      ' - Not trusting result')
                         model_offset_u = None
@@ -406,7 +414,7 @@ def master_find_offset(obs, create_overlay=False,
         if star_offset_u is not None:
             if ((abs(star_offset_u-model_offset_u) > 5 or    # XXX CONSTS
                  abs(star_offset_v-model_offset_v) > 5) and
-                metadata['num_good_stars'] < 6):
+                metadata['star_metadata']['num_good_stars'] < 6):
                 logger.debug('Star and model offsets disagree by too much - '+
                              'ignoring star result')
                 star_list = star_metadata['full_star_list']
@@ -414,10 +422,11 @@ def master_find_offset(obs, create_overlay=False,
                     star.photometry_confidence = 0. # We changed the offset
                     star.use_for_correlation = False
                 star_overlay = star_make_good_bad_overlay(obs,
-                                  star_list, 0, 0,
-                                  star_overlay_box_width,
-                                  star_overlay_box_thickness,
-                                  extend_fov=extend_fov)
+                          star_list, 0, 0,
+                          extend_fov=extend_fov,
+                          overlay_box_width=star_overlay_box_width,
+                          overlay_box_thickness=star_overlay_box_thickness,
+                          star_config=star_config)
                 offset_u = model_offset_u
                 offset_v = model_offset_v
                 metadata['model_overrides_stars'] = True
@@ -433,16 +442,13 @@ def master_find_offset(obs, create_overlay=False,
     else:
         logger.debug('Final combined offset U,V %d %d', offset_u, offset_v)
 
-    metadata['final_offset_u'] = offset_u
-    metadata['final_offset_v'] = offset_v
+    metadata['offset_u'] = offset_u
+    metadata['offset_v'] = offset_v
                 
     if create_overlay:        
-        if saturn_model is not None:
-            overlay[...,0] = _normalize(saturn_model) * 255
-        if len(moons_model_dict) > 0:
-            moons_model_list = [moons_model_dict[x] for x in moons_model_dict]
-            overlay[...,1] = (_normalize(_combine_models(moons_model_list)) * 
-                              255)
+        if len(bodies_model_list) > 0:
+            bodies_combined = _combine_models(bodies_model_list, solid=True)
+            overlay[...,1] = (_normalize(bodies_combined) * 255)
         if rings_model is not None:
             overlay[...,2] = _normalize(rings_model) * 255
         if star_overlay is not None:
@@ -454,4 +460,12 @@ def master_find_offset(obs, create_overlay=False,
     metadata['ext_overlay'] = overlay
     metadata['overlay'] = unpad_image(overlay, extend_fov)
     
-    return offset_u, offset_v, metadata
+    return metadata
+
+def  _master_find_offset_entirely_body(obs, metadata, body_name):
+    metadata['body_only'] = body_name
+    return metadata
+
+def  _master_find_offset_entirely_rings(obs, metadata):
+    metadata['rings_only'] = True
+    return metadata

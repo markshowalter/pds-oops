@@ -28,7 +28,7 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                'ISS_036RF_FMOVIE001_VIMS',
+                'ISS_030RF_FMOVIE001_VIMS',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
@@ -445,7 +445,7 @@ obsid_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
     repro_path = fring_util.repro_path(options, image_path, image_name)
     
     if cur_obsid == None:

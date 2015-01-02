@@ -14,6 +14,8 @@ import pickle
 from imgdisp import ImageDisp, IntegerEntry, FloatEntry, ScrolledList
 import subprocess
 
+from cb_util_file import *
+
 python_filename = sys.argv[0]
 python_dir = os.path.split(sys.argv[0])[0]
 python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
@@ -79,28 +81,29 @@ def get_file_status(guidata):
     status_list = []
     max_repro_mtime = 0
     
-    for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+    for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
 #        print obsid, image_name
         offrepstatus = OffRepStatus()
         offrepstatus.obsid = obsid
         offrepstatus.image_name = image_name
         offrepstatus.image_path = image_path
         
-        offrepstatus.offset_path = fring_util.offset_path(options, image_path, image_name)
-        offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)+'.pickle'
+        offrepstatus.offset_path = file_offset_path(image_path)
+        offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)
         
         offrepstatus.offset_status = ''
-        if (os.path.exists(offrepstatus.offset_path+'.pickle') and
-            os.path.exists(offrepstatus.offset_path+'OVER.npy')):
-            offrepstatus.offset_mtime = os.stat(offrepstatus.offset_path+'.pickle').st_mtime
+        overlay_path_write, overlay_path_read = file_overlay_path(image_path)
+        if (os.path.exists(offrepstatus.offset_path) and
+            os.path.exists(overlay_path_read)):
+            offrepstatus.offset_mtime = os.stat(offrepstatus.offset_path).st_mtime
         else:
             offrepstatus.offset_status = '--'
             offrepstatus.offset_mtime = 1e38
 
         if os.path.exists(offrepstatus.repro_path):
             offrepstatus.repro_mtime = os.stat(offrepstatus.repro_path).st_mtime
-            if (not os.path.exists(offrepstatus.offset_path+'.pickle') or
-                not os.path.exists(offrepstatus.offset_path+'OVER.npy')):
+            if (not os.path.exists(offrepstatus.offset_path) or
+                not os.path.exists(overlay_path_read)):
                 offrepstatus.repro_status = 'r'
             elif offrepstatus.offset_mtime > offrepstatus.repro_mtime:
                 offrepstatus.repro_status = 'D'
@@ -142,8 +145,18 @@ def read_one_offset_status(offrepstatus):
     if offrepstatus.offset_status != '':
         return
     
-    (offrepstatus.auto_offset,
-     offrepstatus.manual_offset, offrepstatus.offset_metadata) = fring_util.read_offset(offrepstatus.offset_path)
+    offrepstatus.offset_metadata = file_read_offset_metadata(offrepstatus.image_path)
+    if offrepstatus.offset_metadata['offset_u'] is None:
+        offrepstatus.auto_offset = None
+    else:
+        offrepstatus.auto_offset = (offrepstatus.offset_metadata['offset_u'],
+                                    offrepstatus.offset_metadata['offset_v'])
+    if ('manual_offset_u' not in offrepstatus.offset_metadata or 
+        offrepstatus.offset_metadata['manual_offset_u'] is None):
+        offrepstatus.manual_offset = None
+    else:
+        offrepstatus.manual_offset = (offrepstatus.offset_metadata['manual_offset_u'],
+                                      offrepstatus.offset_metadata['manual_offset_v'])
      
     auto_status = ' '
     man_status = ' '

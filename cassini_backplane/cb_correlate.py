@@ -217,7 +217,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
             plt.ylabel('V')
             plt.show()
         
-        if DEBUG_CORRELATE_IMGDISP:
+        if DEBUG_CORRELATE_IMGDISP > 1:
             toplevel = Tkinter.Tk()
             frame_toplevel = Tkinter.Frame(toplevel)
             imdisp = ImageDisp([slice], parent=frame_toplevel,
