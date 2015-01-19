@@ -47,6 +47,7 @@ CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
 
 # The maximum pointing error we allow in the (V,U) directions.
 MAX_POINTING_ERROR = {'NAC': (85,75), 'WAC': (15,15)} # Pixels
+#MAX_POINTING_ERROR = {'NAC': (10,10), 'WAC': (15,15)} # Pixels
 
 # The FOV size of the ISS cameras in radians.
 ISS_FOV_SIZE = {'NAC': 0.35*oops.RPD, 'WAC': 3.48*oops.RPD}

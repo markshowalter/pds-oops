@@ -1,6 +1,11 @@
-#XXXXXXXX
-
-assert False
+###############################################################################
+# cb_bootstrap.py
+#
+# Routines related to bootstrapping.
+#
+# Exported routines:
+#    bootstrap_viable
+###############################################################################
 
 import cb_logging
 import logging
@@ -8,47 +13,115 @@ import logging
 import numpy as np
 import numpy.ma as ma
 
+from imgdisp import *
+import Tkinter as tk
+
+from cb_bodies import *
+from cb_gui_offset_data import *
+from cb_offset import *
+from cb_util_file import *
 from cb_util_oops import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
-import numpy as np
-from scipy.ndimage.filters import maximum_filter, gaussian_filter, median_filter
 
-import oops
-import oops.inst.cassini.iss as iss
-from spice_starcat import SPICE_StarCat as StarCat
+_BOOTSTRAP_ANGLE_TOLERANCE = 0.5 * oops.RPD
 
-from PIL import Image
+def _polygons_overlap(poly1, poly2):
+    pass
 
-import scipy.fftpack as fftpack
+def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
+    logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_viable')
 
-def correlate2d(image, model, normalize=False, retile=False):
-    """Correlate the image with the model; normalization to [-1.1] is optional.
-    """
-    image_fft = fftpack.fft2(image)
-    model_fft = fftpack.fft2(model)
-    corr = np.real(fftpack.ifft2(image_fft * np.conj(model_fft)))
-    if normalize:
-        corr /= np.sqrt(np.sum(image**2) * np.sum(model**2))
-    if retile:
-        y = corr.shape[0] / 2
-        x = corr.shape[1] / 2
-        offset = np.empty(corr.shape)
-        offset[0:y,0:x] = corr[-y:,-x:]
-        offset[0:y,-x:] = corr[-y:,0:x]
-        offset[-y:,0:x] = corr[0:y,-x:]
-        offset[-y:,-x:] = corr[0:y,0:x]
-        corr = offset
-    return corr
+    if ref_metadata['camera'] != cand_metadata['camera']:
+        logger.debug('Incompatible - different cameras')
+        return False
+    if ref_metadata['image_shape'] != cand_metadata['image_shape']:
+        logger.debug('Incompatible - different image shapes')
+        return False
+    if (ref_metadata['filter1'] != cand_metadata['filter1'] or
+        ref_metadata['filter2'] != cand_metadata['filter2']):
+        logger.debug('Incompatible - different filters')
+        return False
+    # midtime
+    
+    if ref_metadata['bootstrap_body'] != cand_metadata['bootstrap_body']:
+        logger.debug('Incompatible - different bodies')
+        return False
+    
+    ref_ra_dec = ref_metadata['ra_dec_corner']
+    cand_ra_dec = cand_metadata['ra_dec_corner']
+    
+    # Find the four corners of each
+    ref_v1 = (ref_ra_dec[0], ref_ra_dec[2])
+    ref_v2 = (ref_ra_dec[1], ref_ra_dec[2])
+    ref_v3 = (ref_ra_dec[1], ref_ra_dec[3])
+    ref_v4 = (ref_ra_dec[0], ref_ra_dec[2])
+    cand_v1 = (cand_ra_dec[0], cand_ra_dec[2])
+    cand_v2 = (cand_ra_dec[1], cand_ra_dec[2])
+    cand_v3 = (cand_ra_dec[1], cand_ra_dec[3])
+    cand_v4 = (cand_ra_dec[0], cand_ra_dec[2])
+    
+    # Find the rotations of each
+    ref_angle = np.arctan2(ref_v1[1], ref_v1[0])
+    cand_angle = np.arctan2(cand_v1[1], cand_v1[0])
+    
+    delta_angle = (ref_angle - cand_angle) % oops.TWOPI
+    if delta_angle > _BOOTSTRAP_ANGLE_TOLERANCE:
+        logger.debug('Incompatible - Ref angle %.2f Cand angle %.2f', 
+                     ref_angle*oops.DPR, cand_angle*oops.DPR)
+        return False
+    
+    print ref_v1, ref_v2, ref_v3, ref_v4
+    print cand_v1, cand_v2, cand_v3, cand_v4
+    
+    # Check for overlap
+    # More intelligent check for bootstrapping target - moon or rings
+    
+    return True
 
-def save_png(image, outfile, lo=-50, hi=300):
-    scaled = (image - lo) / (hi - lo)
-    bytes = (256.*scaled).clip(0,255).astype("uint8")
-    im = Image.fromstring("L", (bytes.shape[1],
-                                bytes.shape[0]), bytes)
-    im.save(outfile)
+def bootstrap(ref_path, ref_metadata, cand_path, cand_metadata):
+    logger = logging.getLogger(_LOGGING_NAME+'.bootstrap')
 
+    ref_obs = read_iss_file(ref_path)
+    cand_obs = read_iss_file(cand_path)
+    _, ref_filename = os.path.split(ref_path)
+    _, cand_filename = os.path.split(cand_path)
+    logger.info('Bootstrapping candidate %s reference %s', 
+                cand_filename, ref_filename)
+
+    bootstrap_body = ref_metadata['bootstrap_body']
+    logger.debug('Body %s', bootstrap_body)
+
+    reproj = bodies_reproject(ref_obs, bootstrap_body,
+                              offset=ref_metadata['offset'],
+                              lat_type='squashed')
+
+#    toplevel = tk.Tk()
+#    frame_toplevel = tk.Frame(toplevel)
+#    imdisp = ImageDisp([reproj['img']], parent=frame_toplevel,
+#                       canvas_size=(512,512),
+#                       allow_enlarge=True, enlarge_limit=10,
+#                       auto_update=True)
+#    frame_toplevel.pack()
+#    tk.mainloop()
+
+    new_metadata = master_find_offset(cand_obs, create_overlay=True,
+                                      moons_cartographic_data=reproj)
+
+    display_offset_data(cand_obs, new_metadata)
+
+    # Figure out where the center of the ref image is in the candidate
+    # image.
+#    known_ctr_ra, known_ctr_dec = ref_metadata['ra_dec_center']
+#    u, v = obs.uv_from_ra_and_dec(known_ctr_ra, known_ctr_dec).to_scalars()
+#    
+#    bs_offset = (obs.data.shape[1]//2 - u.vals, obs.data.shape[0]//2 - v.vals)
+#    
+#    print bs_offset
+    
+
+'''
 def stack(images):
     #
     # Make sure all images are the same size
@@ -156,3 +229,5 @@ aligned2[452:,:-2] = raws[1]
 pylab.imshow(aligned2.clip(150,190))
 save_png(aligned2.astype('float'), 'Figure_14gb.png', 150, 190)
 
+http://content.gpwiki.org/index.php/Polygon_Collision
+'''

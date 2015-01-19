@@ -5,8 +5,10 @@
 #
 # Exported routines:
 #    make_corner_meshgrid
+#    make_center_meshgrid
 #    make_ext_meshgrid
 #    set_obs_corner_bp
+#    set_obs_center_bp
 #    set_obs_ext_corner_bp
 #    set_obs_bp
 #    set_obs_ext_bp
@@ -46,6 +48,14 @@ def make_corner_meshgrid(obs, extend_fov=(0,0)):
              swap       =True)
     return mg
 
+def make_center_meshgrid(obs):
+    """Create a Meshgrid with only a single point in the center."""
+    mg = oops.Meshgrid.for_fov(obs.fov,
+             origin=(obs.data.shape[1]//2, obs.data.shape[0]//2),
+             limit =(obs.data.shape[1]//2, obs.data.shape[0]//2),
+             swap  =True)
+    return mg
+
 def make_ext_meshgrid(obs, extend_fov=(0,0)):
     """Create a Meshgrid for the entire extended FOV."""
     mg = oops.Meshgrid.for_fov(obs.fov,
@@ -64,6 +74,16 @@ def set_obs_corner_bp(obs, force=False):
         obs.corner_bp is None or force):
         obs.corner_meshgrid = make_corner_meshgrid(obs)
         obs.corner_bp = oops.Backplane(obs, meshgrid=obs.corner_meshgrid)
+
+def set_obs_center_bp(obs, force=False):
+    """Create a Backplane for the center point of the original FOV.
+    
+    Sets obs.center_meshgrid and obs.center_bp.
+    """
+    if (not hasattr(obs, 'center_bp') or obs.center_meshgrid is None or
+        obs.center_bp is None or force):
+        obs.center_meshgrid = make_center_meshgrid(obs)
+        obs.center_bp = oops.Backplane(obs, meshgrid=obs.center_meshgrid)
 
 def set_obs_ext_corner_bp(obs, extend_fov, force=False):
     """Create a Backplane for the corner points of the extended FOV.

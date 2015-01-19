@@ -99,22 +99,19 @@ def _read_cisscal_calib_file(filename):
     logger = logging.getLogger(_LOGGING_NAME+'.read_cisscal_calib_file')
     logger.debug('Reading "%s"', filename)
 
-    fp = open(filename, 'r')
-    while True:
-        line = fp.readline().strip()
-        if line == '\\begindata':
-            break
-    ret_list = []
-    while True:
-        line = fp.readline().strip()
-        if len(line) == 0:
-            break
-        if line == '\\enddata':
-            break
-        fields = line.split()
-        field_list = [float(x) for x in fields]
-        ret_list.append(field_list)
-    fp.close()
+    with open(filename, 'r') as fp:
+        for line in fp:
+            if line.startswith('\\begindata'):
+                break
+        else:
+            assert False
+        ret_list = []
+        for line in fp:
+            if line.startswith('\\enddata'):
+                break
+            fields = line.strip('\r\n').split()
+            field_list = [float(x) for x in fields]
+            ret_list.append(field_list)
     
     return ret_list
 
@@ -390,50 +387,46 @@ def _cassini_filter_transmission(detector, filter):
             filename = os.path.join(CASSINI_CALIB_ROOT, base_dirname,
                                     'all_filters.tab') 
             logger.debug('Reading "%s"', filename)
-            filter_fp = open(filename, 'r')
-        
-            header = filter_fp.readline().strip('\r\n')
-            header_fields = header.split('\t')
-            assert header_fields[0] == 'WAVELENGTH (nm)'
-            filter_name_list = []
-            for i in xrange(1, len(header_fields)):
-                filter_name = header_fields[i]
-                # For unknown reasons the headers of the NAC and WAC files are
-                # formatted differently. They also have weird names for the
-                # polarized filters.
-                if filter_name[:7] == 'VIS POL': # NAC
-                    filter_name = 'P0'
-                elif filter_name[:6] == 'IR POL': # NAC
-                    filter_name = 'IRP0'
-                elif filter_name[:6] == 'IR_POL': # WAC
-                    filter_name = 'IRP0'
-                elif filter_name[0].isdigit():
-                    filter_name = filter_name[-3:]
-                else:
-                    filter_name = filter_name[:3]
+            with open(filename, 'r') as filter_fp:
+                header = filter_fp.readline().strip('\r\n')
+                header_fields = header.split('\t')
+                assert header_fields[0] == 'WAVELENGTH (nm)'
+                filter_name_list = []
+                for i in xrange(1, len(header_fields)):
+                    filter_name = header_fields[i]
+                    # For unknown reasons the headers of the NAC and WAC files are
+                    # formatted differently. They also have weird names for the
+                    # polarized filters.
+                    if filter_name[:7] == 'VIS POL': # NAC
+                        filter_name = 'P0'
+                    elif filter_name[:6] == 'IR POL': # NAC
+                        filter_name = 'IRP0'
+                    elif filter_name[:6] == 'IR_POL': # WAC
+                        filter_name = 'IRP0'
+                    elif filter_name[0].isdigit():
+                        filter_name = filter_name[-3:]
+                    else:
+                        filter_name = filter_name[:3]
+                    
+                    filter_name_list.append(filter_name)
                 
-                filter_name_list.append(filter_name)
-            
-            for i in xrange(len(filter_name_list)):
-                key = (iss_det, filter_name_list[i])
-                _CASSINI_FILTER_TRANSMISSION[key] = ([], []) # wl, xmission
-            while True:
-                filter_line = filter_fp.readline().strip('\r\n')
-                if len(filter_line) == 0:
-                    break
-                filter_fields = filter_line.split('\t')
-                assert len(filter_fields) == len(filter_name_list)+1
-                if len(filter_fields[0]) == 0:
-                    continue
-                wl = float(filter_fields[0])
                 for i in xrange(len(filter_name_list)):
-                    filter_field = filter_fields[i+1].strip()
-                    if len(filter_field) > 0:
-                        key = (iss_det, filter_name_list[i])
-                        xmission = float(filter_field)
-                        _CASSINI_FILTER_TRANSMISSION[key][0].append(wl)
-                        _CASSINI_FILTER_TRANSMISSION[key][1].append(xmission)
-            filter_fp.close()    
+                    key = (iss_det, filter_name_list[i])
+                    _CASSINI_FILTER_TRANSMISSION[key] = ([], []) # wl, xmission
+                for filter_line in filter_fp:
+                    filter_line = filter_line.strip('\r\n')
+                    filter_fields = filter_line.split('\t')
+                    assert len(filter_fields) == len(filter_name_list)+1
+                    if len(filter_fields[0]) == 0:
+                        continue
+                    wl = float(filter_fields[0])
+                    for i in xrange(len(filter_name_list)):
+                        filter_field = filter_fields[i+1].strip('\r\n')
+                        if len(filter_field) > 0:
+                            key = (iss_det, filter_name_list[i])
+                            xmission = float(filter_field)
+                            _CASSINI_FILTER_TRANSMISSION[key][0].append(wl)
+                            _CASSINI_FILTER_TRANSMISSION[key][1].append(xmission)
     
         pol = _CASSINI_FILTER_TRANSMISSION[('NAC', 'P0')]
         _CASSINI_FILTER_TRANSMISSION[('NAC', 'P60')] = pol 

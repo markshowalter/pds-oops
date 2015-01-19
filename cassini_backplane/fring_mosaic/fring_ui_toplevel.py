@@ -146,17 +146,8 @@ def read_one_offset_status(offrepstatus):
         return
     
     offrepstatus.offset_metadata = file_read_offset_metadata(offrepstatus.image_path)
-    if offrepstatus.offset_metadata['offset_u'] is None:
-        offrepstatus.auto_offset = None
-    else:
-        offrepstatus.auto_offset = (offrepstatus.offset_metadata['offset_u'],
-                                    offrepstatus.offset_metadata['offset_v'])
-    if ('manual_offset_u' not in offrepstatus.offset_metadata or 
-        offrepstatus.offset_metadata['manual_offset_u'] is None):
-        offrepstatus.manual_offset = None
-    else:
-        offrepstatus.manual_offset = (offrepstatus.offset_metadata['manual_offset_u'],
-                                      offrepstatus.offset_metadata['manual_offset_v'])
+    offrepstatus.auto_offset = offrepstatus.offset_metadata['offset']
+    offrepstatus.manual_offset = offrepstatus.offset_metadata['manual_offset']
      
     auto_status = ' '
     man_status = ' '

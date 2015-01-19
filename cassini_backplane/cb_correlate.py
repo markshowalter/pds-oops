@@ -12,6 +12,7 @@ import cb_logging
 import logging
 
 import numpy as np
+import numpy.ma as ma
 import scipy.fftpack as fftpack
 import matplotlib.pyplot as plt
 from imgdisp import ImageDisp
@@ -116,6 +117,62 @@ def _correlate2d(image, model, normalize=False, retile=False):
     corr = unpad_image(corr, padding)
         
     return corr
+
+def _correlate_2d_masked(image, model, search_size_min, search_size_max,
+                         extend_fov):
+    logger = logging.getLogger(_LOGGING_NAME+'._correlate_2d_masked')
+    
+    if np.shape(search_size_min) == ():
+        search_size_min_u = search_size_min
+        search_size_min_v = search_size_min
+    else:
+        search_size_min_u, search_size_min_v = search_size_min
+
+    if np.shape(search_size_max) == ():
+        search_size_max_u = search_size_max
+        search_size_max_v = search_size_max
+    else:
+        search_size_max_u, search_size_max_v = search_size_max
+
+    toplevel = Tkinter.Tk()
+    frame_toplevel = Tkinter.Frame(toplevel)
+    imdisp = ImageDisp([model.data,model.mask], parent=frame_toplevel,
+                       canvas_size=(512,512),
+                       allow_enlarge=True, enlarge_limit=10,
+                       auto_update=True)
+    frame_toplevel.pack()
+    Tkinter.mainloop()
+
+    ret = np.zeros((search_size_max_v*2+1, search_size_max_u*2+1))
+    
+    logger.debug('Search size U %d:%d V %d:%d',
+                 search_size_min_u, search_size_max_u,
+                 search_size_min_v, search_size_max_v)
+    
+    for u_offset in xrange(-search_size_max_u, search_size_max_u+1):
+        for v_offset in xrange(-search_size_max_v, search_size_max_v+1):
+            if (abs(u_offset) < search_size_min_u or
+                abs(v_offset) < search_size_min_v):
+                continue
+            sub_model = model[extend_fov[1]+v_offset:
+                              extend_fov[1]+v_offset+image.shape[0],
+                              extend_fov[0]+u_offset:
+                              extend_fov[0]+u_offset+image.shape[1]]
+            corr = ma.corrcoef(image.flatten(), sub_model.flatten())[0][1]
+            print corr
+            ret[v_offset+search_size_max_v,
+                u_offset+search_size_max_u] = corr
+#            toplevel = Tkinter.Tk()
+#            frame_toplevel = Tkinter.Frame(toplevel)
+#            imdisp = ImageDisp([image,sub_model], parent=frame_toplevel,
+#                               canvas_size=(512,512),
+#                               allow_enlarge=True, enlarge_limit=10,
+#                               auto_update=True)
+#            frame_toplevel.pack()
+#            Tkinter.mainloop()
+    
+    return ret
+
     
 def _find_correlated_offset(corr, search_size_min, search_size_max,
                             max_offsets, peak_margin):
@@ -142,7 +199,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
                            
     Returns:
         List of
-            offset_u, offset_v, peak_value
+            (offset_u, offset_v), peak_value
         
         offset_u           The offset in the U direction.
         offset_v           The offset in the V direction.
@@ -290,7 +347,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
                 ret_list.append(None)
                 break
         else:
-            ret_list.append((offset_u, offset_v, peak_val))
+            ret_list.append(((offset_u, offset_v), peak_val))
     
     # Now remove all the Nones from the returned list.
     while None in ret_list:
@@ -302,7 +359,8 @@ def find_correlation_and_offset(image, model, search_size_min=0,
                                 search_size_max=30,
                                 max_offsets=1, peak_margin=3,
                                 extend_fov=(0,0),
-                                filter=None):
+                                filter=None,
+                                masked=False):
     """Find the offset that best aligns an image and a model.
 
     Inputs:
@@ -326,7 +384,7 @@ def find_correlation_and_offset(image, model, search_size_min=0,
         
     Returns:
         List of
-            offset_u, offset_v, peak_value
+            (offset_u, offset_v), peak_value
         
         offset_u           The offset in the U direction.
         offset_v           The offset in the V direction.
@@ -337,6 +395,10 @@ def find_correlation_and_offset(image, model, search_size_min=0,
     image = image.astype('float')
     model = model.astype('float')
 
+    if masked:
+        image = image.view(ma.MaskedArray)
+        model = model.view(ma.MaskedArray)
+        
     if np.shape(search_size_min) == ():
         search_size_min_u = search_size_min
         search_size_min_v = search_size_min
@@ -358,13 +420,13 @@ def find_correlation_and_offset(image, model, search_size_min=0,
     # If the image has been extended, try up to nine combinations of
     # sub-models if the model shifted onto the image from each direction.
     # The current implementation falls apart if the extend amount is not
-    # the same as the maximum search limit.
-    extend_fov_u_list = [0]
-    if extend_fov_u:
+    # the same as the maximum search limit. XXX
+    extend_fov_u_list = [extend_fov_u]
+    if extend_fov_u and search_size_max_u == extend_fov_u and not masked:
         extend_fov_u_list = [0, extend_fov_u, 2*extend_fov_u]
         assert search_size_max_u == extend_fov_u
-    extend_fov_v_list = [0]
-    if extend_fov_v:
+    extend_fov_v_list = [extend_fov_v]
+    if extend_fov_v and search_size_max_v == extend_fov_v and not masked:
         extend_fov_v_list = [0, extend_fov_v, 2*extend_fov_v]
         assert search_size_max_v == extend_fov_v
 
@@ -372,8 +434,10 @@ def find_correlation_and_offset(image, model, search_size_min=0,
     sub_image = image[extend_fov_v:extend_fov_v+orig_image_size_v,
                       extend_fov_u:extend_fov_u+orig_image_size_u]
     if filter is not None:
-        sub_image = filter(sub_image)
-
+        sub_image = filter(sub_image, masked=masked)
+        if masked:
+            model = filter(model, masked=masked)
+        
     new_ret_list = []
         
     # Iterate over each chosen sub-model and correlate it with the image.
@@ -384,49 +448,59 @@ def find_correlation_and_offset(image, model, search_size_min=0,
                          start_u-extend_fov_u+orig_image_size_u-1,
                          start_v-extend_fov_v,
                          start_v-extend_fov_v+orig_image_size_v-1)
-            sub_model = model[start_v:start_v+orig_image_size_v,
-                              start_u:start_u+orig_image_size_u]
-            if np.any(sub_model):
+            if masked:
+                corr = _correlate_2d_masked(sub_image, model, 
+                                           (search_size_min_u, 
+                                            search_size_min_v),
+                                           (search_size_max_u, 
+                                            search_size_max_v),
+                                           extend_fov)
+            else:
+                sub_model = model[start_v:start_v+orig_image_size_v,
+                                  start_u:start_u+orig_image_size_u]
+                if not np.any(sub_model):
+                    continue
+                
                 if filter is not None:
-                    sub_model = filter(sub_model)
+                    sub_model = filter(sub_model, masked=masked)
                 corr = _correlate2d(sub_image, sub_model,
                                     normalize=True, retile=True)
-                ret_list = _find_correlated_offset(corr, search_size_min,
-                                                   (search_size_max_u,
-                                                    search_size_max_v), 
-                                                   max_offsets, peak_margin)
 
-                # Iterate over each returned offset and calculate what the
-                # offset actually is based on the model shift amount.
-                # Throw away any results that are outside of the given search
-                # limits.
-                for offset_u, offset_v, peak in ret_list:
-                    if offset_u is not None:
-                        new_offset_u = offset_u-start_u+extend_fov_u
-                        new_offset_v = offset_v-start_v+extend_fov_v
-                        if (abs(new_offset_u) <= search_size_max_u and
-                            abs(new_offset_v) <= search_size_max_v):
-                            logger.debug('Adding possible offset U,V %d,%d',
-                                         new_offset_u, new_offset_v)
-                            new_ret_list.append((new_offset_u, new_offset_v,
-                                                 peak))
-                        else:
-                            logger.debug(
-                                     'Offset beyond search limits U,V %d,%d',
+            ret_list = _find_correlated_offset(corr, search_size_min,
+                                               (search_size_max_u,
+                                                search_size_max_v), 
+                                               max_offsets, peak_margin)
+
+            # Iterate over each returned offset and calculate what the
+            # offset actually is based on the model shift amount.
+            # Throw away any results that are outside of the given search
+            # limits.
+            for offset, peak in ret_list:
+                if offset is not None:
+                    new_offset_u = offset[0]-start_u+extend_fov_u
+                    new_offset_v = offset[1]-start_v+extend_fov_v
+                    if (abs(new_offset_u) <= search_size_max_u and
+                        abs(new_offset_v) <= search_size_max_v):
+                        logger.debug('Adding possible offset U,V %d,%d',
                                      new_offset_u, new_offset_v)
+                        new_ret_list.append(((new_offset_u, new_offset_v),
+                                             peak))
+                    else:
+                        logger.debug(
+                                 'Offset beyond search limits U,V %d,%d',
+                                 new_offset_u, new_offset_v)
 
     # Sort the offsets in descending order by correlation peak value.
     # Truncate the (possibly longer) list to the maximum number of requested
     # offsets.
-    new_ret_list.sort(key=lambda x: -x[2])
+    new_ret_list.sort(key=lambda x: -x[1])
     new_ret_list = new_ret_list[:max_offsets]
     
     if len(new_ret_list) == 0:
         logger.debug('No offsets to return')
     else:
-        for i, (offset_u, offset_v, peak) in enumerate(new_ret_list):
+        for i, ((offset_u, offset_v), peak) in enumerate(new_ret_list):
             logger.debug('Returning Peak %d offset U,V %d,%d CORR %f',
                          i+1, offset_u, offset_v, peak)
-    
         
     return new_ret_list

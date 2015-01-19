@@ -145,9 +145,7 @@ def yield_image_filenames(img_start_num, img_end_num,
             break
 
 def read_iss_file(filename):
-    obs = iss.from_file(filename)
+    obs = iss.from_file(filename, fast_distortion=True)
     obs.full_filename = filename
     _, obs.filename = os.path.split(filename) 
     return obs
-
-              

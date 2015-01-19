@@ -36,7 +36,7 @@ cmd_line = sys.argv[1:]
 if len(cmd_line) == 0:
     cmd_line = [
 #                '-a',
-                '--max-subprocesses', '3',
+#                '--max-subprocesses', '3',
                 'ISS_030RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_036RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_085RF_FMOVIE003_PRIME_1',
@@ -98,7 +98,7 @@ if len(cmd_line) == 0:
 #                 '--recompute-auto-offset',
 #                 '--recompute-reproject',
 #                 '--no-reproject',
-#                '--display-offset-reproject',
+                '--display-offset-reproject',
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
@@ -280,9 +280,8 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
             return # Offset file already exists, don't update
         # Save the manual offset!
         metadata = file_read_offset_metadata(offrepdata.image_path)
-        if 'manual_offset_u' in metadata:
-            offrepdata.manual_offset = (metadata['manual_offset_u'],
-                                        metadata['manual_offset_v'])
+        if 'manual_offset' in metadata:
+            offrepdata.manual_offset = metadata['manual_offset']
         time_offset = os.stat(offrepdata.offset_path).st_mtime
     else:
         time_offset = 0
@@ -318,9 +317,9 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
         if options.allow_exception:
             raise
         offrepdata.off_metadata = {}
-    if 'offset_u' in offrepdata.off_metadata:
-        offrepdata.the_offset = (offrepdata.off_metadata['offset_u'],
-                                 offrepdata.off_metadata['offset_v'])
+    if ('offset' in offrepdata.off_metadata and 
+        offrepdata.off_metadata['offset'] is not None):
+        offrepdata.the_offset = offrepdata.off_metadata['offset']
         if options.verbose:
             print 'FOUND %6.2f, %6.2f' % (offrepdata.the_offset[0], offrepdata.the_offset[1])
     else:
@@ -329,8 +328,7 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
             print 'COULD NOT FIND VALID OFFSET - PROBABLY BAD IMAGE'
     
     if offrepdata.manual_offset:
-        offrepdata.off_metadata['manual_offset_u'] = offrepdata.manual_offset[0]
-        offrepdata.off_metadata['manual_offset_v'] = offrepdata.manual_offset[1]
+        offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset
         
     if save_results:
         file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
@@ -361,7 +359,7 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_incidence_angle = metadata['mean_incidence']
         offrepdata.repro_time = metadata['time']
         
-        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
+        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution*oops.RPD)
         offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_long_mask]
 
 def _write_repro_data(offrepdata):
@@ -384,21 +382,20 @@ def _reproject_one_image(offrepdata):
 
     obs = offrepdata.obs
 
-    offset_u = None
-    offset_v = None
+    offset = None
     
     if offrepdata.manual_offset is not None:
-        offset_u, offset_v = offrepdata.manual_offset
+        offset = offrepdata.manual_offset
     elif offrepdata.the_offset is not None:
-        offset_u, offset_v = offrepdata.the_offset
+        offset = offrepdata.the_offset
     else:
         print 'NO OFFSET - REPROJECTION FAILED'
         _update_offrepdata_repro(offrepdata, None)
         return
     
     try:
-        ret = rings_reproject(obs, offset_u, offset_v,
-                              options.longitude_resolution,
+        ret = rings_reproject(obs, offset,
+                              options.longitude_resolution*oops.RPD,
                               options.radius_resolution,
                               options.radius_inner, options.radius_outer,
                               corotating='F')
@@ -452,17 +449,14 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
         return
 
     offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
-    if offrepdata.off_metadata['offset_u'] is None:
+    if offrepdata.off_metadata['offset'] is None:
         offrepdata.the_offset = None
     else:
-        offrepdata.the_offset = (offrepdata.off_metadata['offset_u'],
-                                 offrepdata.off_metadata['offset_v'])
-    if (not 'manual_offset_u' in offrepdata.off_metadata or 
-        offrepdata.off_metadata['manual_offset_u'] is None):
+        offrepdata.the_offset = offrepdata.off_metadata['offset']
+    if not 'manual_offset' in offrepdata.off_metadata: 
         offrepdata.manual_offset = None
     else:
-        offrepdata.manual_offset = (offrepdata.off_metadata['manual_offset_u'],
-                                    offrepdata.off_metadata['manual_offset_v'])
+        offrepdata.manual_offset = offrepdata.off_metadata['manual_offset']
     
     if offrepdata.the_offset is None and offrepdata.manual_offset is None:
         if options.verbose:
@@ -553,8 +547,7 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
     if offrepdata.the_offset is not None:
         # Auto offset - red
         x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.the_offset[0],
-                                        offset_v=offrepdata.the_offset[1])
+                                        offset=offrepdata.the_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
         offset_overlay[y_pixels, x_pixels, 0] = 255
@@ -562,8 +555,7 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
     if offrepdata.manual_offset is not None:
         # Manual offset - green
         x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.manual_offset[0],
-                                        offset_v=offrepdata.manual_offset[1])
+                                        offset=offrepdata.manual_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
         offset_overlay[y_pixels, x_pixels, 1] = 255
@@ -584,9 +576,9 @@ def callback_offset(x, y, offrepdata, offrepdispdata):
         return
     
     if offrepdispdata.off_longitudes is not None:
-        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%offrepdispdata.off_longitudes[y,x]))
-        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
-                                                                                                            offrepdata.obs.midtime)))
+        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%(offrepdispdata.off_longitudes[y,x]*oops.DPR)))
+        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
+                                                                                                            offrepdata.obs.midtime)*oops.DPR)))
     if offrepdispdata.off_radii is not None:
         offrepdispdata.label_off_radius.config(text=('%7.3f'%offrepdispdata.off_radii[y,x]))
 
@@ -660,13 +652,11 @@ def refresh_repro_img(offrepdata, offrepdispdata):
 def command_commit_changes(offrepdata, offrepdispdata):
     if offrepdispdata.entry_x_offset.get() == "" or offrepdispdata.entry_y_offset.get() == "":
         offrepdata.manual_offset = None
-        offrepdata.off_metadata['manual_offset_u'] = None 
-        offrepdata.off_metadata['manual_offset_v'] = None 
+        offrepdata.off_metadata['manual_offset'] = None 
     else:
         offrepdata.manual_offset = (float(offrepdispdata.entry_x_offset.get()),
                                     float(offrepdispdata.entry_y_offset.get()))
-        offrepdata.off_metadata['manual_offset_u'] = offrepdata.manual_offset[0] 
-        offrepdata.off_metadata['manual_offset_v'] = offrepdata.manual_offset[1] 
+        offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset 
     file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
     _write_repro_data(offrepdata)
 
@@ -675,7 +665,7 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     set_obs_bp(offrepdata.obs)
     
     offrepdispdata.off_radii = offrepdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
+    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float')
     offrepdispdata.off_longitudes = rings_fring_inertial_to_corotating(offrepdispdata.off_longitudes,
                                                                        offrepdata.obs.midtime)
     
@@ -888,19 +878,21 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
         print '** Display', offrepdata.obsid, '/', offrepdata.image_name
     if offrepdata.off_metadata is None:
         offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
-        if offrepdata.off_metadata['offset_u'] is None:
+        if offrepdata.off_metadata is None:
             offrepdata.the_offset = None
-        else:
-            offrepdata.the_offset = (offrepdata.off_metadata['offset_u'],
-                                     offrepdata.off_metadata['offset_v'])
-        if ('manual_offset_u' not in offrepdata.off_metadata or
-            offrepdata.off_metadata['manual_offset_u'] is None):
             offrepdata.manual_offset = None
         else:
-            offrepdata.manual_offset = (offrepdata.off_metadata['manual_offset_u'],
-                                        offrepdata.off_metadata['manual_offset_v'])
+            if offrepdata.off_metadata['offset'] is None:
+                offrepdata.the_offset = None
+            else:
+                offrepdata.the_offset = offrepdata.off_metadata['offset']
+            if 'manual_offset' not in offrepdata.off_metadata:
+                offrepdata.manual_offset = None
+            else:
+                offrepdata.manual_offset = offrepdata.off_metadata['manual_offset']
 
-    if option_invalid_offset and (offrepdata.the_offset is not None or offrepdata.manual_offset is not None):
+    if (option_invalid_offset and 
+        (offrepdata.the_offset is not None or offrepdata.manual_offset is not None)):
         if options.verbose:
             print 'Skipping because not invalid'
         return
@@ -938,9 +930,9 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     if offrepdispdata.repro_longitudes is None:
         return
 
-    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%offrepdispdata.repro_longitudes[x]))
-    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
-                                                                                                    offrepdata.obs.midtime)))
+    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%(offrepdispdata.repro_longitudes[x]*oops.DPR)))
+    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
+                                                                                                    offrepdata.obs.midtime)*oops.DPR)))
     
     radius = y*options.radius_resolution+options.radius_inner
     offrepdispdata.label_radius.config(text = '%7.3f'%radius)
