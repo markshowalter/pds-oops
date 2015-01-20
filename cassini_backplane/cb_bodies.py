@@ -51,8 +51,8 @@ _BODIES_LATITUDE_SLOP = 1e-6  # resolution we will be using
 _BODIES_MIN_LATITUDE = -oops.PI
 _BODIES_MAX_LATITUDE = oops.PI-_BODIES_LATITUDE_SLOP*2
 _BODIES_MAX_LONGITUDE = oops.TWOPI-_BODIES_LONGITUDE_SLOP*2
-BODIES_REPRO_MIN_LAMBERT = 0.00
-BODIES_REPRO_MAX_EMISSION = 90. * oops.RPD
+BODIES_REPRO_MIN_LAMBERT = 0.05
+BODIES_REPRO_MAX_EMISSION = 85. * oops.RPD
 
 
 def mask_to_array(mask, shape):
@@ -72,16 +72,17 @@ def _bodies_create_cartographic(bp, body_data):
     min_lat_pixel = body_data['lat_idx_range'][0]
     min_lon_pixel = body_data['lon_idx_range'][0]
     body_name = body_data['body_name']
-    lat_type = body_data['lat_type']
+    latlon_type = body_data['latlon_type']
     lon_direction = body_data['lon_direction']
     
-    bp_latitude = bp.latitude(body_name, lat_type=lat_type)
+    bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = mask_to_array(bp_latitude.mask, bp.shape)
     ok_body_mask = np.logical_not(body_mask_inv)
 
     bp_latitude = bp_latitude.vals.astype('float')
 
-    bp_longitude = bp.longitude(body_name, direction=lon_direction)
+    bp_longitude = bp.longitude(body_name, direction=lon_direction,
+                                lon_type=latlon_type)
     bp_longitude = bp_longitude.vals.astype('float')
 
     latitude_pixels = (bp_latitude + oops.HALFPI) / lat_res
@@ -103,7 +104,7 @@ def _bodies_create_cartographic(bp, body_data):
     latitude_pixels = np.clip(latitude_pixels, 0, data.shape[0]-1)
     longitude_pixels = np.clip(longitude_pixels, 0, data.shape[1]-1)
 
-    logger.debug('Lat Type %s, Lon Direction %s', lat_type, lon_direction)
+    logger.debug('Lat Type %s, Lon Direction %s', latlon_type, lon_direction)
     logger.debug('Latitude range %8.2f %8.2f', 
                  np.min(bp_latitude[ok_body_mask])*oops.DPR, 
                  np.max(bp_latitude[ok_body_mask])*oops.DPR)
@@ -213,16 +214,17 @@ def bodies_generate_longitudes(longitude_start=0.,
     return np.arange(longitude_start, longitude_end+1) * longitude_resolution
 
 def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
-                                        lat_type='centric',
+                                        latlon_type='centric',
                                         lon_direction='east'):
     """Convert latitude,longitude pairs to U,V."""
     logger = logging.getLogger(_LOGGING_NAME+
                                '.bodies_latitude_longitude_to_pixels')
 
-    assert lat_type in ('centric', 'graphic', 'squashed')
+    assert latlon_type in ('centric', 'graphic', 'squashed')
     assert lon_direction in ('east', 'west')
 
-    logger.debug('Lat Type %s, Lon Direction %s', lat_type, lon_direction)
+    logger.debug('Lat/Lon Type %s, Lon Direction %s', latlon_type,
+                 lon_direction)
 
     latitude = polymath.Scalar.as_scalar(latitude)
     longitude = polymath.Scalar.as_scalar(longitude)
@@ -233,14 +235,16 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
     moon_surface = oops.Body.lookup(body_name).surface
 
     # Get the 'squashed' latitude    
-    if lat_type == 'centric':
+    if latlon_type == 'centric':
+        longitude = moon_surface.lon_from_centric(longitude)
         latitude = moon_surface.lat_from_centric(latitude, longitude)
-    elif lat_type == 'graphic':
+    elif latlon_type == 'graphic':
+        longitude = moon_surface.lon_from_graphic(longitude)
         latitude = moon_surface.lat_from_graphic(latitude, longitude)
 
     # Internal longitude is always 'east'
     if lon_direction == 'west':
-        longitude = (oops.TWOPI - longitude) % oops.TWOPI
+        longitude = (-longitude) % oops.TWOPI
         
     obs_event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
                                          polymath.Vector3.ZERO),
@@ -263,7 +267,7 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
 def bodies_reproject(obs, body_name, offset=None,
             latitude_resolution=BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
             longitude_resolution=BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-            zoom=_BODIES_DEFAULT_REPRO_ZOOM, lat_type='centric',
+            zoom=_BODIES_DEFAULT_REPRO_ZOOM, latlon_type='centric',
             lon_direction='east'):
     """Reproject the moon into a rectangular latitude/longitude space.
     
@@ -279,8 +283,9 @@ def bodies_reproject(obs, body_name, offset=None,
                                  (rad/pix).
         zoom                     The amount to magnify the original image for
                                  pixel value interpolation.
-        lat_type                 The coordinate system to use for latitude.
-                                 One of 'centric', 'graphic', or 'squashed'.
+        latlon_type              The coordinate system to use for latitude and
+                                 longitude. One of 'centric', 'graphic', or
+                                 'squashed'.
         lon_direction            The coordinate system to use for longitude.
                                  One of 'east' or 'west'.
                                  
@@ -295,7 +300,8 @@ def bodies_reproject(obs, body_name, offset=None,
         'lon_idx_range'    The range (min,max) of longitudes in the returned
                            image.
         'lon_resolution'   The resolution (rad/pix) in the longitude direction.
-        'lat_type'         The latitude coordinate system (see above).
+        'latlon_type'      The latitude/longitude coordinate system (see
+                           above).
         'lon_direction'    The longitude coordinate system (see above).
         'time'             The midtime of the observation (TDB).
         'offset'           The offset that was used on the image. Can be None
@@ -333,7 +339,7 @@ def bodies_reproject(obs, body_name, offset=None,
     center_resolution = bp.center_resolution(body_name).vals.astype('float')
     resolution = center_resolution / np.cos(bp_emission)
 
-    bp_latitude = bp.latitude(body_name, lat_type=lat_type)
+    bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = mask_to_array(bp_latitude.mask, bp.shape)
     bp_latitude = bp_latitude.vals.astype('float')
 
@@ -392,8 +398,8 @@ def bodies_reproject(obs, body_name, offset=None,
     # Actual longitude (rad)
     lon_bins_act = lon_bins * longitude_resolution
 
-    logger.debug('Offset U,V %d,%d  Lat Type %s  Lon Direction %s', 
-                 offset_u, offset_v, lat_type, lon_direction)
+    logger.debug('Offset U,V %d,%d  Lat/Lon Type %s  Lon Direction %s', 
+                 offset_u, offset_v, latlon_type, lon_direction)
     logger.debug('Latitude range %8.2f %8.2f', 
                  np.min(bp_latitude[ok_body_mask])*oops.DPR, 
                  np.max(bp_latitude[ok_body_mask])*oops.DPR)
@@ -419,7 +425,8 @@ def bodies_reproject(obs, body_name, offset=None,
 
     u_pixels, v_pixels = bodies_latitude_longitude_to_pixels(
                             obs, body_name, lat_bins_act, lon_bins_act,
-                            lat_type=lat_type, lon_direction=lon_direction)
+                            latlon_type=latlon_type, 
+                            lon_direction=lon_direction)
         
     zoom_data = ndinterp.zoom(adj_data, zoom,
                               order=_BODIES_DEFAULT_REPRO_ZOOM_ORDER)
@@ -499,7 +506,7 @@ def bodies_reproject(obs, body_name, offset=None,
     ret['lat_resolution'] = latitude_resolution
     ret['lon_idx_range'] = (min_longitude_pixel, max_longitude_pixel)
     ret['lon_resolution'] = longitude_resolution
-    ret['lat_type'] = lat_type
+    ret['latlon_type'] = latlon_type
     ret['lon_direction'] = lon_direction
     ret['offset'] = offset
     ret['img'] = repro_img
@@ -514,7 +521,7 @@ def bodies_reproject(obs, body_name, offset=None,
 def bodies_mosaic_init(
       latitude_resolution=BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
       longitude_resolution=BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-      lat_type='centric', lon_direction='east'):
+      latlon_type='centric', lon_direction='east'):
     """Create the data structure for a moon mosaic.
 
     Inputs:
@@ -522,8 +529,9 @@ def bodies_mosaic_init(
                                  (rad/pix).
         longitude_resolution     The longitude resolution of the new image
                                  (rad/pix).
-        lat_type                 The coordinate system to use for latitude.
-                                 One of 'centric', 'graphic', or 'squashed'.
+        latlon_type              The coordinate system to use for latitude and
+                                 longitude. One of 'centric', 'graphic', or 
+                                 'squashed'.
         lon_direction            The coordinate system to use for longitude.
                                  One of 'east' or 'west'.
                                  
@@ -532,7 +540,8 @@ def bodies_mosaic_init(
 
         'img'              The full mosaic image.
         'full_mask'        The valid-pixel mask (all False).
-        'lat_type'         The latitude coordinate system (see above).
+        'latlon_type'      The latitude/longitude coordinate system (see
+                           above).
         'lon_direction'    The longitude coordinate system (see above).
         'resolution'       The per-pixel resolution.
         'phase'            The per-pixel phase angle.
@@ -551,7 +560,7 @@ def bodies_mosaic_init(
                           dtype=np.float32)
     ret['full_mask'] = np.ones((latitude_pixels, longitude_pixels), 
                                dtype=np.bool)
-    ret['lat_type'] = lat_type
+    ret['latlon_type'] = latlon_type
     ret['lon_direction'] = lon_direction
     ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
                                  dtype=np.float32)
@@ -577,7 +586,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     mosaic_img = mosaic_metadata['img']
     mosaic_mask = mosaic_metadata['full_mask']
     
-    assert mosaic_metadata['lat_type'] == repro_metadata['lat_type']
+    assert mosaic_metadata['latlon_type'] == repro_metadata['latlon_type']
     assert mosaic_metadata['lon_direction'] == repro_metadata['lon_direction']
     
     repro_lat_idx_range = repro_metadata['lat_idx_range']

@@ -88,8 +88,13 @@ def display_offset_data(obs, metadata):
     offset = metadata['offset']
     metadata['img'] = obs.data
     
-    ext_data = metadata['ext_data']
-    overlay = metadata['ext_overlay']
+    if 'ext_data' not in metadata:
+        ext_data = obs.data
+        metadata['ext_data'] = ext_data
+        overlay = metadata['overlay']
+    else:
+        ext_data = metadata['ext_data']
+        overlay = metadata['ext_overlay']
     star_metadata = metadata['star_metadata']
     
     if ext_data is None:
@@ -160,7 +165,8 @@ def display_offset_data(obs, metadata):
         if mask is not None:
             model = model.mask_where(mask)
         metadata[body_name+'_latitude'] = model
-        bp_longitude = restr_bp.longitude(body_name, direction='west') * oops.DPR
+        bp_longitude = restr_bp.longitude(body_name, direction='west',
+                                          lon_type='graphic') * oops.DPR
         model = polymath.Scalar.as_scalar(np.zeros(ext_data.shape)).mask_where_eq(0)
         model[v_min+ext_v:v_max+ext_v+1,
               u_min+ext_u:u_max+ext_u+1] = bp_longitude    

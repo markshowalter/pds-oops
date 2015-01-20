@@ -33,12 +33,6 @@ def _polygons_overlap(poly1, poly2):
 def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_viable')
 
-    if ref_metadata['camera'] != cand_metadata['camera']:
-        logger.debug('Incompatible - different cameras')
-        return False
-    if ref_metadata['image_shape'] != cand_metadata['image_shape']:
-        logger.debug('Incompatible - different image shapes')
-        return False
     if (ref_metadata['filter1'] != cand_metadata['filter1'] or
         ref_metadata['filter2'] != cand_metadata['filter2']):
         logger.debug('Incompatible - different filters')
@@ -95,7 +89,7 @@ def bootstrap(ref_path, ref_metadata, cand_path, cand_metadata):
 
     reproj = bodies_reproject(ref_obs, bootstrap_body,
                               offset=ref_metadata['offset'],
-                              lat_type='squashed')
+                              latlon_type='centric')
 
 #    toplevel = tk.Tk()
 #    frame_toplevel = tk.Frame(toplevel)
@@ -109,6 +103,7 @@ def bootstrap(ref_path, ref_metadata, cand_path, cand_metadata):
     new_metadata = master_find_offset(cand_obs, create_overlay=True,
                                       moons_cartographic_data=reproj)
 
+    display_offset_data(ref_obs, ref_metadata)
     display_offset_data(cand_obs, new_metadata)
 
     # Figure out where the center of the ref image is in the candidate
@@ -231,3 +226,49 @@ save_png(aligned2.astype('float'), 'Figure_14gb.png', 150, 190)
 
 http://content.gpwiki.org/index.php/Polygon_Collision
 '''
+
+
+"""
+    if ref_metadata['camera'] != cand_metadata['camera']:
+        logger.debug('Incompatible - different cameras')
+        return False
+    if ref_metadata['image_shape'] != cand_metadata['image_shape']:
+        logger.debug('Incompatible - different image shapes')
+        return False
+    if (ref_metadata['filter1'] != cand_metadata['filter1'] or
+        ref_metadata['filter2'] != cand_metadata['filter2']):
+        logger.debug('Incompatible - different filters')
+        return False
+    # midtime
+    
+    if ref_metadata['bootstrap_body'] != cand_metadata['bootstrap_body']:
+        logger.debug('Incompatible - different bodies')
+        return False
+    
+    ref_ra_dec = ref_metadata['ra_dec_corner']
+    cand_ra_dec = cand_metadata['ra_dec_corner']
+    
+    # Find the four corners of each
+    ref_v1 = (ref_ra_dec[0], ref_ra_dec[2])
+    ref_v2 = (ref_ra_dec[1], ref_ra_dec[2])
+    ref_v3 = (ref_ra_dec[1], ref_ra_dec[3])
+    ref_v4 = (ref_ra_dec[0], ref_ra_dec[2])
+    cand_v1 = (cand_ra_dec[0], cand_ra_dec[2])
+    cand_v2 = (cand_ra_dec[1], cand_ra_dec[2])
+    cand_v3 = (cand_ra_dec[1], cand_ra_dec[3])
+    cand_v4 = (cand_ra_dec[0], cand_ra_dec[2])
+    
+    # Find the rotations of each
+    ref_angle = np.arctan2(ref_v1[1], ref_v1[0])
+    cand_angle = np.arctan2(cand_v1[1], cand_v1[0])
+    
+    delta_angle = (ref_angle - cand_angle) % oops.TWOPI
+    if delta_angle > _BOOTSTRAP_ANGLE_TOLERANCE:
+        logger.debug('Incompatible - Ref angle %.2f Cand angle %.2f', 
+                     ref_angle*oops.DPR, cand_angle*oops.DPR)
+        return False
+    
+    print ref_v1, ref_v2, ref_v3, ref_v4
+    print cand_v1, cand_v2, cand_v3, cand_v4
+    
+"""

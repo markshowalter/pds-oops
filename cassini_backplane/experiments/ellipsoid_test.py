@@ -3,8 +3,8 @@ import oops
 import oops.inst.cassini.iss as iss
 import polymath
 
-LAT_TYPE = 'centric'
-LONG_DIRECTION = 'west'
+LAT_TYPE = 'graphic'
+LONG_DIRECTION = 'east'
 
 def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
                                         lat_type='centric',
@@ -22,22 +22,23 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
     moon_surface = oops.Body.lookup(body_name).surface
 
     # Internal longitude is always 'east'
-    east_longitude = longitude
     if direction == 'west':
-        east_longitude = (oops.TWOPI - longitude) % oops.TWOPI
+        longitude = (-longitude) % oops.TWOPI
 
     # Get the 'squashed' latitude    
     if lat_type == 'centric':
-        latitude = moon_surface.lat_from_centric(latitude, east_longitude)
+        longitude = moon_surface.lon_from_centric(longitude)
+        latitude = moon_surface.lat_from_centric(latitude, longitude)
     elif lat_type == 'graphic':
-        latitude = moon_surface.lat_from_graphic(latitude, east_longitude)
+        longitude = moon_surface.lon_from_graphic(longitude)
+        latitude = moon_surface.lat_from_graphic(latitude, longitude)
 
         
     obs_event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
                                          polymath.Vector3.ZERO),
                            obs.path, obs.frame)
     _, obs_event = moon_surface.photon_to_event_by_coords(
-                                          obs_event, (east_longitude, latitude))
+                                          obs_event, (longitude, latitude))
 
     uv = obs.fov.uv_from_los(-obs_event.arr)
     u, v = uv.to_scalars()
@@ -63,7 +64,7 @@ def process_moon_one_file(filename, body_name):
     bp_latitude = bp.latitude(body_name, lat_type=LAT_TYPE)
     bp_latitude = bp_latitude.vals.astype('float')
 
-    bp_longitude = bp.longitude(body_name, direction=LONG_DIRECTION)
+    bp_longitude = bp.longitude(body_name, direction=LONG_DIRECTION, lon_type=LAT_TYPE)
     bp_longitude = bp_longitude.vals.astype('float')
 
     obs.fov = orig_fov

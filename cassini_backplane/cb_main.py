@@ -89,5 +89,5 @@ for cand_path, cand_metadata in candidate_list:
 #                            cand_path, cand_metadata):
 #            pass
         bootstrap(known_path, known_metadata,
-                  known_path, known_metadata)
-#                  cand_path, cand_metadata)
+#                  known_path, known_metadata)
+                  cand_path, cand_metadata)
