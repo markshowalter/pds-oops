@@ -35,9 +35,9 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = [
-#                '-a',
-                '--max-subprocesses', '3',
-                'ISS_030RF_FMOVIE001_VIMS',
+#                 '-a',
+#                 '--max-subprocesses', '6',
+#                 'ISS_030RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_036RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_085RF_FMOVIE003_PRIME_1',
 #                '--start-obsid', 'ISS_106RF_FMOVIE002_PRIME',
@@ -61,7 +61,7 @@ if len(cmd_line) == 0:
 #'ISS_109RI_TDIFS20HP001_CIRS',
 #'ISS_112RF_FMOVIE002_PRIME',
 #'ISS_132RI_FMOVIE001_VIMS',
-
+'ISS_115RF_FMOVIEEQX001_PRIME',
 #'ISS_080RF_FMOVIE005_PRIME/N1597390953_1',
 
 #'ISS_051RI_LPMRDFMOV001_PRIME',
@@ -318,7 +318,8 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
         if options.allow_exception:
             raise
         offrepdata.off_metadata = {}
-    if 'offset_u' in offrepdata.off_metadata:
+    if ('offset_u' in offrepdata.off_metadata and 
+        offrepdata.off_metadata['offset_u'] is not None):
         offrepdata.the_offset = (offrepdata.off_metadata['offset_u'],
                                  offrepdata.off_metadata['offset_v'])
         if options.verbose:

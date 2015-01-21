@@ -653,7 +653,6 @@ def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     # data.
     mosaic_img = mosaic_metadata['img']
     repro_img = np.zeros(mosaic_img.shape) 
-    print repro_img.shape, repro_good_long.shape, repro_metadata['img'].shape
     repro_img[:,repro_good_long] = repro_metadata['img']
     mosaic_res = mosaic_metadata['mean_resolution']
     repro_res = np.zeros(mosaic_res.shape) + 1e300

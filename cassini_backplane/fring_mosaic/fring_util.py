@@ -15,10 +15,11 @@ oops.spice.load_leap_seconds()
 if os.getcwd()[1] == ':':
     # Windows
     PYTHON_EXE = 'c:/Users/rfrench/AppData/Local/Enthought/Canopy/User/python.exe'
-    ROOT = os.path.join(RESULTS_ROOT, 'f-ring')
 else:
     # Linux
-    assert False
+    PYTHON_EXE = '/home/rfrench/Enthought/Canopy_64bit/User/bin/python'
+
+ROOT = os.path.join(RESULTS_ROOT, 'f-ring')    
     
 PYTHON_RING_REPROJECT = 'fring_ui_reproject.py'
 PYTHON_RING_MOSAIC = 'fring_ui_mosaic.py'
