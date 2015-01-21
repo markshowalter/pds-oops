@@ -75,13 +75,14 @@ def master_find_offset(obs,
                        star_config=None,
                         
                    allow_saturn=True,
-
                    allow_moons=True,
-                       moons_use_lambert=True,
-                       moons_cartographic_data=None,
+                       bodies_use_lambert=True,
+                       bodies_cartographic_data=None,
+                       bodies_config=None,
                    
                    allow_rings=True,
                        rings_model_source='voyager',
+                       rings_config=None,
 
                    force_offset=None,
                    force_bootstrap_candidate=False):
@@ -100,16 +101,16 @@ def master_find_offset(obs,
 
         allow_saturn             True to allow finding the offset based on
                                  Saturn.
-
         allow_moons              True to allow finding the offset based on
                                  moons.
-        moons_use_lambert        True to use Lambert shading for moons.
-        moons_cartographic_data  The metadata to use for cartographic
+        bodies_use_lambert       True to use Lambert shading for moons.
+        bodies_cartographic_data The metadata to use for cartographic
                                  surfaces (see cb_bodies).
+        bodies_config            Config parameters for bodies.
 
         allow_rings              True to allow finding the offset based on
                                  rings.
-        rings_model_source       The source for ring data (see cb_rings).
+        rings_config             Config parameters for rings.
 
         force_offset             None to find the offset automatically or
                                  a tuple (U,V) to force the result offset.
@@ -122,6 +123,9 @@ def master_find_offset(obs,
     Returns:
         metadata           A dictionary containing information about the
                            offset result:
+                           
+          Data about the offset process:
+          
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
             'large_bodies'     A list of the large bodies present in the image.
@@ -315,11 +319,17 @@ def master_find_offset(obs,
 
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
+        logger.debug('Forcing bootstrap candidate and returning')
         return metadata
         
     if entirely_body:
-        return _master_find_offset_one_single_body(
-                           obs, metadata, entirely_body, extend_fov)
+        if (bodies_cartographic_data is None or
+            bodies_cartographic_data['body_name'] != entirely_body):
+            # Nothing we can do here except bootstrap
+            metadata['bootstrap_candidate'] = True
+            logger.debug('Single body without cartographic data - forcing '+
+                         'bootstrap candidate and returning')
+            return metadata
 
     ####                               ###
     #### RING AND BODY COMBINED MODELS ###
@@ -338,25 +348,30 @@ def master_find_offset(obs,
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
-            if body_name in FUZZY_BODY_LIST:
+            if body_name in FUZZY_BODY_LIST and not create_overlay:
                 continue
             
-            model = bodies_create_model(
-                    obs, body_name, u_min=inv['u_min'], u_max=inv['u_max'],
-                    v_min=inv['v_min'], v_max=inv['v_max'],
+            bodies_model, bodies_metadata = bodies_create_model(
+                    obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
-                    lambert=moons_use_lambert,
-                    cartographic_data=moons_cartographic_data)
-            bodies_model_list.append(model)
-    
+                    lambert=bodies_use_lambert,
+                    cartographic_data=bodies_cartographic_data,
+                    bodies_config=bodies_config)
+            bodies_model_list.append((bodies_model, bodies_metadata))
+
     #
     # TRY TO MAKE A MODEL FROM THE RINGS IN THE IMAGE
     #
     if allow_rings:
         rings_model, ring_metadata = rings_create_model(
                                          obs, extend_fov=extend_fov,
-                                         source=rings_model_source)
+                                         rings_config=rings_config)
         metadata['ring_metadata'] = ring_metadata
+
+    rings_curvature_ok = (metadata['ring_metadata'] is not None and
+                          metadata['ring_metadata']['curvature_ok'])
+    rings_features_ok = (metadata['ring_metadata'] is not None and
+                         metadata['ring_metadata']['fiducial_features_ok'])
 
     #
     # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET
@@ -365,12 +380,17 @@ def master_find_offset(obs,
     model_list = []
     used_model_str_list = []
     # XXX Deal with moons on the far side of the rings
-    if rings_model is not None:
+    if rings_model is not None and rings_curvature_ok and rings_features_ok:
         model_list = model_list + [rings_model]
         used_model_str_list.append('rings')
     if len(bodies_model_list) > 0:
-        for model in bodies_model_list:
-            model_list.append(model)
+        for bodies_model, bodies_metadata in bodies_model_list:
+            if bodies_model in FUZZY_BODY_LIST:
+                continue
+            if (not bodies_metadata['curvature_ok'] or
+                not bodies_metadata['limb_ok']):
+                continue
+            model_list.append(bodies_model)
         used_model_str_list.append('bodies')
     metadata['model_contents'] = used_model_str_list
     if force_offset:
@@ -379,10 +399,6 @@ def master_find_offset(obs,
                      model_offset[0], model_offset[1])
     elif len(model_list) == 0:
         logger.debug('Nothing to model - no offset found')
-        rings_curvature_ok = (metadata['ring_metadata'] is not None and
-                              metadata['ring_metadata']['curvature_ok'])
-        rings_features_ok = (metadata['ring_metadata'] is not None and
-                             metadata['ring_metadata']['fiducial_features_ok'])
         if rings_curvature_ok and not rings_features_ok:
             logger.debug('Ring curvature OK but not enough fiducial features '+
                          '- candidate for bootstrapping')
@@ -522,9 +538,12 @@ def master_find_offset(obs,
 
     metadata['offset'] = offset
                 
-    if create_overlay:        
-        if len(bodies_model_list) > 0:
-            bodies_combined = _combine_models(bodies_model_list, solid=True,
+    if create_overlay:
+        # We recreate the model lists because there are models we might
+        # include on the overlay that we didn't use for correlation.        
+        o_bodies_model_list = [x[0] for x in bodies_model_list]
+        if len(o_bodies_model_list) > 0:
+            bodies_combined = _combine_models(o_bodies_model_list, solid=True,
                                               masked=masked_model)
             overlay[...,1] = _normalize(bodies_combined) * 255
         if rings_model is not None:
@@ -544,7 +563,3 @@ def  _master_find_offset_one_single_body(obs, metadata, body_name, extend_fov):
     metadata['body_only'] = body_name
     return metadata
 
-def  _master_find_offset_entirely_rings(obs, metadata, extend_fov):
-    ring_sufficient_curvature(obs, extend_fov=extend_fov)
-    metadata['rings_only'] = True
-    return metadata

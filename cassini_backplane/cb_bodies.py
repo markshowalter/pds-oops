@@ -119,15 +119,44 @@ def _bodies_create_cartographic(bp, body_data):
     return model
 
 def bodies_create_model(obs, body_name, lambert=True,
-                        u_min=0, u_max=10000, v_min=0, v_max=10000,
+                        inventory=None,
                         extend_fov=(0,0),
-                        cartographic_data=None):
+                        cartographic_data={}, bodies_config=None):
+    """
+    XXX
+    """
     logger = logging.getLogger(_LOGGING_NAME+'.bodies_create_model')
 
+    if bodies_config is None:
+        bodies_config = BODIES_DEFAULT_CONFIG
+        
     body_name = body_name.upper()
 
     set_obs_ext_bp(obs, extend_fov)
     set_obs_ext_data(obs, extend_fov)
+
+    metadata = {}
+    metadata['curvature_ok'] = False
+    metadata['limb_ok'] = True # XXX
+        
+    u_min = inventory['u_min_unclipped']
+    u_max = inventory['u_max_unclipped']
+    v_min = inventory['v_min_unclipped']
+    v_max = inventory['v_max_unclipped']
+    
+    curvature_threshold = bodies_config['curvature_threshold']
+    u_center = (u_min+u_max)/2
+    v_center = (v_min+v_max)/2
+    width = u_max-u_min+1
+    height = v_max-v_min+1
+    width_threshold = width * curvature_threshold
+    height_threshold = height * curvature_threshold
+    
+    if ((u_center-extend_fov[0] >= width_threshold and
+         obs.data.shape[1]-1-extend_fov[0]-u_center >= width_threshold) and
+        (v_center-extend_fov[1] >= height_threshold and
+         obs.data.shape[0]-1-extend_fov[1]-v_center >= height_threshold)):
+        metadata['curvature_ok'] = True
     
     u_min -= BODIES_POSITION_SLOP
     u_max += BODIES_POSITION_SLOP
@@ -143,8 +172,19 @@ def bodies_create_model(obs, body_name, lambert=True,
                  'V %d to %d',
                  body_name, obs.data.shape[1], obs.data.shape[0],
                  extend_fov[0], extend_fov[1], u_min, u_max, v_min, v_max)
-    if cartographic_data is not None:
-        logger.debug('Cartographic body %s', cartographic_data['body_name'])
+    if metadata['curvature_ok']:
+        logger.debug('Curvature OK')
+        
+    cart_body_data = None
+    if cartographic_data:
+        if body_name in cartographic_data:
+            cart_body_data = cartographic_data[body_name]
+        
+        for cart_body in sorted(cartographic_data.keys()):
+            if cart_body == body_name:
+                logger.debug('Cartographic data for %s - OK', cart_body)
+            else:
+                logger.debug('Cartographic data for %s', cart_body)
     
     # Create a Meshgrid that only covers the extent of the body
     # We're making the assumption here that calling where_intercepted
@@ -167,8 +207,8 @@ def bodies_create_model(obs, body_name, lambert=True,
         restr_model = restr_body_mask.astype('float')
 
     if cartographic_data is not None:
-        cart_model = _bodies_create_cartographic(restr_bp, cartographic_data)
-        restr_model *= cart_model 
+        cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
+        restr_model *= cart_model
 
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
@@ -178,7 +218,7 @@ def bodies_create_model(obs, body_name, lambert=True,
     model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
           u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
         
-    return model
+    return model, metadata
 
 
 #==============================================================================

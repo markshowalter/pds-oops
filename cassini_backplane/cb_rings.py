@@ -122,21 +122,19 @@ _RINGS_FIDUCIAL_FEATURES = []
 #
 #==============================================================================
 
-def rings_sufficient_curvature(obs, extend_fov=None, threshold=2):
+def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     logger = logging.getLogger(_LOGGING_NAME+'.rings_sufficient_curvature')
 
-    if extend_fov is not None:
-        set_obs_ext_bp(obs, extend_fov)
-        bp = obs.ext_bp
-    else:
-        set_obs_bp(obs)
-        bp = obs.bp
+    if rings_config is None:
+        rings_config = RINGS_DEFAULT_CONFIG
 
-    radii = bp.ring_radius('saturn:ring').vals.astype('float')
+    set_obs_ext_bp(obs, extend_fov)
+        
+    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
-    longitudes = bp.ring_longitude('saturn:ring').vals.astype('float') 
+    longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float') 
     min_longitude = np.min(longitudes)
     max_longitude  = np.max(longitudes)
 
@@ -209,7 +207,7 @@ def rings_sufficient_curvature(obs, extend_fov=None, threshold=2):
     
     dist = np.sqrt((mid_pt_u-u_pixels[1])**2+(mid_pt_v-v_pixels[1])**2)
     
-    if dist < threshold:
+    if dist < rings_config['curvature_threshold']:
         logger.debug('Distance %.2f is too close for curvature', dist)
         return False
     
@@ -235,19 +233,14 @@ def _rings_read_fiducial_features():
     
     _RINGS_FIDUCIAL_FEATURES.sort(key=lambda x:x[0], reverse=True)
     
-def rings_fiducial_features(obs, extend_fov=None):
+def rings_fiducial_features(obs, extend_fov=(0,0)):
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
 
     _rings_read_fiducial_features()
     
-    if extend_fov is not None:
-        set_obs_ext_bp(obs, extend_fov)
-        bp = obs.ext_bp
-    else:
-        set_obs_bp(obs)
-        bp = obs.bp
+    set_obs_ext_bp(obs, extend_fov)
 
-    radii = bp.ring_radius('saturn:ring').vals.astype('float')
+    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
@@ -346,27 +339,55 @@ def _compute_ring_radial_data(source, resolution):
     return ret
 
 
-def rings_create_model(obs, extend_fov=(0,0), source='voyager'):
+def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
+                       rings_config=None):
     """Create a model for the rings.
-    
-    If there are no rings in the image or they are entirely in shadow,
-    return None.
-    
+
     The rings model is created by interpolating from the Voyager I/F
     profile. Portions in Saturn's shadow are removed.
+
+    If there are no rings in the image or they are entirely in shadow,
+    return None. Also return None if the curvature is insufficient or there
+    aren't enough fiducial features in view and always_create_model is False.
+    
+    Inputs:
+        obs                    The Observation.
+        extend_fov             The amount beyond the image in the (U,V)
+                               dimension to model rings.
+        always_create_model    True to always return a model even if the 
+                               curvature is insufficient or there aren't
+                               enough fiducial features.
+        star_config            Configuration parameters. None uses the default.
+
+    Returns:
+        metadata           A dictionary containing information about the
+                           offset result:
+            'shadow_bodies'         The list of Bodies that shadow the rings.
+            'curvature_ok'          True if the curvature is sufficient for 
+                                    correlation.
+            'fiducial_features'     The list of fiducial features in view.
+            'fiducial_features_ok'  True if the number of fidcual features
+                                    is greater than the threshold.
+
     """
     logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model')
 
-    assert source in ('uvis', 'voyager')
+    if rings_config is None:
+        rings_config = RINGS_DEFAULT_CONFIG
+        
+    assert rings_config['model_source'] in ('uvis', 'voyager')
     
     metadata = {}
     metadata['shadow_bodies'] = []
     metadata['curvature_ok'] = False
     metadata['fiducial_features'] = []
+    metadata['fiducial_features_ok'] = False
     
     set_obs_ext_bp(obs, extend_fov)
 
-    if not rings_sufficient_curvature(obs, extend_fov):
+    if (not always_create_model and 
+        not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
+                                       rings_config=rings_config)):
        logger.debug('Too little curvature - no ring model produced')
        return None, metadata
    
@@ -374,10 +395,11 @@ def rings_create_model(obs, extend_fov=(0,0), source='voyager'):
    
     fiducial_features = rings_fiducial_features(obs, extend_fov)
     metadata['fiducial_features'] = fiducial_features
-    fiducial_features_ok = len(fiducial_features) >= 2
+    fiducial_features_ok = (len(fiducial_features) >=
+                            rings_config['fiducial_feature_threshold'])
     metadata['fiducial_features_ok'] = fiducial_features_ok
     
-    if not fiducial_features_ok:
+    if (not always_create_model and not fiducial_features_ok):
         logger.debug('Insufficient number of fiducial features - '+
                      'no ring model produced')
         return None, metadata

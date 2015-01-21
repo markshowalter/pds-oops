@@ -42,49 +42,6 @@ DEBUG_STARS_FILTER_IMGDISP = False
 
 STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
 
-STARS_DEFAULT_CONFIG = {
-    # Minimum number of stars that much photometrically match for an offset
-    # to be considered good.
-    'min_stars': 3,
-
-    # The minimum photometry confidence allowed for a star to be considered
-    # valid.
-    'min_confidence': 0.9,
-
-    # Maximum number of stars to use.
-    'max_stars': 30,
-    
-    # PSF size for modeling a star (must be odd).
-    'psf_size': 9,
-        
-    # The default star class when none is available.
-    'default_star_class': 'G0',
-    
-    # The minimum DN that is guaranteed to be visible in the image.
-    'min_brightness_guaranteed_vis': 200.,
-
-    # The minimum DN count for a star to be detectable. These values are pretty
-    # aggressively dim - there's no guarantee a star with this brightness can
-    # actually be seen.
-    ('min_detectable_dn', 'NAC'): 20,
-    ('min_detectable_dn', 'WAC'): 150,
-
-    # The range of vmags to use when determining the dimmest star visible.
-    'min_vmag': 5.,
-    'max_vmag': 15.,
-    'vmag_increment': 0.5,
-
-    # The size of the box to analyze vs. the predicted integrated DN.
-    # XXX These numbers are just made up, but seem to work.
-    # More study should be done.
-    'photometry_boxsize_1': (500,11),
-    'photometry_boxsize_2': (100,9),
-    'photometry_boxsize_default': 7,
-    
-    # How far a star has to be from a major body before it is no longer
-    # considered to conflict.
-    'star_body_conflict_margin': 3,
-}
     
 #===============================================================================
 #
@@ -1023,11 +980,6 @@ def star_find_offset(obs, extend_fov=(0,0), star_config=None):
             filtered_data = filter_sub_median(obs.calib_dn_ext_data, 
                                               median_boxsize=11)
  
-# XXX Maybe we should use the maximum filter?       
-#filtered_data = filter_local_maximum(obs.calib_dn_ext_data,
-#                                     maximum_boxsize=11, median_boxsize=11,
-#                                     maximum_blur=5)
-
             filtered_data[filtered_data < 0.] = 0.
 
             # If we trust the DN values, then we can eliminate any pixels that
@@ -1148,11 +1100,12 @@ def star_find_offset(obs, extend_fov=(0,0), star_config=None):
                 # It was the last star - nothing to compare against
                 logger.debug('No dim enough stars left - giving up')
                 break
-            if star_list[i].dn > 1000: #star_list[i].dn > star_list[i+1].dn*2: # XXX
-                # Star is twice as bright as next star - get rid of it
-#                logger.debug('Star %9d (DN %7.2f) is much brighter than star %9d (DN %7.2f) - ignoring and iterating',
-#                             star_list[i].unique_number, star_list[i].dn,
-#                             star_list[i+1].unique_number, star_list[i+1].dn)
+            too_bright_dn = star_config['too_bright_dn']
+            too_bright_factor = star_config['too_bright_factor']
+            if ((too_bright_dn and star_list[i].dn > too_bright_dn) or
+                (too_bright_factor and
+                 star_list[i].dn > star_list[i+1].dn*too_bright_factor)):
+                # Star is too bright - get rid of it
                 logger.debug('Star %9d (DN %7.2f) is too bright - '+
                              'ignoring and iterating',
                              star_list[i].unique_number, star_list[i].dn)

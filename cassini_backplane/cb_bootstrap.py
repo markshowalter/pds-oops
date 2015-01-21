@@ -43,34 +43,6 @@ def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
         logger.debug('Incompatible - different bodies')
         return False
     
-    ref_ra_dec = ref_metadata['ra_dec_corner']
-    cand_ra_dec = cand_metadata['ra_dec_corner']
-    
-    # Find the four corners of each
-    ref_v1 = (ref_ra_dec[0], ref_ra_dec[2])
-    ref_v2 = (ref_ra_dec[1], ref_ra_dec[2])
-    ref_v3 = (ref_ra_dec[1], ref_ra_dec[3])
-    ref_v4 = (ref_ra_dec[0], ref_ra_dec[2])
-    cand_v1 = (cand_ra_dec[0], cand_ra_dec[2])
-    cand_v2 = (cand_ra_dec[1], cand_ra_dec[2])
-    cand_v3 = (cand_ra_dec[1], cand_ra_dec[3])
-    cand_v4 = (cand_ra_dec[0], cand_ra_dec[2])
-    
-    # Find the rotations of each
-    ref_angle = np.arctan2(ref_v1[1], ref_v1[0])
-    cand_angle = np.arctan2(cand_v1[1], cand_v1[0])
-    
-    delta_angle = (ref_angle - cand_angle) % oops.TWOPI
-    if delta_angle > _BOOTSTRAP_ANGLE_TOLERANCE:
-        logger.debug('Incompatible - Ref angle %.2f Cand angle %.2f', 
-                     ref_angle*oops.DPR, cand_angle*oops.DPR)
-        return False
-    
-    print ref_v1, ref_v2, ref_v3, ref_v4
-    print cand_v1, cand_v2, cand_v3, cand_v4
-    
-    # Check for overlap
-    # More intelligent check for bootstrapping target - moon or rings
     
     return True
 
@@ -100,8 +72,10 @@ def bootstrap(ref_path, ref_metadata, cand_path, cand_metadata):
 #    frame_toplevel.pack()
 #    tk.mainloop()
 
+    cart_dict = {reproj['body_name']: reproj}
+    
     new_metadata = master_find_offset(cand_obs, create_overlay=True,
-                                      moons_cartographic_data=reproj)
+                                      bodies_cartographic_data=cart_dict)
 
     display_offset_data(ref_obs, ref_metadata)
     display_offset_data(cand_obs, new_metadata)

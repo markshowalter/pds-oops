@@ -63,22 +63,53 @@ test_data = (
 #1506052003 - DIONE, P0+UV3, edge on rings
 #1506058905 - DIONE, on rings
 
-    (1487410178, ('DIONE', 'TITAN'),
-     {},
-    ),
-     
-    (1487595561, ('DIONE', 'RHEA'),
-     {},
-    ),
-     
-    (1507685420, ('DIONE', 'RHEA'), # DIONE on top of RHEA
-     {},
-    ),
-     
-    (1507741763, ('DIONE', 'SATURN'), # DIONE on Saturn, edge on rings, GRN
-     {'allow_rings': False},
-    ),
+#    (1487410178, ('DIONE', 'TITAN'),
+#     {},
+#    ),
+#     
+#    (1487595561, ('DIONE', 'RHEA'),
+#     {},
+#    ),
+#     
+#    (1507685420, ('DIONE', 'RHEA'), # DIONE on top of RHEA
+#     {},
+#    ),
+#     
+#    (1507741763, ('DIONE', 'SATURN'), # DIONE on Saturn, edge on rings, GRN
+#     {'allow_rings': False},
+#    ),
 
+### MIMAS
+
+    (1492217357, ('MIMAS'),
+     """MIMAS alone, large, centered, good partial limb, partial terminator.
+     """,
+     {},
+    ),
+    
+    (1501645855, ('MIMAS'),
+     """MIMAS alone, large, slightly off the edge but good curvature,
+     good partial limb, partial terminator.
+     """,
+     {},
+    ),
+             
+    (1501646143, ('MIMAS'),
+     """MIMAS alone, large, significantly off the edge but good curvature,
+     terminator only. Bootstrapping candidate.
+     """,
+     {},
+    ),
+             
+    (1501646177, ('MIMAS'),
+     """MIMAS alone, large, mostly off the edge, bad curvature, terminator
+     only. Bootstrapping candidate.
+     """,
+     {},
+    ),
+             
+               
+             
 # RING MOONS
 #1751425716 - AEGAEON, G ring, star streaks
 #1540685777 - DAPHNIS, rings without curvature
@@ -103,10 +134,10 @@ test_data = (
 
 logger = logging.getLogger(_LOGGING_NAME+'.main')
 
-skip = True
+skip = False
 
 for test_entry in test_data:
-    (image_num, attribs, offset_kwargs) = test_entry
+    (image_num, descr, attribs, offset_kwargs) = test_entry
     
     for image_filename in yield_image_filenames(image_num, image_num):
         if skip:
