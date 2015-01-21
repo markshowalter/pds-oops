@@ -509,24 +509,27 @@ def master_find_offset(obs,
     metadata['model_overrides_stars'] = False
     if model_offset is not None:
         if star_offset is not None:
-            if ((abs(star_offset[0]-model_offset[0]) > 5 or    # XXX CONSTS
-                 abs(star_offset[1]-model_offset[1]) > 5) and
-                metadata['star_metadata']['num_good_stars'] < 6):
-                logger.debug('Star and model offsets disagree by too much - '+
-                             'ignoring star result')
-                star_list = star_metadata['full_star_list']
-                for star in star_list:
-                    star.photometry_confidence = 0. # We changed the offset
-                    star.use_for_correlation = False
-                star_overlay = star_make_good_bad_overlay(obs,
-                          star_list, 0, 0,
-                          extend_fov=extend_fov,
-                          overlay_box_width=star_overlay_box_width,
-                          overlay_box_thickness=star_overlay_box_thickness,
-                          star_config=star_config)
-                offset = model_offset
-                metadata['model_overrides_stars'] = True
-                metadata['used_objects_type'] = 'model'
+            if (abs(star_offset[0]-model_offset[0]) > 5 or    # XXX CONSTS
+                abs(star_offset[1]-model_offset[1]) > 5):
+                if metadata['star_metadata']['num_good_stars'] >= 6:
+                    logger.debug('Star and model offsets disagree by too '+
+                                 'much - trusting star result')
+                else:
+                    logger.debug('Star and model offsets disagree by too '+
+                                 'much - ignoring star result')
+                    star_list = star_metadata['full_star_list']
+                    for star in star_list:
+                        star.photometry_confidence = 0. # We changed the offset
+                        star.use_for_correlation = False
+                    star_overlay = star_make_good_bad_overlay(obs,
+                              star_list, 0, 0,
+                              extend_fov=extend_fov,
+                              overlay_box_width=star_overlay_box_width,
+                              overlay_box_thickness=star_overlay_box_thickness,
+                              star_config=star_config)
+                    offset = model_offset
+                    metadata['model_overrides_stars'] = True
+                    metadata['used_objects_type'] = 'model'
         else:
             offset = model_offset
             metadata['used_objects_type'] = 'model'

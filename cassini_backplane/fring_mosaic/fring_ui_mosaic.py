@@ -103,7 +103,7 @@ def _update_mosaicdata(mosaicdata, metadata):
 def save_vicar(mosaicdata):
     v = vicar.VicarImage()
     v.set_array(mosaicdata.img)
-    v.to_file('j:/Temp/'+mosaicdata.obsid+'.IMG')
+#     v.to_file('j:/Temp/'+mosaicdata.obsid+'.IMG')
     
 def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     # Input files: image_path_list (includes repro suffix)
