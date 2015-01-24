@@ -522,7 +522,7 @@ def master_find_offset(obs,
                         star.photometry_confidence = 0. # We changed the offset
                         star.use_for_correlation = False
                     star_overlay = star_make_good_bad_overlay(obs,
-                              star_list, 0, 0,
+                              star_list, (0,0),
                               extend_fov=extend_fov,
                               overlay_box_width=star_overlay_box_width,
                               overlay_box_thickness=star_overlay_box_thickness,

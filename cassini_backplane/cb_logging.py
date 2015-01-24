@@ -47,7 +47,7 @@ def log_set_rings_level(level=_LOG_OVERRIDE_RINGS):
 def log_set_stars_level(level=_LOG_OVERRIDE_STARS):
     if level:
         logger = logging.getLogger('cb.cb_stars')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
     
 def log_set_util_file_level(level=_LOG_OVERRIDE_UTIL_FILE):

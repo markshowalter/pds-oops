@@ -144,13 +144,16 @@ def bodies_create_model(obs, body_name, lambert=True,
     v_min = inventory['v_min_unclipped']
     v_max = inventory['v_max_unclipped']
     
-    curvature_threshold = bodies_config['curvature_threshold']
+    curvature_threshold_frac = bodies_config['curvature_threshold_frac']
+    curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
     u_center = (u_min+u_max)/2
     v_center = (v_min+v_max)/2
     width = u_max-u_min+1
     height = v_max-v_min+1
-    width_threshold = width * curvature_threshold
-    height_threshold = height * curvature_threshold
+    width_threshold = max(width * curvature_threshold_frac,
+                          curvature_threshold_pix)
+    height_threshold = max(height * curvature_threshold_frac,
+                           curvature_threshold_pix)
     
     if ((u_center-extend_fov[0] >= width_threshold and
          obs.data.shape[1]-1-extend_fov[0]-u_center >= width_threshold) and

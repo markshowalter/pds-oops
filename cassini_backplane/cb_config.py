@@ -131,7 +131,14 @@ BODIES_DEFAULT_CONFIG = {
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
     # correlation.
-    'curvature_threshold': 0.1,
+    'curvature_threshold_frac': 0.1,
+    
+    # The number of pixels of the width/height of a body that must be visible
+    # on either side of the center in order for the curvature to be sufficient
+    # for correlation. Both curvature_threshold_frac and 
+    # curvature_threshold_pixels must be true for correlation. The _pixels
+    # version is useful for the case of small moons.
+    'curvature_threshold_pixels': 20,
 }
 
 RINGS_DEFAULT_CONFIG = {

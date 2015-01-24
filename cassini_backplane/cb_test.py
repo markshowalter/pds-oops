@@ -81,35 +81,93 @@ test_data = (
 
 ### MIMAS
 
-    (1492217357, ('MIMAS'),
-     """MIMAS alone, large, centered, good partial limb, partial terminator.
-     """,
+    # TERMINATOR TESTS
+    # These have Mimas alone, centered, and entirely in the image
+
+#     (1493446065, ('MIMAS'),
+#      """MIMAS alone, small, centered, entirely in the image, overexposed,
+#      incidence to 20-105.""",
+#      {},
+#     ), # STARS
+#     
+#     (1484509816, ('MIMAS'),
+#      """MIMAS alone, medium, centered, entirely in the image,
+#      incidence to 0-130.""",
+#      {},
+#     ),
+# 
+#     (1484530421, ('MIMAS'),
+#      """MIMAS alone, medium, centered, entirely in the image,
+#      incidence to 0-160.""",
+#      {},
+#     ),
+#              
+#     (1484535522, ('MIMAS'),
+#      """MIMAS alone, medium, centered, entirely in the image,
+#      incidence to 0-165.""",
+#      {},
+#     ),
+
+    (1484573247, ('MIMAS'),
+     """MIMAS alone, medium, centered, entirely in the image,
+     incidence to 50-180.""",
      {},
     ),
+
+#     (1484580522, ('MIMAS'),
+#      """MIMAS alone, small, centered, entirely in the image, slightly
+#      overexposed, incidence to 60-180.""",
+#      {},
+#     ),
+# 
+#     (1487445616, ('MIMAS'),
+#      """MIMAS alone, small, centered, entirely in the image, slightly
+#      overexposed, incidence to 30-160.""",
+#      {},
+#     ),
+
+    # These have Mimas alone and offset
+
+#     (1501640895, ('MIMAS'),
+#      """MIMAS alone, large, slightly off the top edge but good curvature,
+#      good limb on left, terminator on right, incidence 0-130.""",
+#      {},
+#     ),
+# 
+#     (1501645855, ('MIMAS'),
+#      """MIMAS alone, large, slightly off the top left edge but good curvature,
+#      good partial limb on right, terminator on left, incidence 0-120.""",
+#      {},
+#     ),
+# 
+#     (1501646143, ('MIMAS'),
+#      """MIMAS alone, large, significantly off the right edge but good
+#      curvature, terminator on left, incidence 30-135.
+#      Bootstrapping candidate.""",
+#      {},
+#     ),
+#              
+#     (1501646177, ('MIMAS'),
+#      """MIMAS alone, large, mostly off the right edge, bad curvature,
+#      terminator on left, incidence 60-135. Bootstrapping candidate.""",
+#      {},
+#     ),
+# 
+# 
+# 
+# 
+# 
+# 
+#     (1492217357, ('MIMAS'),
+#      """MIMAS alone, large, centered, entirely in the image,
+#      incidence 0-150.""",
+#      {},
+#     ),
     
-    (1501645855, ('MIMAS'),
-     """MIMAS alone, large, slightly off the edge but good curvature,
-     good partial limb, partial terminator.
-     """,
-     {},
-    ),
              
-    (1501646143, ('MIMAS'),
-     """MIMAS alone, large, significantly off the edge but good curvature,
-     terminator only. Bootstrapping candidate.
-     """,
-     {},
-    ),
              
-    (1501646177, ('MIMAS'),
-     """MIMAS alone, large, mostly off the edge, bad curvature, terminator
-     only. Bootstrapping candidate.
-     """,
-     {},
-    ),
-             
-               
-             
+# MIMAS ON TOP OF RINGS
+     
 # RING MOONS
 #1751425716 - AEGAEON, G ring, star streaks
 #1540685777 - DAPHNIS, rings without curvature
@@ -133,6 +191,8 @@ test_data = (
 )
 
 logger = logging.getLogger(_LOGGING_NAME+'.main')
+
+cb_logging.log_set_stars_level(logging.DEBUG)
 
 skip = False
 

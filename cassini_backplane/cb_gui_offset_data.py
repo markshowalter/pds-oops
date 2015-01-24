@@ -97,10 +97,6 @@ def display_offset_data(obs, metadata):
         overlay = metadata['ext_overlay']
     star_metadata = metadata['star_metadata']
     
-    if ext_data is None:
-        print 'WEIRD FAILURE - NO EXT_DATA'
-        return
-    
     ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
     ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
     metadata['ext_u'] = ext_u
@@ -133,8 +129,6 @@ def display_offset_data(obs, metadata):
         u_max = body['u_max_unclipped']+1
         v_min = body['v_min_unclipped']-1
         v_max = body['v_max_unclipped']+1
-        print body_name
-        print u_min, u_max, v_min, v_max
         u_min = np.clip(u_min, -ext_u, obs.data.shape[1]+ext_u-1)
         u_max = np.clip(u_max, -ext_u, obs.data.shape[1]+ext_u-1)
         v_min = np.clip(v_min, -ext_v, obs.data.shape[0]+ext_v-1)
