@@ -76,7 +76,7 @@ FUZZY_BODY_LIST = ['TITAN', 'HYPERION'] # XXX
 ##################
 
 STARS_DEFAULT_CONFIG = {
-    # Minimum number of stars that much photometrically match for an offset
+    # Minimum number of stars that must photometrically match for an offset
     # to be considered good.
     'min_stars': 3,
 
@@ -87,10 +87,10 @@ STARS_DEFAULT_CONFIG = {
     # Maximum number of stars to use.
     'max_stars': 30,
     
-    # PSF size for modeling a star (must be odd).
+    # PSF size for modeling a star (must be odd). The PSF is square.
     'psf_size': 9,
         
-    # The default star class when none is available.
+    # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',
     
     # The minimum DN that is guaranteed to be visible in the image.
@@ -98,7 +98,7 @@ STARS_DEFAULT_CONFIG = {
 
     # The minimum DN count for a star to be detectable. These values are pretty
     # aggressively dim - there's no guarantee a star with this brightness can
-    # actually be seen.
+    # actually be seen. But there's no point in looking at a star any dimmer.
     ('min_detectable_dn', 'NAC'): 20,
     ('min_detectable_dn', 'WAC'): 150,
 
@@ -114,16 +114,17 @@ STARS_DEFAULT_CONFIG = {
     'photometry_boxsize_2': (100,9),
     'photometry_boxsize_default': 7,
     
-    # How far a star has to be from a major body before it is no longer
-    # considered to conflict.
+    # How far (in pixels) a star has to be from a major body before it is no
+    # longer considered to conflict.
     'star_body_conflict_margin': 3,
     
-    # If star finding fails, get rid of the brightest star if it's at least
-    # this bright.
+    # If star navigation fails, get rid of the brightest star if it's at least
+    # this bright. None means don't apply this test.
     'too_bright_dn': 1000,
     
-    # If star finding fails, get rid of the brightest star if it's at least
-    # this much brighter than the next dimmest star.
+    # If star navigation fails, get rid of the brightest star if it's at least
+    # this much brighter (factor) than the next dimmest star. None means don't
+    # apply this test.
     'too_bright_factor': None
 }
 
@@ -136,24 +137,77 @@ BODIES_DEFAULT_CONFIG = {
     # The number of pixels of the width/height of a body that must be visible
     # on either side of the center in order for the curvature to be sufficient
     # for correlation. Both curvature_threshold_frac and 
-    # curvature_threshold_pixels must be true for correlation. The _pixels
-    # version is useful for the case of small moons.
+    # curvature_threshold_pixels must be true for correlation to be trusted.
+    # The _pixels version is useful for the case of small moons.
     'curvature_threshold_pixels': 20,
+    
+    # The maximum incidence that can be considered a limb instead of a
+    # terminator.
+    'limb_incidence_threshold': 80. * oops.RPD,
+    
+    # The resolution in longitude and latitude (radians) for the metadata
+    # latlon mask.
+    'lon_resolution': 1. * oops.RPD,
+    'lat_resolution': 1. * oops.RPD,
+
+    # The latlon coordinate type and direction for the metadata latlon mask.
+    'latlon_type': 'centric',
+    'lon_direction': 'east',
+    
 }
 
 RINGS_DEFAULT_CONFIG = {
     # The source for profile data - 'voyager' or 'uvis'.
     'model_source': 'uvis',
     
-    # There must be at least this many fiducial features for correlation
-    # to be done.
+    # There must be at least this many fiducial features for rings to be used
+    # for correlation.
     'fiducial_feature_threshold': 3,
     
-    # The number of pixels of curvature that must be present for correlation
-    # to be done.
+    # There must be at least this number of pixels of curvature present for
+    # rings to be used for correlation.
     'curvature_threshold': 2,
 }
 
-BOOTSTRAP_DEFAULT_COINFIG = {
+BOOTSTRAP_DEFAULT_CONFIG = {
 }
 
+OFFSET_DEFAULT_CONFIG = {
+    # If there are at least this many bodies in the image, then we trust the
+    # body-based model correlation result.
+    'num_bodies_threshold': 3,
+
+    # OR
+        
+    # If the bodies cover at least this fraction of the image, then we trust
+    # the body-based model correlation result. 
+    'bodies_cov_threshold': 0., # 0.0005,
+    
+    # If the total model covers at least this fraction of the image, then we 
+    # might trust it.
+    'model_cov_threshold': 0.,#0.0005,
+    
+    # AND
+    
+    # If the total model has any contents within this distance of an edge, 
+    # then we might trust it.
+    'model_edge_pixels': 5,
+    
+    # The number of pixels to search in U,V during secondary correlation.
+    'secondary_corr_search_size': 15,  
+    
+    # If the stars-based and bodies/rings-based correlations differ by at
+    # least this amount, then we don't trust the bodies/rings-based model.
+    'stars_model_diff_threshold': 5,
+    
+    # If there are at least this many good stars, then the stars can override
+    # the bodies/rings model when they differ by too many pixels.
+    'stars_override_threshold': 6,
+
+    # If secondary correlation is off by more than this amount, it fails.
+    'secondary_corr_threshold': 2,
+    
+    # If the secondary correlation peak isn't at least this fraction of the
+    # primary correlation peak, correlation fails.
+    'secondary_corr_peak_threshold': 0.75,
+}

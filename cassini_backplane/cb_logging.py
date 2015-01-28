@@ -23,25 +23,25 @@ def log_set_default_level(level=_LOG_DEFAULT_LEVEL):
 def log_set_bodies_level(level=_LOG_OVERRIDE_BODIES):
     if level:
         logger = logging.getLogger('cb.cb_bodies')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
     
 def log_set_correlate_level(level=_LOG_OVERRIDE_CORRELATE):
     if level:
         logger = logging.getLogger('cb.cb_correlate')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
 
 def log_set_offset_level(level=_LOG_OVERRIDE_OFFSET):
     if level:
         logger = logging.getLogger('cb.cb_offset')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
 
 def log_set_rings_level(level=_LOG_OVERRIDE_RINGS):
     if level:
         logger = logging.getLogger('cb.cb_rings')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
     
 def log_set_stars_level(level=_LOG_OVERRIDE_STARS):
@@ -53,19 +53,19 @@ def log_set_stars_level(level=_LOG_OVERRIDE_STARS):
 def log_set_util_file_level(level=_LOG_OVERRIDE_UTIL_FILE):
     if level:
         logger = logging.getLogger('cb.cb_util_file')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
     
 def log_set_util_flux_level(level=_LOG_OVERRIDE_UTIL_FLUX):
     if level:
         logger = logging.getLogger('cb.cb_util_flux')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
     
 def log_set_util_oops_level(level=_LOG_OVERRIDE_UTIL_OOPS):
     if level:
         logger = logging.getLogger('cb.cb_util_oops')
-        logger.propagate = False
+        logger.propagate = True
         logger.setLevel(level)
 
 def log_set_format(full=True):

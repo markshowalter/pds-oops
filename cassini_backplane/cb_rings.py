@@ -149,8 +149,7 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     if max_longitude - min_longitude > np.pi/2.:
         # XXX This does not handle the wrap-around case! XXX
         # Seeing 90+ degress of the ring - definitely enough curvature!
-        logger.debug('More than 90 degrees visible - returning enough '+
-                     'curvature')
+        logger.debug('More than 90 degrees visible - returning curvature OK')
         return True
 
     min_radius = max(min_radius, RINGS_MIN_RADIUS)
@@ -299,12 +298,12 @@ def _blur_ring_radial_data(tab, resolution):
         replace_bool = fiducial_dist >= (dist+min_blur)
         blurred_data[replace_bool] = one_blur[replace_bool]
     
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-#    plt.plot(new_radius, fiducial_dist, '-', color='black')
-    plt.plot(new_radius, data, '-', color='#ff4040')
-    plt.plot(new_radius, blurred_data, '-', color='black')
-    plt.show()
+#    fig = plt.figure()
+#    ax = fig.add_subplot(111)
+##    plt.plot(new_radius, fiducial_dist, '-', color='black')
+#    plt.plot(new_radius, data, '-', color='#ff4040')
+#    plt.plot(new_radius, blurred_data, '-', color='black')
+#    plt.show()
     
     return blurred_data, start_radius, end_radius, radial_resolution
 
@@ -417,7 +416,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     radii[radii < RINGS_MIN_RADIUS] = 0
     radii[radii > RINGS_MAX_RADIUS] = 0
     
-    ret = _compute_ring_radial_data(source, 0.) # XXX
+    ret = _compute_ring_radial_data(rings_config['model_source'], 0.) # XXX
     radial_data, start_radius, end_radius, radial_resolution = ret
 
     radii[radii < start_radius] = 0

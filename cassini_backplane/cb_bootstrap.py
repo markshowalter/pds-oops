@@ -27,9 +27,6 @@ _LOGGING_NAME = 'cb.' + __name__
 
 _BOOTSTRAP_ANGLE_TOLERANCE = 0.5 * oops.RPD
 
-def _polygons_overlap(poly1, poly2):
-    pass
-
 def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_viable')
 
@@ -37,12 +34,10 @@ def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
         ref_metadata['filter2'] != cand_metadata['filter2']):
         logger.debug('Incompatible - different filters')
         return False
-    # midtime
     
     if ref_metadata['bootstrap_body'] != cand_metadata['bootstrap_body']:
         logger.debug('Incompatible - different bodies')
         return False
-    
     
     return True
 
@@ -77,7 +72,7 @@ def bootstrap(ref_path, ref_metadata, cand_path, cand_metadata):
     new_metadata = master_find_offset(cand_obs, create_overlay=True,
                                       bodies_cartographic_data=cart_dict)
 
-    display_offset_data(ref_obs, ref_metadata)
+#    display_offset_data(ref_obs, ref_metadata)
     display_offset_data(cand_obs, new_metadata)
 
     # Figure out where the center of the ref image is in the candidate

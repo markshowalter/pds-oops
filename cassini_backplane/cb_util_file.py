@@ -108,7 +108,7 @@ def file_write_offset_metadata(img_filename, metadata):
     
     np.save(overlay_path_save, overlay)
 
-def yield_image_filenames(img_start_num, img_end_num,
+def yield_image_filenames(img_start_num, img_end_num, camera='NW',
                           restrict_list=None):
     done = False
     for coiss_dir in sorted(os.listdir(COISS_2XXX_DERIVED_ROOT)):
@@ -137,6 +137,8 @@ def yield_image_filenames(img_start_num, img_end_num,
                     done = True
                     break
                 if img_num < img_start_num:
+                    continue
+                if img_name[0] not in camera:
                     continue
                 yield os.path.join(img_dir, img_name)
             if done:

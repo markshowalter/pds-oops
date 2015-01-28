@@ -792,7 +792,7 @@ def _star_find_offset(obs, filtered_data, star_list, margin, min_stars,
                              seen_bright_stars, bright_stars,
                              offset[0], offset[1])
                 # Return True so the top-level loop keeps searching
-                return (offset_u, offset_v), good_stars, True, False
+                return offset, good_stars, True, False
             logger.debug('***** Enough good stars - final offset U,V %d,%d',
                          offset[0], offset[1])
             # Return False so the top-level loop gives up

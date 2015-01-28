@@ -23,12 +23,19 @@ _LOGGING_NAME = 'cb.' + __name__
 
 logger = logging.getLogger(_LOGGING_NAME+'.main')
 
+cb_logging.log_set_stars_level(logging.DEBUG)
+cb_logging.log_set_offset_level(logging.DEBUG)
+cb_logging.log_set_bodies_level(logging.DEBUG)
+cb_logging.log_set_rings_level(logging.DEBUG)
+
+# MIMAS
+
 #img_start_num = 1501640419
 #img_end_num = 1501640895
 
 # Closeups
-img_start_num = 1501645855
-img_end_num = 1501646177
+#img_start_num = 1501645855
+#img_end_num = 1501646177
 
 #img_start_num = 1501630084
 #img_end_num = 1501630117
@@ -36,7 +43,22 @@ img_end_num = 1501646177
 #img_start_num = 1492217357
 #img_end_num = 1492217397
 
-force_recompute = False
+
+# RHEA
+
+# 1490874611 bottom left no limb
+# 1490874664 bottom left no limb
+# 1490874718 top left good limb maybe OK for curvature - let it run? XXX
+# 1490874782 top good limb good curvature - curvature marked bad XXX
+# 1490874834 fills image
+# 1490874889 bottom no limb
+# 1490874954 bottom right no limb
+# 1490875006 right good limb good curvature - curvature marked bad XXX
+# 1490875063 top right good limb bad curvature
+img_start_num = 1490874611
+img_end_num = 1490875063
+
+force_recompute = True
 
 # Compute singular offset files where possible
 
@@ -54,8 +76,8 @@ for image_path in yield_image_filenames(img_start_num, img_end_num):
                 obs.texp, obs.filter1, obs.filter2)
 
     metadata = master_find_offset(obs, create_overlay=True,
-                                  force_bootstrap_candidate=force_bootstrap)
-    force_bootstrap = True
+                                  force_bootstrap_candidate=force_bootstrap,
+                                  allow_stars=False, allow_rings=False)
     file_write_offset_metadata(image_path, metadata)
 
 # Find bootstrapping candidates

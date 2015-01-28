@@ -15,7 +15,17 @@ from cb_util_file import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
+# 1662351509 - CRASHES during display - rings problem?
+
 test_data = (
+
+
+#     (1662351509, ('RHEA'),
+#      "Model and stars agree",
+#      {'allow_stars':True, 'allow_rings':False},
+#     ), # STARS
+
+
 #    (1493446380, ('ATLAS', 'PANDORA', 'RINGS'), # UV3, rings without curvature
 #     {},
 #    ),
@@ -81,53 +91,53 @@ test_data = (
 
 ### MIMAS
 
-    # TERMINATOR TESTS
-    # These have Mimas alone, centered, and entirely in the image
-
+#    # TERMINATOR TESTS
+#    # These have Mimas alone, centered, and entirely in the image
+#
 #     (1493446065, ('MIMAS'),
 #      """MIMAS alone, small, centered, entirely in the image, overexposed,
-#      incidence to 20-105.""",
+#      incidence 20-105.""",
 #      {},
 #     ), # STARS
 #     
 #     (1484509816, ('MIMAS'),
 #      """MIMAS alone, medium, centered, entirely in the image,
-#      incidence to 0-130.""",
+#      incidence 0-130.""",
 #      {},
 #     ),
 # 
 #     (1484530421, ('MIMAS'),
 #      """MIMAS alone, medium, centered, entirely in the image,
-#      incidence to 0-160.""",
+#      incidence 0-160.""",
 #      {},
 #     ),
 #              
 #     (1484535522, ('MIMAS'),
 #      """MIMAS alone, medium, centered, entirely in the image,
-#      incidence to 0-165.""",
+#      incidence 0-165.""",
 #      {},
 #     ),
-
-    (1484573247, ('MIMAS'),
-     """MIMAS alone, medium, centered, entirely in the image,
-     incidence to 50-180.""",
-     {},
-    ),
-
+#
+#    (1484573247, ('MIMAS'),
+#     """MIMAS alone, medium, centered, entirely in the image,
+#     incidence 50-180.""",
+#     {},
+#    ),
+#
 #     (1484580522, ('MIMAS'),
 #      """MIMAS alone, small, centered, entirely in the image, slightly
-#      overexposed, incidence to 60-180.""",
+#      overexposed, incidence 60-180.""",
 #      {},
 #     ),
 # 
 #     (1487445616, ('MIMAS'),
 #      """MIMAS alone, small, centered, entirely in the image, slightly
-#      overexposed, incidence to 30-160.""",
+#      overexposed, incidence 30-160.""",
 #      {},
 #     ),
-
-    # These have Mimas alone and offset
-
+#
+#    # These have Mimas alone and offset
+#
 #     (1501640895, ('MIMAS'),
 #      """MIMAS alone, large, slightly off the top edge but good curvature,
 #      good limb on left, terminator on right, incidence 0-130.""",
@@ -165,9 +175,102 @@ test_data = (
 #     ),
     
              
-             
 # MIMAS ON TOP OF RINGS
      
+     
+     
+### RHEA
+
+    # TERMINATOR TESTS
+    # These have Rhea alone, centered, and entirely in the image
+
+#     (1498348607, 'N', ('RHEA'),
+#      """RHEA alone, small, centered, entirely in the image,
+#      incidence 0-90.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1484528177, 'N', ('RHEA'),
+#      """RHEA alone, medium, centered, entirely in the image,
+#      incidence 0-120. Terminator on top right.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1507943927, 'N', ('RHEA'),
+#      """RHEA alone, small, centered, entirely in the image,
+#      incidence 20-170. Terminator down the center.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1509645920, 'N', ('RHEA'),
+#      """RHEA alone, small, centered, entirely in the image,
+#      incidence 30-175. Terminator down the center.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1516373800, 'N', ('RHEA'),
+#      """RHEA alone, small, centered, entirely in the image,
+#      incidence 80-175. Thin crescent at bottom.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1500013667, 'N', ('RHEA'),
+#      """RHEA alone, small, centered, entirely in the image,
+#      incidence 5-135.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+
+     # These have Rhea off the side of the image
+     
+     (1558972182, 'N', ('RHEA'),
+      """RHEA alone, large, off all sides, good curvature,
+      incidence 0-120. Terminator at right but left has limb.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1484584650, 'N', ('RHEA'),
+      """RHEA alone, large, off top right corner, bad curvature,
+      incidence 0-60.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1484584990, 'N', ('RHEA'),
+      """RHEA alone, large, off bottom left corner, bad curvature,
+      incidence 45-155. Terminator on outer curve.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1484584990, 'N', ('RHEA'),
+      """RHEA alone, large, off bottom right corner, good curvature,
+      incidence 35-135. Terminator on top portion.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1484600538, 'N', ('RHEA'),
+      """RHEA alone, large, off bottom left corner, good curvature,
+      incidence 50-165. Terminator on most of top portion.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1521604316, 'N', ('RHEA'),
+      """RHEA alone, large, off bottom, bad curvature,
+      incidence 100-180.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1521616930, 'N', ('RHEA'),
+      """RHEA alone, large, off top left corner, bad curvature,
+      incidence 50-105. Terminator at top but part of curve has limb.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+     (1521617131, 'N', ('RHEA'),
+      """RHEA alone, large, off top, bad curvature,
+      incidence 45-110. Terminator at top but part of curve has limb.""",
+      {'allow_stars': False, 'allow_rings': False},
+     ),
+
+
 # RING MOONS
 #1751425716 - AEGAEON, G ring, star streaks
 #1540685777 - DAPHNIS, rings without curvature
@@ -193,13 +296,16 @@ test_data = (
 logger = logging.getLogger(_LOGGING_NAME+'.main')
 
 cb_logging.log_set_stars_level(logging.DEBUG)
+cb_logging.log_set_offset_level(logging.DEBUG)
+cb_logging.log_set_bodies_level(logging.DEBUG)
+cb_logging.log_set_rings_level(logging.DEBUG)
 
 skip = False
 
 for test_entry in test_data:
-    (image_num, descr, attribs, offset_kwargs) = test_entry
+    (image_num, camera, descr, attribs, offset_kwargs) = test_entry
     
-    for image_filename in yield_image_filenames(image_num, image_num):
+    for image_filename in yield_image_filenames(image_num, image_num, camera):
         if skip:
             skip = False
             continue

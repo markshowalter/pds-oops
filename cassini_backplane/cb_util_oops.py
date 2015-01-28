@@ -15,7 +15,6 @@
 #    set_obs_ext_data    
 #    compute_ra_dec_limits
 #    compute_sun_saturn_distance
-#    mask_to_array
 ###############################################################################
 
 import cb_logging
@@ -195,12 +194,3 @@ def compute_sun_saturn_distance(obs):
 # MISCELLANEOUS
 #
 #==============================================================================
-
-def mask_to_array(mask, shape):
-    """Given a mask, convert a single Boolean value to the proper-sized array."""
-    if np.shape(mask) == shape:
-        return mask
-    
-    new_mask = np.empty(shape)
-    new_mask[:,:] = mask
-    return new_mask

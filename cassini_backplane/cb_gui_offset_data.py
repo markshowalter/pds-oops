@@ -95,7 +95,7 @@ def display_offset_data(obs, metadata):
     else:
         ext_data = metadata['ext_data']
         overlay = metadata['ext_overlay']
-    star_metadata = metadata['star_metadata']
+    stars_metadata = metadata['stars_metadata']
     
     ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
     ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
@@ -224,11 +224,11 @@ def display_offset_data(obs, metadata):
 
     label = Label(imgdisp.addon_control_frame, text='Star Offset:', anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
-    if star_metadata:
-        if star_metadata['offset'] is None:
+    if stars_metadata:
+        if stars_metadata['offset'] is None:
             offset = 'None'
         else:
-            offset = str(star_metadata['offset'][0])+', '+str(star_metadata['offset'][1])
+            offset = str(stars_metadata['offset'][0])+', '+str(stars_metadata['offset'][1])
     else:
         offset = 'N/A'
     label = Label(imgdisp.addon_control_frame, text=offset,
@@ -250,7 +250,7 @@ def display_offset_data(obs, metadata):
 
     label = Label(imgdisp.addon_control_frame, text='Used Objects:', anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label = Label(imgdisp.addon_control_frame, text=str(metadata['used_objects_type']).upper(),
+    label = Label(imgdisp.addon_control_frame, text=str(metadata['used_objects_type']),
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
 
@@ -290,7 +290,7 @@ def display_offset_data(obs, metadata):
         for body_name in metadata['rings_shadow_bodies']:
             shadow_bodies += body_name.upper()[:2] + ' '
         
-    label = Label(imgdisp.addon_control_frame, text='Rings Shadows:', anchor='w', width=label_width)
+    label = Label(imgdisp.addon_control_frame, text='Ring Shadowed By:', anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
     label = Label(imgdisp.addon_control_frame, text=shadow_bodies,
                   anchor='e', width=val_width)
