@@ -70,6 +70,8 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
 FUZZY_BODY_LIST = ['TITAN', 'HYPERION'] # XXX
 
+# These bodies can be used for bootstrapping.
+BOOTSTRAP_BODY_LIST = ['RHEA']
 
 ##################
 # CONFIGURATIONS #
@@ -170,6 +172,14 @@ RINGS_DEFAULT_CONFIG = {
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
+    # The resolution in longitude and latitude (radians) for the metadata
+    # latlon mask.
+    'lon_resolution': 0.2 * oops.RPD,
+    'lat_resolution': 0.2 * oops.RPD,
+
+    # The latlon coordinate type and direction for the metadata latlon mask.
+    'latlon_type': 'centric',
+    'lon_direction': 'east',
 }
 
 OFFSET_DEFAULT_CONFIG = {

@@ -27,6 +27,7 @@ cb_logging.log_set_stars_level(logging.DEBUG)
 cb_logging.log_set_offset_level(logging.DEBUG)
 cb_logging.log_set_bodies_level(logging.DEBUG)
 cb_logging.log_set_rings_level(logging.DEBUG)
+cb_logging.log_set_bootstrap_level(logging.DEBUG)
 
 # MIMAS
 
@@ -48,8 +49,8 @@ cb_logging.log_set_rings_level(logging.DEBUG)
 
 # 1490874611 bottom left no limb
 # 1490874664 bottom left no limb
-# 1490874718 top left good limb maybe OK for curvature - let it run? XXX
-# 1490874782 top good limb good curvature - curvature marked bad XXX
+# 1490874718 top left good limb - star navigation differs from bootstrapping
+# 1490874782 top good limb good curvature
 # 1490874834 fills image
 # 1490874889 bottom no limb
 # 1490874954 bottom right no limb
@@ -58,7 +59,7 @@ cb_logging.log_set_rings_level(logging.DEBUG)
 img_start_num = 1490874611
 img_end_num = 1490875063
 
-force_recompute = True
+force_recompute = False
 
 # Compute singular offset files where possible
 
@@ -79,11 +80,10 @@ for image_path in yield_image_filenames(img_start_num, img_end_num):
                                   force_bootstrap_candidate=force_bootstrap,
                                   allow_stars=False, allow_rings=False)
     file_write_offset_metadata(image_path, metadata)
+#    display_offset_data(obs, metadata)
+
 
 # Find bootstrapping candidates
-
-known_list = []
-candidate_list = []
 
 for image_path in yield_image_filenames(img_start_num, img_end_num):
     _, image_filename = os.path.split(image_path)
@@ -92,24 +92,8 @@ for image_path in yield_image_filenames(img_start_num, img_end_num):
         logger.info('No offset file for %s', image_filename)
         continue
 
-    metadata = file_read_offset_metadata(image_path)
+    metadata = file_read_offset_metadata(image_path, read_overlay=True) # XXX
     
-    if metadata['offset'] is not None:
-        known_list.append((image_path,metadata))
-        logger.debug('Known offset %s', image_filename)
-    elif metadata['bootstrap_candidate']:
-        candidate_list.append((image_path,metadata))
-        logger.debug('Candidate %s', image_filename)
+    bootstrap_add_file(image_path, metadata)
 
-for cand_path, cand_metadata in candidate_list:
-    _, cand_filename = os.path.split(cand_path)
-    logger.debug('Attempting bootstrap on %s', cand_filename)
-    cand_midtime = cand_metadata['midtime']
-    known_list.sort(key=lambda x: abs(x[1]['midtime']-cand_midtime))
-    for known_path, known_metadata in known_list:
-#        if not bootstrap_viable(known_path, known_metadata,
-#                            cand_path, cand_metadata):
-#            pass
-        bootstrap(known_path, known_metadata,
-#                  known_path, known_metadata)
-                  cand_path, cand_metadata)
+bootstrap_add_file(None, None)

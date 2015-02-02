@@ -8,6 +8,7 @@ import logging
 
 _LOG_DEFAULT_LEVEL = logging.INFO
 _LOG_OVERRIDE_BODIES    = None #logging.ERROR
+_LOG_OVERRIDE_BOOTSTRAP = None #logging.ERROR
 _LOG_OVERRIDE_CORRELATE = None #logging.ERROR
 _LOG_OVERRIDE_OFFSET    = None #logging.ERROR
 _LOG_OVERRIDE_RINGS     = None #logging.ERROR
@@ -23,6 +24,12 @@ def log_set_default_level(level=_LOG_DEFAULT_LEVEL):
 def log_set_bodies_level(level=_LOG_OVERRIDE_BODIES):
     if level:
         logger = logging.getLogger('cb.cb_bodies')
+        logger.propagate = True
+        logger.setLevel(level)
+    
+def log_set_bootstrap_level(level=_LOG_OVERRIDE_BOOTSTRAP):
+    if level:
+        logger = logging.getLogger('cb.cb_bootstrap')
         logger.propagate = True
         logger.setLevel(level)
     

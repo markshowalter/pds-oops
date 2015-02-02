@@ -222,53 +222,53 @@ test_data = (
 
      # These have Rhea off the side of the image
      
-     (1558972182, 'N', ('RHEA'),
-      """RHEA alone, large, off all sides, good curvature,
-      incidence 0-120. Terminator at right but left has limb.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1484584650, 'N', ('RHEA'),
-      """RHEA alone, large, off top right corner, bad curvature,
-      incidence 0-60.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1484584990, 'N', ('RHEA'),
-      """RHEA alone, large, off bottom left corner, bad curvature,
-      incidence 45-155. Terminator on outer curve.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1484584990, 'N', ('RHEA'),
-      """RHEA alone, large, off bottom right corner, good curvature,
-      incidence 35-135. Terminator on top portion.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1484600538, 'N', ('RHEA'),
-      """RHEA alone, large, off bottom left corner, good curvature,
-      incidence 50-165. Terminator on most of top portion.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1521604316, 'N', ('RHEA'),
-      """RHEA alone, large, off bottom, bad curvature,
-      incidence 100-180.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1521616930, 'N', ('RHEA'),
-      """RHEA alone, large, off top left corner, bad curvature,
-      incidence 50-105. Terminator at top but part of curve has limb.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
-
-     (1521617131, 'N', ('RHEA'),
-      """RHEA alone, large, off top, bad curvature,
-      incidence 45-110. Terminator at top but part of curve has limb.""",
-      {'allow_stars': False, 'allow_rings': False},
-     ),
+#     (1558972182, 'N', ('RHEA'),
+#      """RHEA alone, large, off all sides, good curvature,
+#      incidence 0-120. Terminator at right but left has limb.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1484584650, 'N', ('RHEA'),
+#      """RHEA alone, large, off top right corner, bad curvature,
+#      incidence 0-60.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1484584990, 'N', ('RHEA'),
+#      """RHEA alone, large, off bottom left corner, bad curvature,
+#      incidence 45-155. Terminator on outer curve.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1484584990, 'N', ('RHEA'),
+#      """RHEA alone, large, off bottom right corner, good curvature,
+#      incidence 35-135. Terminator on top portion.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1484600538, 'N', ('RHEA'),
+#      """RHEA alone, large, off bottom left corner, good curvature,
+#      incidence 50-165. Terminator on most of top portion.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1521604316, 'N', ('RHEA'),
+#      """RHEA alone, large, off bottom, bad curvature,
+#      incidence 100-180.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1521616930, 'N', ('RHEA'),
+#      """RHEA alone, large, off top left corner, bad curvature,
+#      incidence 50-105. Terminator at top but part of curve has limb.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
+#
+#     (1521617131, 'N', ('RHEA'),
+#      """RHEA alone, large, off top, bad curvature,
+#      incidence 45-110. Terminator at top but part of curve has limb.""",
+#      {'allow_stars': False, 'allow_rings': False},
+#     ),
 
 
 # RING MOONS

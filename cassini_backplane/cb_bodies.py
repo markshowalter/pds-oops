@@ -32,6 +32,8 @@ import polymath
 import gravity
 import cspice
 from pdstable import PdsTable
+from imgdisp import *
+import Tkinter as tk
 
 from cb_config import *
 from cb_util_image import *
@@ -49,8 +51,8 @@ _BODIES_DEFAULT_REPRO_ZOOM = 2
 _BODIES_DEFAULT_REPRO_ZOOM_ORDER = 3
 _BODIES_LONGITUDE_SLOP = 1e-6 # Must be smaller than any longitude or radius
 _BODIES_LATITUDE_SLOP = 1e-6  # resolution we will be using
-_BODIES_MIN_LATITUDE = -oops.PI
-_BODIES_MAX_LATITUDE = oops.PI-_BODIES_LATITUDE_SLOP*2
+_BODIES_MIN_LATITUDE = -oops.HALFPI
+_BODIES_MAX_LATITUDE = oops.HALFPI-_BODIES_LATITUDE_SLOP*2
 _BODIES_MAX_LONGITUDE = oops.TWOPI-_BODIES_LONGITUDE_SLOP*2
 _BODIES_REPRO_MIN_LAMBERT = 0.05
 _BODIES_REPRO_MAX_EMISSION = 85. * oops.RPD
@@ -106,9 +108,8 @@ def _bodies_create_cartographic(bp, body_data):
                  np.max(bp_longitude[ok_body_mask])*oops.DPR)
 
     model = data[latitude_pixels, longitude_pixels]
-#    model[model == 0.] = np.max(model) 
     model[inv_ok_pixel_mask] = 0
-    
+
     return model
 
 def bodies_create_model(obs, body_name, inventory,
@@ -151,7 +152,7 @@ def bodies_create_model(obs, body_name, inventory,
 
     metadata = {}
     metadata['body_name'] = body_name
-    metadata['curvature_ok'] = False
+    metadata['curvature_ok'] = True
     metadata['limb_ok'] = False
         
     u_min = inventory['u_min_unclipped']
@@ -159,6 +160,13 @@ def bodies_create_model(obs, body_name, inventory,
     v_min = inventory['v_min_unclipped']
     v_max = inventory['v_max_unclipped']
     
+    entirely_visible = False
+    if (u_min >= extend_fov[0] and u_max <= obs.data.shape[1]-1-extend_fov[0] and
+        v_min >= extend_fov[1] and v_max <= obs.data.shape[0]-1-extend_fov[1]):
+        # Body is entirely visible - no part is off the edge
+        entirely_visible = True
+        logger.debug('Entirely visible')
+        
     curvature_threshold_frac = bodies_config['curvature_threshold_frac']
     curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
     u_center = (u_min+u_max)/2
@@ -220,9 +228,15 @@ def bodies_create_model(obs, body_name, inventory,
     limb_mask = np.logical_and(limb_mask, limb_mask_total)
 
     limb_incidence_min = np.min(incidence[limb_mask].vals)
-    logger.debug('Minimum limb incidence angle %.2f', 
-                 limb_incidence_min*oops.DPR)
-    if limb_incidence_min < bodies_config['limb_incidence_threshold']:
+    limb_incidence_max = np.max(incidence[limb_mask].vals)
+    logger.debug('Limb incidence angle min %.2f max %.2f',
+                 limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
+    limb_threshold = bodies_config['limb_incidence_threshold']
+    # If we can see the entire body, then we only need part of the limb to be
+    # OK. If the body is partially off the edge, then we need the entire limb
+    # to be OK.
+    if ((entirely_visible and limb_incidence_min < limb_threshold) or
+        (not entirely_visible and limb_incidence_max < limb_threshold)):
         logger.debug('Limb OK')
         metadata['limb_ok'] = True
     else:
@@ -235,17 +249,14 @@ def bodies_create_model(obs, body_name, inventory,
         restr_model = restr_body_mask.astype('float')
 
     if cartographic_data:
-        if body_name in cartographic_data:
-            cart_body_data = cartographic_data[body_name]
-            cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
-            restr_model *= cart_model
-        
         for cart_body in sorted(cartographic_data.keys()):
             if cart_body == body_name:
+                cart_body_data = cartographic_data[body_name]
+                cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
+                restr_model *= cart_model
                 logger.debug('Cartographic data for %s - USING', cart_body)
             else:
                 logger.debug('Cartographic data for %s', cart_body)
-    
 
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
@@ -257,12 +268,9 @@ def bodies_create_model(obs, body_name, inventory,
     
     # Compute the lat/lon mask for bootstrapping
     
-    lat_resolution = bodies_config['lat_resolution']
-    lon_resolution = bodies_config['lon_resolution']
-    
     latlon_mask = bodies_reproject(obs, body_name, 
-        latitude_resolution=lat_resolution, 
-        longitude_resolution=lon_resolution,
+        latitude_resolution=bodies_config['lat_resolution'], 
+        longitude_resolution=bodies_config['lon_resolution'],
         zoom=1,
         latlon_type=bodies_config['latlon_type'],
         lon_direction=bodies_config['lon_direction'],
@@ -289,9 +297,9 @@ def bodies_generate_latitudes(latitude_start=_BODIES_MIN_LATITUDE,
     The list will be on latitude_resolution boundaries and is guaranteed to
     not contain a latitude less than latitude_start or greater than
     latitude_end."""
-    latitude_start = int(np.ceil(latitude_start/latitude_resolution))
-    latitude_end = int(np.floor(latitude_end/latitude_resolution))
-    return np.arange(latitude_start, latitude_end+1) * latitude_resolution
+    start_idx = int(np.ceil(latitude_start/latitude_resolution))
+    end_idx = int(np.floor(latitude_end/latitude_resolution))
+    return np.arange(start_idx, end_idx+1) * latitude_resolution
 
 def bodies_generate_longitudes(longitude_start=0.,
                                longitude_end=_BODIES_MAX_LONGITUDE,
@@ -302,9 +310,9 @@ def bodies_generate_longitudes(longitude_start=0.,
     The list will be on longitude_resolution boundaries and is guaranteed to
     not contain a longitude less than longitude_start or greater than
     longitude_end."""
-    longitude_start = int(np.ceil(longitude_start/longitude_resolution)) 
-    longitude_end = int(np.floor(longitude_end/longitude_resolution))
-    return np.arange(longitude_start, longitude_end+1) * longitude_resolution
+    start_idx = int(np.ceil(longitude_start/longitude_resolution)) 
+    end_idx = int(np.floor(longitude_end/longitude_resolution))
+    return np.arange(start_idx, end_idx+1) * longitude_resolution
 
 def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
                                         latlon_type='centric',
@@ -395,14 +403,15 @@ def bodies_reproject(obs, body_name, offset=None,
         subimage_edges           A tuple (u_min,u_max,v_min,v_max) describing
                                  the subimage used for the Meshgrid when
                                  override_backplane is used. None to indicate
-                                 the Backplane is the size of obs.data. This
-                                 is currently unused and doesn't work.
+                                 the Backplane is the size of obs.data.
                                  
     Returns:
             If mask_only is False, a dictionary containing
 
         'body_name'        The name of the body.
+        'filename'         The filename from the Observation.
         'full_mask'        The mask of pixels that contain reprojected data.
+                           True means the pixel is valid.
         'lat_idx_range'    The range (min,max) of latitudes in the returned
                            image.
         'lat_resolution'   The resolution (rad/pix) in the latitude direction.
@@ -445,8 +454,8 @@ def bodies_reproject(obs, body_name, offset=None,
     
     if min_lambert is not None or not mask_only:
         lambert = bp.lambert_law(body_name).vals.astype('float')
-    if max_emission is not None or not mask_only:
-        bp_emission = bp.emission_angle(body_name).vals.astype('float')
+
+    bp_emission = bp.emission_angle(body_name).vals.astype('float')
     
     if not mask_only:
         bp_phase = bp.phase_angle(body_name).vals.astype('float')
@@ -466,8 +475,15 @@ def bodies_reproject(obs, body_name, offset=None,
                                 lon_type=latlon_type)
     bp_longitude = bp_longitude.vals.astype('float')
 
+    if subimage_edges is not None:
+        u_min, u_max, v_min, v_max = subimage_edges
+        subimg = obs.data[v_min:v_max+1,u_min:u_max+1]
+    else:
+        subimg = obs.data
+        
     # A pixel is OK if it falls on the body, the Lambert model is
-    # bright enough and the emission angle is large enough
+    # bright enough, the emission angle is large enough, and the
+    # data isn't exactly ZERO.
     ok_body_mask_inv = body_mask_inv
     if min_lambert is not None:
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv,
@@ -475,17 +491,20 @@ def bodies_reproject(obs, body_name, offset=None,
     if max_emission is not None:
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv, 
                                          bp_emission > max_emission)
+    if not mask_only:
+        ok_body_mask_inv = np.logical_or(ok_body_mask_inv,
+                                         subimg == 0.)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
 
     if not mask_only:
         # Divide the data by the lambert model in an attempt to account for
         # projected illumination
-        lambert[ok_body_mask_inv] = 1e300
+        lambert[ok_body_mask_inv] = 1e38
         adj_data = obs.data / lambert
         adj_data[ok_body_mask_inv] = 0.
         lambert[ok_body_mask_inv] = 0.
-        bp_emission[ok_body_mask_inv] = 1e300
-        resolution[ok_body_mask_inv] = 1e300
+        bp_emission[ok_body_mask_inv] = 1e38
+        resolution[ok_body_mask_inv] = 1e38
 
     # The number of pixels in the final reprojection 
     latitude_pixels = int(oops.PI / latitude_resolution)
@@ -563,15 +582,23 @@ def bodies_reproject(obs, body_name, offset=None,
     
     good_u = u_pixels[goodmask]
     good_v = v_pixels[goodmask]
-    
     good_lat = lat_bins[goodmask]
     good_lon = lon_bins[goodmask]
-
+    
     if mask_only:    
         repro_img = np.zeros((latitude_pixels, longitude_pixels), 
                              dtype=np.bool)
         repro_img[good_lat,good_lon] = True
     else:
+        # Now get rid of bad data in the image. For some reason it's possible
+        # to have bad data here that wasn't caught in the production of
+        # ok_body_mask above.
+        goodmask = adj_data[good_v.astype('int'), good_u.astype('int')] != 0.
+        good_u = good_u[goodmask]
+        good_v = good_v[goodmask]
+        good_lat = good_lat[goodmask]
+        good_lon = good_lon[goodmask]    
+
         if zoom == 1:
             zoom_data = adj_data
         else:
@@ -600,7 +627,7 @@ def bodies_reproject(obs, body_name, offset=None,
                              dtype=np.float32)
         repro_res.mask = True
         repro_res[good_lat,good_lon] = resolution[good_v,good_u]
-        full_mask = ma.getmaskarray(repro_res)
+        full_mask = np.logical_not(ma.getmaskarray(repro_res))
     
         repro_phase = ma.zeros((latitude_pixels, longitude_pixels), 
                                dtype=np.float32)
@@ -644,6 +671,7 @@ def bodies_reproject(obs, body_name, offset=None,
     ret = {}
     
     ret['body_name'] = body_name
+    ret['filename'] = obs.filename
     ret['full_mask'] = full_mask
     ret['lat_idx_range'] = (min_latitude_pixel, max_latitude_pixel)
     ret['lat_resolution'] = latitude_resolution
@@ -661,7 +689,7 @@ def bodies_reproject(obs, body_name, offset=None,
     
     return ret
 
-def bodies_mosaic_init(
+def bodies_mosaic_init(body_name,
       latitude_resolution=_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
       longitude_resolution=_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
       latlon_type='centric', lon_direction='east'):
@@ -681,8 +709,16 @@ def bodies_mosaic_init(
     Returns:
         A dictionary containing an empty mosaic
 
+        'body_name'        The name of the body.
         'img'              The full mosaic image.
-        'full_mask'        The valid-pixel mask (all False).
+        'full_mask'        The valid-pixel mask (all False). True means the
+                           pixel is valid.
+        'lat_idx_range'    The range (min,max) of latitudes in the returned
+                           image.
+        'lat_resolution'   The resolution (rad/pix) in the latitude direction.
+        'lon_idx_range'    The range (min,max) of longitudes in the returned
+                           image.
+        'lon_resolution'   The resolution (rad/pix) in the longitude direction.
         'latlon_type'      The latitude/longitude coordinate system (see
                            above).
         'lon_direction'    The longitude coordinate system (see above).
@@ -692,17 +728,22 @@ def bodies_mosaic_init(
         'incidence'        The per-pixel incidence angle.
         'image_number'     The per-pixel image number giving the image
                            used to fill the data for each pixel.
+        'filename_list'    The filenames indexed by image_number.
         'time'             The per-pixel time (TDB).
     """
-
     latitude_pixels = int(oops.PI / latitude_resolution)
     longitude_pixels = int(oops.TWOPI / longitude_resolution)
     
     ret = {}
+    ret['body_name'] = body_name
     ret['img'] = np.zeros((latitude_pixels, longitude_pixels), 
                           dtype=np.float32)
-    ret['full_mask'] = np.ones((latitude_pixels, longitude_pixels), 
-                               dtype=np.bool)
+    ret['full_mask'] = np.zeros((latitude_pixels, longitude_pixels), 
+                                dtype=np.bool)
+    ret['lat_idx_range'] = (0, latitude_pixels-1)
+    ret['lat_resolution'] = latitude_resolution
+    ret['lon_idx_range'] = (0, longitude_pixels-1)
+    ret['lon_resolution'] = longitude_resolution
     ret['latlon_type'] = latlon_type
     ret['lon_direction'] = lon_direction
     ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
@@ -715,12 +756,13 @@ def bodies_mosaic_init(
                                 dtype=np.float32)
     ret['image_number'] = np.zeros((latitude_pixels, longitude_pixels), 
                                    dtype=np.int32)
+    ret['filename_list'] = []
     ret['time'] = np.zeros((latitude_pixels, longitude_pixels), 
                            dtype=np.float32)
     
     return ret
 
-def bodies_mosaic_add(mosaic_metadata, repro_metadata, image_number):
+def bodies_mosaic_add(mosaic_metadata, repro_metadata):
     """Add a reprojected image to an existing mosaic.
     
     For each valid pixel in the reprojected image, it is copied to the
@@ -735,7 +777,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     repro_lat_idx_range = repro_metadata['lat_idx_range']
     repro_lon_idx_range = repro_metadata['lon_idx_range']
 
-    repro_mask = np.ones(mosaic_img.shape, dtype=np.bool) 
+    repro_mask = np.zeros(mosaic_img.shape, dtype=np.bool) 
     repro_mask[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
                repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['full_mask']
@@ -774,17 +816,19 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     
     # Calculate where the new resolution is better
     better_resolution_mask = repro_res < mosaic_res
-    replace_mask = np.logical_and(np.logical_not(repro_mask),
+    replace_mask = np.logical_and(repro_mask,
                                   np.logical_or(better_resolution_mask, 
-                                                mosaic_mask))
+                                                np.logical_not(mosaic_mask)))
 
     mosaic_img[replace_mask] = repro_img[replace_mask]
     mosaic_res[replace_mask] = repro_res[replace_mask] 
     mosaic_phase[replace_mask] = repro_phase[replace_mask] 
     mosaic_emission[replace_mask] = repro_emission[replace_mask] 
-    mosaic_incidence[replace_mask] = repro_incidence[replace_mask] 
-    mosaic_image_number[replace_mask] = image_number 
-    mosaic_mask[replace_mask] = False
+    mosaic_incidence[replace_mask] = repro_incidence[replace_mask]
+    mosaic_image_number[replace_mask] = len(mosaic_metadata['filename_list']) 
+    mosaic_metadata['filename_list'].append(repro_metadata['filename'])
+    mosaic_time[replace_mask] = repro_metadata['time'] 
+    mosaic_mask[replace_mask] = True
 
 
 #===============================================================================

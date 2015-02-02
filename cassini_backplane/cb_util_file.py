@@ -60,7 +60,7 @@ def file_overlay_path(img_filename):
 
 _OFFSET_FILE_VERSION = 0
 
-def file_read_offset_metadata(img_filename):
+def file_read_offset_metadata(img_filename, read_overlay=False):
     offset_path = file_offset_path(img_filename)
     overlay_path_save, overlay_path_load = file_overlay_path(img_filename)
     
@@ -73,7 +73,7 @@ def file_read_offset_metadata(img_filename):
     offset_pickle_fp.close()
 
     metadata['overlay'] = None
-    if os.path.exists(overlay_path_load):
+    if read_overlay and os.path.exists(overlay_path_load):
         overlay = np.load(overlay_path_load)
         if overlay.shape[0] != 0:
             metadata['overlay'] = overlay 

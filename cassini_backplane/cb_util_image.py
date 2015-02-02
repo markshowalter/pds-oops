@@ -19,6 +19,8 @@ import logging
 import numpy as np
 import scipy.ndimage.filters as filt
 
+import oops
+
 _LOGGING_NAME = 'cb.' + __name__
 
 
@@ -183,3 +185,57 @@ def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
         sub = filt.gaussian_filter(sub, gaussian_blur)
 
     return data - sub
+
+#==============================================================================
+# 
+# MISC
+#
+#==============================================================================
+
+def hsv_to_rgb(data):
+    """Convert an array [...,3] of HSV values into RGB values.
+    
+    This is the same as Python's colorsys.hsv_to_rgb but is vectorized.
+    """
+    
+    # From http://www.rapidtables.com/convert/color/hsv-to-rgb.htm
+    # C = V*S
+    # X = C*(1-|(h/60 deg) mod 2 - 1|)
+    # m = V-C
+    
+    deg60 = oops.PI/3
+    h = data[...,0] * oops.TWOPI
+    c = data[...,1] * data[...,2]
+    x = c * (1 - np.abs((h / deg60) % 2 - 1))
+    m = data[...,2] - c
+    
+    ret = np.zeros(data.shape)
+    
+    is_0_60 = h < deg60
+    is_60_120 = np.logical_and(deg60 <= h, h < deg60*2)
+    is_120_180 = np.logical_and(deg60*2 <= h, h < deg60*3)
+    is_180_240 = np.logical_and(deg60*3 <= h, h < deg60*4)
+    is_240_300 = np.logical_and(deg60*4 <= h, h < deg60*5)
+    is_300_360 = deg60*5 <= h
+    
+    cond = np.logical_or(is_0_60, is_300_360)
+    ret[cond, 0] = c[cond]
+    cond = np.logical_or(is_60_120, is_240_300)
+    ret[cond, 0] = x[cond]
+    
+    cond = np.logical_or(is_0_60, is_180_240)
+    ret[cond, 1] = x[cond]
+    cond = np.logical_or(is_60_120, is_120_180)
+    ret[cond, 1] = c[cond]
+    
+    cond = np.logical_or(is_120_180, is_300_360)
+    ret[cond, 2] = x[cond]
+    cond = np.logical_or(is_180_240, is_240_300)
+    ret[cond, 2] = c[cond]
+    
+    ret[..., 0] += m
+    ret[..., 1] += m
+    ret[..., 2] += m
+    
+    return ret
+

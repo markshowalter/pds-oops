@@ -378,6 +378,10 @@ def master_find_offset(obs,
                 continue
             if body_name in FUZZY_BODY_LIST and not create_overlay:
                 continue
+            if (entirely_body == body_name and
+                (bodies_cartographic_data is None or
+                 body_name not in bodies_cartographic_data)):
+                continue 
             
             body_model, body_metadata = bodies_create_model(
                     obs, body_name, inventory=inv,
@@ -438,8 +442,11 @@ def master_find_offset(obs,
                 # Fuzzy bodies can't be used for navigation, but can be used
                 # later to create the overlay
                 continue
-            if (not body_metadata['curvature_ok'] or
-                not body_metadata['limb_ok']):
+            body_name = body_metadata['body_name']
+            if ((bodies_cartographic_data is None or
+                 body_name not in bodies_cartographic_data) and
+                (not body_metadata['curvature_ok'] or
+                 not body_metadata['limb_ok'])):
                 if not good_body:
                     # Only if there isn't a good closer body
                     bad_body = True
@@ -638,7 +645,7 @@ def master_find_offset(obs,
                 #########################################
     
     if offset is None and bad_body and not good_body:
-        logger.debug('Bootstrap candidate')
+        logger.debug('Marking as bootstrap candidate')
         metadata['bootstrap_candidate'] = True
     
     return metadata
