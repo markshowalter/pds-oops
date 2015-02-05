@@ -71,7 +71,7 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 FUZZY_BODY_LIST = ['TITAN', 'HYPERION'] # XXX
 
 # These bodies can be used for bootstrapping.
-BOOTSTRAP_BODY_LIST = ['RHEA']
+BOOTSTRAP_BODY_LIST = ['ENCELADUS', 'RHEA']
 
 ##################
 # CONFIGURATIONS #
@@ -145,7 +145,7 @@ BODIES_DEFAULT_CONFIG = {
     
     # The maximum incidence that can be considered a limb instead of a
     # terminator.
-    'limb_incidence_threshold': 80. * oops.RPD,
+    'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
     
     # The resolution in longitude and latitude (radians) for the metadata
     # latlon mask.

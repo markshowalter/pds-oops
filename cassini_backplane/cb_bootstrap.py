@@ -106,7 +106,7 @@ def _bootstrap_find_offset(cand_path, cand_metadata, bootstrap_config):
     
     new_metadata = master_find_offset(cand_obs, create_overlay=True,
                                       bodies_cartographic_data=cart_dict,
-                                      allow_stars=True) # XXX
+                                      allow_stars=False) # XXX
 
     if new_metadata['offset'] is not None:
         logger.debug('Bootstrapping successful - updating mosaic')
@@ -121,10 +121,13 @@ def _bootstrap_find_offset(cand_path, cand_metadata, bootstrap_config):
         bodies_mosaic_add(mosaic_metadata, repro_metadata)
 
         print 'Updated mosaic'
-        display_body_mosaic(mosaic_metadata)
+#         plt.figure()
+#         plt.imshow(mosaic_metadata['img'])
+#         plt.show()
+#         display_body_mosaic(mosaic_metadata)
         
 #    display_offset_data(ref_obs, ref_metadata, show_rings=False, show_bodies=False)
-    display_offset_data(cand_obs, new_metadata, show_rings=False, show_bodies=False)
+#     display_offset_data(cand_obs, new_metadata, show_rings=False, show_bodies=False)
 
     return new_metadata
 
@@ -159,8 +162,11 @@ def _bootstrap_make_initial_mosaic(body_name, bootstrap_config):
         
     _BOOTSTRAP_MOSAICS[body_name] = mosaic_metadata
 
-    print 'Initial mosaic'    
-    display_body_mosaic(mosaic_metadata)
+#     plt.imshow(mosaic_metadata['img'])
+#     plt.show()
+    
+#     print 'Initial mosaic'    
+#     display_body_mosaic(mosaic_metadata)
     
 def _bootstrap_update_lists(body_name, cand_idx, new_metadata):
     candidates = _BOOTSTRAP_CANDIDATES[body_name]

@@ -304,12 +304,12 @@ def master_find_offset(obs,
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
-            if (inv['u_min_unclipped'] < -extend_fov[0] and
-                inv['u_max_unclipped'] >= obs.data.shape[1]+extend_fov[0] and
-                inv['v_min_unclipped'] < -extend_fov[1] and
-                inv['v_max_unclipped'] >= obs.data.shape[0]+extend_fov[1]):
+            corner_body_mask = (obs.ext_corner_bp.where_intercepted(body_name).
+                                vals)
+            if np.all(corner_body_mask):
                 logger.debug('Image appears to be covered by %s', body_name)
                 entirely_body = body_name
+                metadata['body_only'] = body_name
 
     # See if the main rings take up the entire image
     # XXX THIS IS NOT A VALID TEST    
@@ -321,6 +321,7 @@ def master_find_offset(obs,
         if np.all(radii_good):  
             logger.debug('Image appears to be entirely rings')
             entirely_rings = True
+            metadata['rings_only'] = True
     
     
                     ######################
@@ -378,20 +379,27 @@ def master_find_offset(obs,
                 continue
             if body_name in FUZZY_BODY_LIST and not create_overlay:
                 continue
-            if (entirely_body == body_name and
-                (bodies_cartographic_data is None or
-                 body_name not in bodies_cartographic_data)):
-                continue 
-            
+            mask_only = (entirely_body == body_name and
+                         (bodies_cartographic_data is None or
+                          body_name not in bodies_cartographic_data))
             body_model, body_metadata = bodies_create_model(
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
                     lambert=bodies_use_lambert,
                     cartographic_data=bodies_cartographic_data,
-                    bodies_config=bodies_config)
+                    bodies_config=bodies_config,
+                    mask_only=mask_only)
             bodies_model_list.append((body_model, body_metadata))
             bodies_metadata[body_name] = body_metadata
             
+    if entirely_body:
+        if (bodies_cartographic_data is None or
+            entirely_body not in bodies_cartographic_data):
+            # Nothing we can do here except bootstrap
+            metadata['bootstrap_candidate'] = True
+            logger.debug('Single body without cartographic data - forcing '+
+                         'bootstrap candidate and returning')
+            return metadata
 
     #
     # MAKE A MODEL FOR THE RINGS IN THE IMAGE
@@ -406,15 +414,6 @@ def master_find_offset(obs,
                           metadata['rings_metadata']['curvature_ok'])
     rings_features_ok = (metadata['rings_metadata'] is not None and
                          metadata['rings_metadata']['fiducial_features_ok'])
-
-    if entirely_body:
-        if (bodies_cartographic_data is None or
-            entirely_body not in bodies_cartographic_data):
-            # Nothing we can do here except bootstrap
-            metadata['bootstrap_candidate'] = True
-            logger.debug('Single body without cartographic data - forcing '+
-                         'bootstrap candidate and returning')
-            return metadata
 
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True

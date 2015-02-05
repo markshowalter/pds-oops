@@ -8,6 +8,7 @@
 #    file_overlay_path
 #    file_read_offset_metadata
 #    file_write_offset_metadata
+#    yield_image_filenames
 ###############################################################################
 
 import cb_logging
@@ -25,6 +26,16 @@ from cb_config import *
 _LOGGING_NAME = 'cb.' + __name__
 
 _OFFSET_FILE_VERSION = 0
+
+
+
+###############################################################################
+#
+#
+# READ AND WRITE BINARY DATA FILES IN THE RESULTS DIRECTORY
+#
+#
+###############################################################################
 
 
 def _results_root_for_file(img_filename, root=RESULTS_ROOT):

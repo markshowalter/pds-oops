@@ -115,7 +115,9 @@ def _bodies_create_cartographic(bp, body_data):
 def bodies_create_model(obs, body_name, inventory,
                         lambert=True,
                         extend_fov=(0,0),
-                        cartographic_data={}, bodies_config=None):
+                        cartographic_data={},
+                        bodies_config=None,
+                        mask_only=False):
     """Create a model for a body.
     
     Inputs:
@@ -131,6 +133,8 @@ def bodies_create_model(obs, body_name, inventory,
         cartographic_data  A dictionary of body names containing cartographic
                            data in lat/lon format.
         bodies_config      Configuration parameters.
+        mask_only          Only compute the latlon mask and don't spent time
+                           actually trying to make a model.
                                  
     Returns:
         A dictionary containing
@@ -152,9 +156,11 @@ def bodies_create_model(obs, body_name, inventory,
 
     metadata = {}
     metadata['body_name'] = body_name
-    metadata['curvature_ok'] = True
+    metadata['curvature_ok'] = False
     metadata['limb_ok'] = False
-        
+
+    # Analyze the curvature
+            
     u_min = inventory['u_min_unclipped']
     u_max = inventory['u_max_unclipped']
     v_min = inventory['v_min_unclipped']
@@ -193,7 +199,17 @@ def bodies_create_model(obs, body_name, inventory,
     u_max = np.clip(u_max, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
     v_min = np.clip(v_min, -extend_fov[1], obs.data.shape[0]+extend_fov[1]-1)
     v_max = np.clip(v_max, -extend_fov[1], obs.data.shape[0]+extend_fov[1]-1)
-           
+    
+    # Things break if the moon is only a single pixel wide or tall
+    if u_min == u_max and u_min == obs.data.shape[1]+extend_fov[0]-1:
+        u_min -= 1
+    if u_min == u_max and u_min == -extend_fov[0]:
+        u_max += 1
+    if v_min == v_max and v_min == obs.data.shape[0]+extend_fov[1]-1:
+        v_min -= 1
+    if v_min == v_max and v_min == -extend_fov[1]:
+        v_max += 1
+        
     logger.debug('"%s" image size %d %d subrect U %d to %d '
                  'V %d to %d',
                  body_name, obs.data.shape[1], obs.data.shape[0],
@@ -202,7 +218,7 @@ def bodies_create_model(obs, body_name, inventory,
         logger.debug('Curvature OK')
     else:
         logger.debug('Curvature BAD')
-        
+
     # Create a Meshgrid that only covers the extent of the body
     restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
                                            origin=(u_min+.5, v_min+.5),
@@ -210,6 +226,24 @@ def bodies_create_model(obs, body_name, inventory,
                                            swap  =True)
     restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
 
+    # Compute the lat/lon mask for bootstrapping
+    
+    latlon_mask = bodies_reproject(obs, body_name, 
+        latitude_resolution=bodies_config['lat_resolution'], 
+        longitude_resolution=bodies_config['lon_resolution'],
+        zoom=1,
+        latlon_type=bodies_config['latlon_type'],
+        lon_direction=bodies_config['lon_direction'],
+        mask_only=True, override_backplane=restr_bp,
+        subimage_edges=(u_min,u_max,v_min,v_max))
+
+    metadata['latlon_mask'] = latlon_mask
+    
+    if mask_only:
+        return None, metadata
+    
+    # Analyze the limb
+    
     incidence = restr_bp.incidence_angle(body_name)
     restr_body_mask_inv = ma.getmaskarray(incidence.mvals)
 #    restr_body_mask = restr_bp.where_intercepted(body_name).vals
@@ -227,8 +261,12 @@ def bodies_create_model(obs, body_name, inventory,
     limb_mask_total = np.logical_or(limb_mask_total, limb_mask_4)
     limb_mask = np.logical_and(limb_mask, limb_mask_total)
 
-    limb_incidence_min = np.min(incidence[limb_mask].vals)
-    limb_incidence_max = np.max(incidence[limb_mask].vals)
+    if not np.any(limb_mask):
+        limb_incidence_min = 1e38
+        limb_incidence_max = 1e38
+    else:
+        limb_incidence_min = np.min(incidence[limb_mask].vals)
+        limb_incidence_max = np.max(incidence[limb_mask].vals)
     logger.debug('Limb incidence angle min %.2f max %.2f',
                  limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
     limb_threshold = bodies_config['limb_incidence_threshold']
@@ -241,6 +279,8 @@ def bodies_create_model(obs, body_name, inventory,
         metadata['limb_ok'] = True
     else:
         logger.debug('Limb BAD') 
+    
+    # Make the actual model
     
     if lambert:
         restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
@@ -265,19 +305,6 @@ def bodies_create_model(obs, body_name, inventory,
                      dtype=np.float32)
     model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
           u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
-    
-    # Compute the lat/lon mask for bootstrapping
-    
-    latlon_mask = bodies_reproject(obs, body_name, 
-        latitude_resolution=bodies_config['lat_resolution'], 
-        longitude_resolution=bodies_config['lon_resolution'],
-        zoom=1,
-        latlon_type=bodies_config['latlon_type'],
-        lon_direction=bodies_config['lon_direction'],
-        mask_only=True, override_backplane=restr_bp,
-        subimage_edges=(u_min,u_max,v_min,v_max))
-
-    metadata['latlon_mask'] = latlon_mask
     
     return model, metadata
 
@@ -496,6 +523,8 @@ def bodies_reproject(obs, body_name, offset=None,
                                          subimg == 0.)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
 
+    empty_mask = not np.any(ok_body_mask)
+    
     if not mask_only:
         # Divide the data by the lambert model in an attempt to account for
         # projected illumination
@@ -510,21 +539,33 @@ def bodies_reproject(obs, body_name, offset=None,
     latitude_pixels = int(oops.PI / latitude_resolution)
     longitude_pixels = int(oops.TWOPI / longitude_resolution)
 
-    # Restrict the latitude and longitude ranges for some attempt at efficiency
-    min_latitude_pixel = (np.floor(np.min(bp_latitude[ok_body_mask]+oops.HALFPI) / 
-                                   latitude_resolution)).astype('int')
-    min_latitude_pixel = np.clip(min_latitude_pixel, 0, latitude_pixels-1)
-    max_latitude_pixel = (np.ceil(np.max(bp_latitude[ok_body_mask]+oops.HALFPI) / 
-                                  latitude_resolution)).astype('int')
-    max_latitude_pixel = np.clip(max_latitude_pixel, 0, latitude_pixels-1)
-    num_latitude_pixel = max_latitude_pixel - min_latitude_pixel + 1
+    if empty_mask:
+        min_latitude_pixel = 0
+        max_latitude_pixel = 1
+        min_longitude_pixel = 0
+        max_longitude_pixel = 1
+    else:
+        # Restrict the latitude and longitude ranges for some attempt at
+        # efficiency
+        min_latitude_pixel = (np.floor(np.min(bp_latitude[ok_body_mask]+
+                                              oops.HALFPI) / 
+                                       latitude_resolution)).astype('int')
+        min_latitude_pixel = np.clip(min_latitude_pixel, 0, latitude_pixels-1)
+        max_latitude_pixel = (np.ceil(np.max(bp_latitude[ok_body_mask]+
+                                             oops.HALFPI) / 
+                                      latitude_resolution)).astype('int')
+        max_latitude_pixel = np.clip(max_latitude_pixel, 0, latitude_pixels-1)
+    
+        min_longitude_pixel = (np.floor(np.min(bp_longitude[ok_body_mask]) / 
+                                        longitude_resolution)).astype('int')
+        min_longitude_pixel = np.clip(min_longitude_pixel, 0, 
+                                      longitude_pixels-1)
+        max_longitude_pixel = (np.ceil(np.max(bp_longitude[ok_body_mask]) / 
+                                       longitude_resolution)).astype('int')
+        max_longitude_pixel = np.clip(max_longitude_pixel, 0, 
+                                      longitude_pixels-1)
 
-    min_longitude_pixel = (np.floor(np.min(bp_longitude[ok_body_mask]) / 
-                                    longitude_resolution)).astype('int')
-    min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
-    max_longitude_pixel = (np.ceil(np.max(bp_longitude[ok_body_mask]) / 
-                                   longitude_resolution)).astype('int')
-    max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
+    num_latitude_pixel = max_latitude_pixel - min_latitude_pixel + 1
     num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
     
     # Latitude bin numbers
@@ -541,29 +582,32 @@ def bodies_reproject(obs, body_name, offset=None,
 
     logger.debug('Offset U,V %d,%d  Lat/Lon Type %s  Lon Direction %s', 
                  offset_u, offset_v, latlon_type, lon_direction)
-    logger.debug('Latitude range %8.2f %8.2f', 
-                 np.min(bp_latitude[ok_body_mask])*oops.DPR, 
-                 np.max(bp_latitude[ok_body_mask])*oops.DPR)
-    logger.debug('Latitude bin range %8.2f %8.2f', 
-                 np.min(lat_bins_act)*oops.DPR, 
-                 np.max(lat_bins_act)*oops.DPR)
-    logger.debug('Latitude pixel range %d %d', 
-                 min_latitude_pixel, max_latitude_pixel) 
-    logger.debug('Longitude range %6.2f %6.2f', 
-                 np.min(bp_longitude[ok_body_mask])*oops.DPR, 
-                 np.max(bp_longitude[ok_body_mask])*oops.DPR)
-    logger.debug('Longitude bin range %6.2f %6.2f', 
-                 np.min(lon_bins_act)*oops.DPR,
-                 np.max(lon_bins_act)*oops.DPR)
-    logger.debug('Longitude pixel range %d %d', 
-                 min_longitude_pixel, max_longitude_pixel)
-    if not mask_only: 
-        logger.debug('Resolution range %7.2f %7.2f', 
-                     np.min(resolution[ok_body_mask]),
-                     np.max(resolution[ok_body_mask]))
-        logger.debug('Data range %f %f', 
-                     np.min(adj_data), 
-                     np.max(adj_data))
+    if empty_mask:
+        logger.debug('Empty body mask')
+    else:
+        logger.debug('Latitude range %8.2f %8.2f', 
+                     np.min(bp_latitude[ok_body_mask])*oops.DPR, 
+                     np.max(bp_latitude[ok_body_mask])*oops.DPR)
+#     logger.debug('Latitude bin range %8.2f %8.2f', 
+#                  np.min(lat_bins_act)*oops.DPR, 
+#                  np.max(lat_bins_act)*oops.DPR)
+#     logger.debug('Latitude pixel range %d %d', 
+#                  min_latitude_pixel, max_latitude_pixel) 
+        logger.debug('Longitude range %6.2f %6.2f', 
+                     np.min(bp_longitude[ok_body_mask])*oops.DPR, 
+                     np.max(bp_longitude[ok_body_mask])*oops.DPR)
+#     logger.debug('Longitude bin range %6.2f %6.2f', 
+#                  np.min(lon_bins_act)*oops.DPR,
+#                  np.max(lon_bins_act)*oops.DPR)
+#     logger.debug('Longitude pixel range %d %d', 
+#                  min_longitude_pixel, max_longitude_pixel)
+        if not mask_only: 
+            logger.debug('Resolution range %7.2f %7.2f', 
+                         np.min(resolution[ok_body_mask]),
+                         np.max(resolution[ok_body_mask]))
+#         logger.debug('Data range %f %f', 
+#                      np.min(adj_data), 
+#                      np.max(adj_data))
 
     uv = bodies_latitude_longitude_to_pixels(
                     obs, body_name, lat_bins_act, lon_bins_act,
@@ -782,31 +826,31 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata):
                repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['full_mask']
         
-    repro_img = np.zeros(mosaic_img.shape) 
+    repro_img = np.zeros(mosaic_img.shape, dtype=np.float32) 
     repro_img[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
               repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['img']
     
     mosaic_res = mosaic_metadata['resolution']
-    repro_res = np.zeros(mosaic_res.shape)
+    repro_res = np.zeros(mosaic_res.shape, dtype=np.float32)
     repro_res[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
               repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['resolution']
     
     mosaic_phase = mosaic_metadata['phase']
-    repro_phase = np.zeros(mosaic_phase.shape)
+    repro_phase = np.zeros(mosaic_phase.shape, dtype=np.float32)
     repro_phase[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
                 repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['phase']
     
     mosaic_emission = mosaic_metadata['emission']
-    repro_emission = np.zeros(mosaic_emission.shape)
+    repro_emission = np.zeros(mosaic_emission.shape, dtype=np.float32)
     repro_emission[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
                    repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['emission']
     
     mosaic_incidence = mosaic_metadata['incidence']
-    repro_incidence = np.zeros(mosaic_incidence.shape)
+    repro_incidence = np.zeros(mosaic_incidence.shape, dtype=np.float32)
     repro_incidence[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
                     repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['incidence']

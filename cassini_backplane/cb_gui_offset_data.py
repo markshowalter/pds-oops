@@ -49,9 +49,9 @@ def _callback_mousemove(x, y, metadata):
 
     if 'label_body_name_longitude' in metadata:
         metadata['label_body_name_longitude'].config(text=
-                           ('Body '+metadata['longitude_type']+' Longitude:'))
+                           ('Body '+metadata['longitude_type']+' Long:'))
         metadata['label_body_name_latitude'].config(text=
-                           ('Body '+metadata['latitude_type']+' Latitude:'))
+                           ('Body '+metadata['latitude_type']+' Lat:'))
         (metadata['label_body_name_resolution'].config(text=
                                                        ('Body Resolution:')))
         metadata['label_body_name_phase'].config(text=('Body Phase:'))
@@ -70,13 +70,13 @@ def _callback_mousemove(x, y, metadata):
             val = metadata[body_name+'_longitude'][y,x]
             if not val.masked():
                 metadata['label_body_name_longitude'].config(text=
-                  (body_name[:5]+' '+metadata['longitude_type']+' Longitude:'))
+                  (body_name[:5]+' '+metadata['longitude_type']+' Long:'))
                 metadata['label_body_longitude'].config(text=
                                          ('%7.3f'%val.vals))
             val = metadata[body_name+'_latitude'][y,x]
             if not val.masked():
                 metadata['label_body_name_latitude'].config(text=
-                  (body_name[:5]+' '+metadata['latitude_type']+' Latitude:'))
+                  (body_name[:5]+' '+metadata['latitude_type']+' Lat:'))
                 metadata['label_body_latitude'].config(text=
                                          ('%7.3f'%val.vals))
                 val = metadata[body_name+'_resolution']
@@ -171,7 +171,16 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             u_max = np.clip(u_max, -ext_u, obs.data.shape[1]+ext_u-1)
             v_min = np.clip(v_min, -ext_v, obs.data.shape[0]+ext_v-1)
             v_max = np.clip(v_max, -ext_v, obs.data.shape[0]+ext_v-1)
-            
+            # Things break if the moon is only a single pixel wide or tall
+            if u_min == u_max and u_min == obs.data.shape[1]+ext_u-1:
+                u_min -= 1
+            if u_min == u_max and u_min == -ext_u:
+                u_max += 1
+            if v_min == v_max and v_min == obs.data.shape[0]+ext_v-1:
+                v_min -= 1
+            if v_min == v_max and v_min == -ext_v:
+                v_max += 1
+
             meshgrid = oops.Meshgrid.for_fov(obs.fov,
                                              origin=(u_min+.5, v_min+.5),
                                              limit =(u_max+.5, v_max+.5),
@@ -242,7 +251,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     gridrow = 0
     gridcolumn = 0
 
-    label_width = 16
+    label_width = 15
     val_width = 9
 
     addon_control_frame = imgdisp.addon_control_frame
@@ -376,7 +385,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     gridrow += 1
 
     if show_rings:
-        label = Label(addon_control_frame, text='Ring Longitude:', 
+        label = Label(addon_control_frame, text='Ring Long:', 
                       anchor='w', width=label_width)
         label.grid(row=gridrow, column=gridcolumn, sticky=W)
         label_ring_longitude = Label(addon_control_frame, text='', 
