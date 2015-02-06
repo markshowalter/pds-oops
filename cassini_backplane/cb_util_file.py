@@ -14,8 +14,9 @@
 import cb_logging
 import logging
 
-import pickle
 import numpy as np
+import msgpack
+import msgpack_numpy
 import os.path
 
 import oops
@@ -25,99 +26,14 @@ from cb_config import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
-_OFFSET_FILE_VERSION = 0
-
-
 
 ###############################################################################
 #
 #
-# READ AND WRITE BINARY DATA FILES IN THE RESULTS DIRECTORY
+# GENERAL FILE UTILITIES
 #
 #
 ###############################################################################
-
-
-def _results_root_for_file(img_filename, root=RESULTS_ROOT):
-    rdir, filename = os.path.split(img_filename)
-    rdir, dir1 = os.path.split(rdir)
-    rdir, dir2 = os.path.split(rdir)
-    assert dir2 == 'data'
-    rdir, dir3 = os.path.split(rdir)
-    filename = filename.upper()
-    filename = filename.replace('.IMG', '')
-    filename = filename.replace('_CALIB', '')
-
-    assert os.path.exists(root)
-    root = os.path.join(root, 'COISS_2xxx')
-    assert os.path.exists(root)
-    
-    part_dir3 = os.path.join(root, dir3)
-    if not os.path.exists(part_dir3):
-        os.mkdir(part_dir3)
-    part_dir1 = os.path.join(part_dir3, dir1)
-    if not os.path.exists(part_dir1):
-        os.mkdir(part_dir1)
-    return os.path.join(root, dir3, dir1, filename)
-
-def file_offset_path(img_filename):
-    fn = _results_root_for_file(img_filename, RESULTS_ROOT) + '-OFFSET.pickle'
-    return fn
-
-def file_overlay_path(img_filename):
-    fn = _results_root_for_file(img_filename, RESULTS_ROOT) + '-OVERLAY'
-    fn = os.path.join(RESULTS_ROOT, fn)
-    return fn, fn+'.npy'
-
-_OFFSET_FILE_VERSION = 0
-
-def file_read_offset_metadata(img_filename, read_overlay=False):
-    offset_path = file_offset_path(img_filename)
-    overlay_path_save, overlay_path_load = file_overlay_path(img_filename)
-    
-    if not os.path.exists(offset_path):
-        return None
-    offset_pickle_fp = open(offset_path, 'rb')
-    offset_file_version = pickle.load(offset_pickle_fp)
-    assert offset_file_version == _OFFSET_FILE_VERSION
-    metadata = pickle.load(offset_pickle_fp)
-    offset_pickle_fp.close()
-
-    metadata['overlay'] = None
-    if read_overlay and os.path.exists(overlay_path_load):
-        overlay = np.load(overlay_path_load)
-        if overlay.shape[0] != 0:
-            metadata['overlay'] = overlay 
-        
-    return metadata
-
-def file_write_offset_metadata(img_filename, metadata):
-    """Write offset/overlay files for img_filename."""
-    logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
-
-    offset_path = file_offset_path(img_filename)
-    overlay_path_save, overlay_path_load = file_overlay_path(img_filename)
-
-    logger.debug('Writing offset file %s', offset_path)
-    
-    new_metadata = metadata.copy()
-    if 'ext_data' in new_metadata:
-        del new_metadata['ext_data']
-    if 'ext_overlay' in new_metadata:
-        del new_metadata['ext_overlay']
-    overlay = np.array([])
-    if 'overlay' in new_metadata and new_metadata['overlay'] is not None:
-        overlay = new_metadata['overlay']
-        del new_metadata['overlay']
-
-    offset_pickle_fp = open(offset_path, 'wb')
-    pickle.dump(_OFFSET_FILE_VERSION, offset_pickle_fp)
-    pickle.dump(new_metadata, offset_pickle_fp)    
-    offset_pickle_fp.close()
-
-    logger.debug('Writing overlay file %s', overlay_path_save)
-    
-    np.save(overlay_path_save, overlay)
 
 def yield_image_filenames(img_start_num, img_end_num, camera='NW',
                           restrict_list=None):
@@ -157,8 +73,138 @@ def yield_image_filenames(img_start_num, img_end_num, camera='NW',
         if done:
             break
 
-def read_iss_file(filename):
-    obs = iss.from_file(filename, fast_distortion=True)
-    obs.full_filename = filename
-    _, obs.filename = os.path.split(filename) 
+def read_iss_file(path):
+    obs = iss.from_file(path, fast_distortion=True)
+    obs.full_path = path
+    _, obs.filename = os.path.split(path) 
     return obs
+
+
+###############################################################################
+#
+#
+# READ AND WRITE BINARY DATA FILES IN THE RESULTS DIRECTORY
+#
+#
+###############################################################################
+
+
+def _results_root_for_file(img_path, root=RESULTS_ROOT,
+                           make_dirs=True):
+    """Results root is of the form:
+    
+    <ROOT>/COISS_2xxx/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
+    """
+    rdir, filename = os.path.split(img_path)
+    rdir, dir1 = os.path.split(rdir)
+    rdir, dir2 = os.path.split(rdir)
+    assert dir2 == 'data'
+    rdir, dir3 = os.path.split(rdir)
+    filename = filename.upper()
+    filename = filename.replace('.IMG', '')
+    filename = filename.replace('_CALIB', '')
+
+    assert os.path.exists(root)
+    root = os.path.join(root, 'COISS_2xxx')
+    if make_dirs and not os.path.exists(root):
+        os.mkdir(root)
+    part_dir3 = os.path.join(root, dir3)
+    if make_dirs and not os.path.exists(part_dir3):
+        os.mkdir(part_dir3)
+    part_dir1 = os.path.join(part_dir3, dir1)
+    if make_dirs and not os.path.exists(part_dir1):
+        os.mkdir(part_dir1)
+    return os.path.join(part_dir1, filename)
+
+def file_img_to_offset_path(img_path, make_dirs=True):
+    fn = _results_root_for_file(img_path, RESULTS_ROOT, make_dirs)
+    fn += '-OFFSET.dat'
+    return fn
+
+def file_offset_to_img_path(offset_path):
+    rdir, filename = os.path.split(offset_path)
+    rdir, dir1 = os.path.split(rdir)
+    rdir, dir2 = os.path.split(rdir)
+    
+    filename = filename.replace('-OFFSET.dat', '')
+    filename += '_CALIB.IMG'
+
+    img_path = os.path.join(COISS_2XXX_DERIVED_ROOT, dir2, 'data',
+                            dir1, filename)
+        
+    return img_path
+
+def file_read_offset_metadata(img_path):
+    offset_path = file_img_to_offset_path(img_path, make_dirs=False)
+    
+    if not os.path.exists(offset_path):
+        return None
+
+    offset_fp = open(offset_path, 'rb')
+    metadata = msgpack.unpackb(offset_fp.read(), 
+                               object_hook=msgpack_numpy.decode)
+    offset_fp.close()
+
+    return metadata
+
+def file_write_offset_metadata(img_path, metadata):
+    """Write offset file for img_filename."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
+
+    offset_path = file_img_to_offset_path(img_path)
+
+    logger.debug('Writing offset file %s', offset_path)
+    
+    new_metadata = metadata.copy()
+    if 'ext_data' in new_metadata:
+        del new_metadata['ext_data']
+    if 'ext_overlay' in new_metadata:
+        del new_metadata['ext_overlay']
+
+    offset_fp = open(offset_path, 'wb')
+    offset_fp.write(msgpack.packb(new_metadata, 
+                                  default=msgpack_numpy.encode))    
+    offset_fp.close()
+
+def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
+    """Mosaic filename is of the form:
+    
+    <ROOT>/mosaics/<bodyname>/<firstimg>_<lastimg>_<#img>.dat
+    """
+    assert os.path.exists(root)
+    root = os.path.join(root, 'mosaics')
+    if make_dirs and not os.path.exists(root):
+        os.mkdir(root)
+    root = os.path.join(root, metadata['body_name'])
+    if make_dirs and not os.path.exists(root):
+        os.mkdir(root)
+    sorted_img_list = sorted(metadata['filename_list'])
+    filename = '%s_%s_%04d.dat' % (sorted_img_list[0][:13],
+                                   sorted_img_list[-1][:13],
+                                   len(sorted_img_list))
+    
+    return os.path.join(root, filename)
+
+def file_read_mosaic_metadata(path):
+    if not os.path.exists(path):
+        return None
+
+    mosaic_fp = open(path, 'rb')
+    metadata = msgpack.unpackb(mosaic_fp.read(), 
+                               object_hook=msgpack_numpy.decode)
+    mosaic_fp.close()
+
+    return metadata
+
+def file_write_mosaic_metadata(metadata):
+    """Write mosaic metadata."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_moasic_metadata')
+
+    mosaic_path = file_mosaic_path(metadata)
+
+    logger.debug('Writing mosaic file %s', mosaic_path)
+    
+    mosaic_fp = open(mosaic_path, 'wb')
+    mosaic_fp.write(msgpack.packb(metadata, 
+                                  default=msgpack_numpy.encode))    
+    mosaic_fp.close()

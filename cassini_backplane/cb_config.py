@@ -172,12 +172,11 @@ RINGS_DEFAULT_CONFIG = {
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
-    # The resolution in longitude and latitude (radians) for the metadata
-    # latlon mask.
-    'lon_resolution': 0.2 * oops.RPD,
-    'lat_resolution': 0.2 * oops.RPD,
+    # The resolution in longitude and latitude (radians) for the mosaic.
+    'lon_resolution': 0.1 * oops.RPD,
+    'lat_resolution': 0.1 * oops.RPD,
 
-    # The latlon coordinate type and direction for the metadata latlon mask.
+    # The latlon coordinate type and direction for the mosaic.
     'latlon_type': 'centric',
     'lon_direction': 'east',
 }

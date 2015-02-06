@@ -969,13 +969,13 @@ def _define_body_spherical(spice_id, parent, barycenter, radius):
     if "BARYCENTER" in body.keywords and parent is not None:
         body.add_keywords(parent)
 
-_define_body_spherical('MIMAS', 'SATURN', 'SATURN', 198.2)
-_define_body_spherical('ENCELADUS', 'SATURN', 'SATURN', 252.1)
-_define_body_spherical('TETHYS', 'SATURN', 'SATURN', 531.1)
-_define_body_spherical('DIONE', 'SATURN', 'SATURN', 561.4)
-_define_body_spherical('RHEA', 'SATURN', 'SATURN', 763.8)
-_define_body_spherical('IAPETUS', 'SATURN', 'SATURN BARYCENTER', 734.5)
-_define_body_spherical('PHOEBE', 'SATURN', 'SATURN BARYCENTER', 106.5)
+# _define_body_spherical('MIMAS', 'SATURN', 'SATURN', 198.2)
+# _define_body_spherical('ENCELADUS', 'SATURN', 'SATURN', 252.1)
+# _define_body_spherical('TETHYS', 'SATURN', 'SATURN', 531.1)
+# _define_body_spherical('DIONE', 'SATURN', 'SATURN', 561.4)
+# _define_body_spherical('RHEA', 'SATURN', 'SATURN', 763.8)
+# _define_body_spherical('IAPETUS', 'SATURN', 'SATURN BARYCENTER', 734.5)
+# _define_body_spherical('PHOEBE', 'SATURN', 'SATURN BARYCENTER', 106.5)
 
 
 #===============================================================================

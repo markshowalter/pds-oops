@@ -105,7 +105,8 @@ def _callback_mousemove(x, y, metadata):
                                          ('%7.3f'%val.vals))
         
 def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
-                        latlon_type='centric', lon_direction='east'):
+                        latlon_type='centric', lon_direction='east',
+                        toplevel=None):
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']
@@ -239,13 +240,14 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                 mask = ~orig_model_mask
             else:
                 mask = ~orig_model_mask | mask 
-        
-    toplevel = Tk()
-    toplevel.title(obs.filename)
-    frame_toplevel = Frame(toplevel)
 
-    imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,768), 
-                        parent=frame_toplevel, allow_enlarge=True,
+    if toplevel is None:
+        toplevel = Tk()
+    toplevel.title(obs.filename)
+
+    imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,512), 
+                        parent=toplevel, toplevel=toplevel,
+                        allow_enlarge=True,
                         auto_update=True, origin=(ext_u,ext_v))
 
     gridrow = 0
@@ -278,6 +280,31 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                   anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
     label = Label(addon_control_frame, text=('%7.3f'%obs.texp),
+                  anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky=W)
+    gridrow += 1
+    
+    label = Label(addon_control_frame, text='Bootstrap Cand:', 
+                  anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky=W)
+    label = Label(addon_control_frame, 
+                  text=str(metadata['bootstrap_candidate']), 
+                  anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+
+    label = Label(addon_control_frame, text='Bootstrap Ref:', 
+                  anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
+    label = Label(addon_control_frame, 
+                  text=str(metadata['bootstrap_reference']), 
+                  anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky=W)
+
+    label = Label(addon_control_frame, text='Bootstrapped:', 
+                  anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
+    label = Label(addon_control_frame, 
+                  text=str(metadata['bootstrapped']), 
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky=W)
     gridrow += 1
@@ -505,8 +532,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                                _callback_mousemove(x, y, metadata))
     imgdisp.bind_mousemove(0, callback_mousemove_func)
 
-    frame_toplevel.pack()
-
+    imgdisp.pack()
+    
     tk.mainloop()
 
     obs.fov = orig_fov

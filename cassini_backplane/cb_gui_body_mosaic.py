@@ -64,8 +64,6 @@ def _command_refresh_color(metadata):
         minval = np.min(valsrc[full_mask])
         maxval = np.max(valsrc[full_mask])
     
-    print minval, maxval
-    
     hsv = np.empty(valsrc.shape + (3,))
     hsv[:,:,0] = (1-(valsrc-minval)/(maxval-minval))*.66
     hsv[:,:,1] = 1
@@ -114,7 +112,7 @@ def _callback_mousemove(x, y, metadata):
         metadata['label_date'].config(text=
                            cspice.et2utc(float(metadata['time'][y,x]), 'C', 0))
         
-def display_body_mosaic(metadata):
+def display_body_mosaic(metadata, toplevel=None):
     metadata = metadata.copy() # Don't mutate the one given to us
 
     metadata['latitude'] = bodies_generate_latitudes(latitude_resolution=
@@ -122,12 +120,13 @@ def display_body_mosaic(metadata):
     metadata['longitude'] = bodies_generate_longitudes(longitude_resolution=
                                     metadata['lon_resolution'])
 
-    toplevel = Tk()
+    if toplevel is None:
+        toplevel = Tk()
     toplevel.title(metadata['body_name'])
-    frame_toplevel = Frame(toplevel)
 
-    imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,512),
-                        parent=frame_toplevel, allow_enlarge=True,
+    imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,400),
+                        parent=toplevel, toplevel=toplevel,
+                        allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)
 
     metadata['imgdisp'] = imgdisp
@@ -137,7 +136,7 @@ def display_body_mosaic(metadata):
 
     label_width = 12
     val_width = 6
-    val2_width = 17
+    val2_width = 18
     
     addon_control_frame = imgdisp.addon_control_frame
 
@@ -289,8 +288,6 @@ def display_body_mosaic(metadata):
     imgdisp.bind_mousemove(0, callback_mousemove_func)
 
     imgdisp.pack(side=LEFT)
-    
-    frame_toplevel.pack()
     
     tk.mainloop()
     

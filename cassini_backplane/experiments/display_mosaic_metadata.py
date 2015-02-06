@@ -1,0 +1,27 @@
+###############################################################################
+# display_mosaic_metadata.py
+###############################################################################
+
+import Tkinter as tk
+import tkFileDialog
+
+from cb_config import *
+from cb_gui_body_mosaic import *
+from cb_util_file import *
+
+mosaic_dir = os.path.join(RESULTS_ROOT, 'mosaics')
+
+root = tk.Tk()
+root.withdraw()
+
+while True:
+    toplevel = Toplevel()
+    toplevel.withdraw()
+    path = tkFileDialog.askopenfilename(parent=toplevel,
+                                        initialdir=mosaic_dir, 
+                                        title='Choose a mosaic metadata file')
+    if path == '':
+        break
+    metadata = file_read_mosaic_metadata(path)
+    toplevel = Toplevel()
+    display_body_mosaic(metadata, toplevel=toplevel)

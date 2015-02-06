@@ -178,6 +178,8 @@ def master_find_offset(obs,
                                True if the image is a good candidate for
                                future use as a bootstrap reference.
             'bootstrap_body'   The largest (pixel size) body in the image.
+            'bootstrapped'     True if the image was navigated using 
+                               bootstrapping.
                                
           Large data that might be too big to store in an offset file:
             
@@ -240,7 +242,7 @@ def master_find_offset(obs,
     set_obs_center_bp(obs)
     ra = obs.center_bp.right_ascension()
     dec = obs.center_bp.declination()
-    metadata['ra_dec_center'] = (ra,dec)
+    metadata['ra_dec_center'] = (ra.vals,dec.vals)
     # Offset process
     metadata['offset'] = None
     metadata['body_only'] = False
@@ -262,6 +264,7 @@ def master_find_offset(obs,
     metadata['bootstrap_candidate'] = False
     metadata['bootstrap_reference'] = False
     metadata['bootstrap_body'] = None
+    metadata['bootstrapped'] = False
     
     
                 ###########################
