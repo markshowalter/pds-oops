@@ -17,7 +17,8 @@ class ImageDisp(Frame):
     various events."""
     
     def __init__(self, imgdata_list, overlay_list=None, color_column_list=None,
-                 parent=None, canvas_size=None, flip_y=False, origin=(0,0),
+                 parent=None, toplevel=None, 
+                 canvas_size=None, flip_y=False, origin=(0,0),
                  allow_enlarge=False, enlarge_limit=5,
                  one_zoom=True, auto_update=False,
                  whitepoint_ignore_frac=1.00):
@@ -79,6 +80,9 @@ class ImageDisp(Frame):
         
         ### Init the Tk Frame
         Frame.__init__(self, parent)
+        self.toplevel = toplevel
+        if toplevel is not None:
+            toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
 
         if type(imgdata_list) != type([]) and type(imgdata_list) != type(()):
             imgdata_list = [imgdata_list]
@@ -265,10 +269,10 @@ class ImageDisp(Frame):
         
         ### Make another frame for other programs to add their own controls
         
-        self.addon_control_frame = Frame(self)
-        self.addon_control_frame.pack(side=RIGHT, fill=BOTH, expand=YES)
+        self.addon_control_frame = Frame(controls_parent_frame)
+        self.addon_control_frame.pack(side=LEFT, fill=X, anchor=N)
         
-        controls_parent_frame.pack()
+        controls_parent_frame.pack(anchor=W, fill=X, expand=True)
         self.pack()
         self.update_image_data(imgdata_list, overlay_list, color_column_list)
 
@@ -629,6 +633,11 @@ class ImageDisp(Frame):
             canvas.xview_moveto(scroll_x_min)
             canvas.yview_moveto(scroll_y_min)
 
+    def _command_wm_delete(self):
+        """Internal - callback for window manager closing window."""
+        self.toplevel.destroy()
+        self.toplevel.quit()
+        
     def _command_update_now(self):
         """Internal - callback for update now button."""
         update1 = self._update_transparency()
