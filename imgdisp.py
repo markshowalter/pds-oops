@@ -80,6 +80,8 @@ class ImageDisp(Frame):
         
         ### Init the Tk Frame
         Frame.__init__(self, parent)
+        if toplevel is None:
+            toplevel = parent
         self.toplevel = toplevel
         if toplevel is not None:
             toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
