@@ -1,3 +1,10 @@
+###############################################################################
+# imgdisp.py
+#
+# ImageDisp is a generic Tcl/Tk-based GUI interface for displaying images and
+# associated metadata.
+###############################################################################
+
 from Tkinter import *
 import ImageTk
 from PIL import Image
@@ -16,11 +23,19 @@ class ImageDisp(Frame):
     (e.g. white/blackpoint, gamma) allowing callbacks to be registered for
     various events."""
     
-    def __init__(self, imgdata_list, overlay_list=None, color_column_list=None,
-                 parent=None, toplevel=None, 
-                 canvas_size=None, flip_y=False, origin=(0,0),
-                 allow_enlarge=False, enlarge_limit=5,
-                 one_zoom=True, auto_update=False,
+    def __init__(self, 
+                 imgdata_list, 
+                 overlay_list=None, 
+                 color_column_list=None,
+                 parent=None, 
+                 toplevel=None, 
+                 canvas_size=None, 
+                 flip_y=False, 
+                 origin=(0,0),
+                 allow_enlarge=False, 
+                 enlarge_limit=5,
+                 one_zoom=True, 
+                 auto_update=False,
                  whitepoint_ignore_frac=1.00):
         """The constructor for the ImageDisp class.
         
@@ -34,38 +49,69 @@ class ImageDisp(Frame):
                        all controlled by the same image controls. All images
                        must have the same dimensions.
                        
-        overlay_list   An optional list of 3-D (height x width x 3 or
-                       height x width x 4) color overlays, one per image.
-                       The values should be floating point from 0.0 - 1.0.
-                       If present, the fourth level indicates alpha level
-                       with 0 being invisible and 1 being opaque.
+        overlay_list   An optional list of 2-D (height x width) or 3-D 
+                       (height x width x {3,4}) color overlays, one per image.
+                       A list entry may be None indicating no overlay for that
+                       image, or the entire argument may be None indicating no
+                       overlays at all.
+                       The height and width may be an integer multiple of
+                       the image dimensions. In this case, the image is scaled
+                       up (with each pixel replicated in an NxM grid) so that
+                       the overlay corresponds with a sub-pixel area.
+                       If the array values are integers, they are assumed to
+                       range from 0-255. Otherwise, the array values should be
+                       floating point from 0.0 - 1.0.
+                       If the overlay is 2-D, the overlay is red. Otherwise,
+                       the third dimension is either (R,G,B) or (R,G,B,A).
+                       If present, the alpha value (A) represents the 
+                       transparency of the overlay, with 0.0 being invisible
+                       and 1.0 being opaque. This alpha level is combined with
+                       the overlay transparency slider to produce the final
+                       transparency value.
+                       If no alpha channel is provided, the overlay is opaque
+                       except where it is (0,0,0), in which case it is 
+                       transparent.
 
         color_column_list
-                       An optional list of 2-D (width x 3) colors. Each 
-                       vertical slice of an image is multiplied by the
-                       corresponding RGB values in the column. This is useful
-                       for tinting each column as a single color without
-                       having to specify a full overlay.
+                       An optional list of 2-D (width x 3) colors. Array
+                       values should be floating point. The third dimension
+                       is (R,G,B). Each vertical slice of an image is
+                       multiplied by the corresponding RGB values in the 
+                       column. This is useful for tinting each column as a 
+                       single color without having to specify a full overlay.
+                       Note, however, that the overlay transparency slider
+                       has no effect and there is no alpha channel.
         
         parent         The parent (enclosing) Tkinter widget, if any.
         
+        toplevel       The Toplevel Tkinter widget, it any. If not provided,
+                       this defaults to parent.
+        
         canvas_size    The size (width, height) of the Canvas widget to display
-                       the image. Defaults to the full size of the image.
+                       the image. The Canvas will always be this size, 
+                       regardless of the size of the image. If the image at the
+                       current zoom level is larger than the canvas, scrollbars
+                       will appear. Defaults to the full size of the image.
                        
         flip_y         By default (0,0) is in the top left corner of the
                        display. If flip_y is True then the image is flipped
                        across a horizontal line and (0,0) is at the bottom
                        left corner of the display.
         
+        origin         An optional tuple (x,y) giving the pixel location of
+                       the origin (0,0). This is used to display the mouse
+                       pointer location and to adjust the pixel location passed
+                       to callbacks.
+                       
         allow_enalrge  True to allow the zoom levels to become negative
-                       (enlarging each image datum to be large than a single
+                       (enlarging each image datum to be larger than a single
                        display pixel).
                  
         enlarge_limit  The maximum magnification permitted if allow_enlarge
                        is True.
                        
         one_zoom       True to provide only one zoom slider that affects
-                       both x and y equally. False to provide two slides to
+                       both x and y equally. False to provide two sliders to
                        allow zoom for x and y separately.
                        
         auto_update    The initial setting of the Auto Update checkbox.
@@ -1316,7 +1362,7 @@ if __name__ == '__main__':
     
     # Test ImageDisp
     
-    test_data_dir = os.environ["OOPS_TEST_DATA"]
+    test_data_dir = os.environ["OOPS_TEST_DATA_PATH"]
     
     iss_nac_fn1 = os.path.join(test_data_dir, 'cassini', 'ISS',
                                'N1649465323_1.IMG')
