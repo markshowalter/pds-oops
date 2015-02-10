@@ -229,11 +229,11 @@ def bodies_create_model(obs, body_name, inventory,
     # Compute the lat/lon mask for bootstrapping
     
     latlon_mask = bodies_reproject(obs, body_name, 
-        latitude_resolution=bodies_config['lat_resolution'], 
-        longitude_resolution=bodies_config['lon_resolution'],
+        latitude_resolution=bodies_config['mask_lat_resolution'], 
+        longitude_resolution=bodies_config['mask_lon_resolution'],
         zoom=1,
-        latlon_type=bodies_config['latlon_type'],
-        lon_direction=bodies_config['lon_direction'],
+        latlon_type=bodies_config['mask_latlon_type'],
+        lon_direction=bodies_config['mask_lon_direction'],
         mask_only=True, override_backplane=restr_bp,
         subimage_edges=(u_min,u_max,v_min,v_max))
 

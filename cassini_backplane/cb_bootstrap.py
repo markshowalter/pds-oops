@@ -78,10 +78,10 @@ def _bootstrap_mask_overlap(mask1, mask2):
             mask2 = mask2[:,mask1.shape[1]]
         elif mask1.shape[1] > mask2.shape[1]:
             mask1 = mask1[:,mask2.shape[1]]
-            
+    
     return np.logical_and(mask1, mask2)
         
-def _bootstrap_find_offset(cand_path, cand_metadata, bootstrap_config):
+def _bootstrap_find_offset(cand_path, cand_metadata, bootstrap_config, **kwargs):
     logger = logging.getLogger(_LOGGING_NAME+'._bootstrap_find_offset')
 
     _, cand_filename = os.path.split(cand_path)
@@ -106,7 +106,7 @@ def _bootstrap_find_offset(cand_path, cand_metadata, bootstrap_config):
     
     new_metadata = master_find_offset(cand_obs, create_overlay=True,
                                       bodies_cartographic_data=cart_dict,
-                                      allow_stars=False) # XXX
+                                      **kwargs) # XXX
 
     if new_metadata['offset'] is not None:
         logger.debug('Bootstrapping successful - updating mosaic')
@@ -185,9 +185,61 @@ def _bootstrap_update_lists(body_name, cand_idx, new_metadata):
         
     _BOOTSTRAP_KNOWNS[body_name].sort(key=lambda x: 
                                             abs(x[1]['midtime']))
+
+def _bootstrap_time_expired(body_name):
+    return False # XXX
     
+def _bootstrap_sort_candidates(body_name):
+    candidates = _BOOTSTRAP_CANDIDATES[body_name]
+    mosaic_metadata = _BOOTSTRAP_MOSAICS[body_name]
     
-def bootstrap_add_file(image_path, metadata, bootstrap_config=None):
+    for cand_path, cand_metadata in candidates:
+        cand_body_metadata = cand_metadata['bodies_metadata'][body_name]
+        overlap = _bootstrap_mask_overlap(mosaic_metadata['full_mask'],
+                                          cand_body_metadata['latlon_mask'])
+        count = np.sum(overlap)
+        cand_metadata['.sort_metric'] = count 
+
+    print 'Unsorted candidate list:'
+    for i in xrange(len(candidates)):
+        print '  ', candidates[i][0]
+    print
+    
+    candidates.sort(key=lambda x: x[1]['.sort_metric'], reverse=True)
+    
+    print 'Sorted candidate list:'
+    for i in xrange(len(candidates)):
+        print '  ', candidates[i][0], candidates[i][1]['.sort_metric']
+    print
+        
+        
+def _bootstrap_process(force, bootstrap_config, **kwargs):
+    for body_name in sorted(_BOOTSTRAP_CANDIDATES):
+        if body_name not in BOOTSTRAP_BODY_LIST:
+            continue
+        candidates = _BOOTSTRAP_CANDIDATES[body_name]
+        if force or _bootstrap_time_expired(body_name):
+            # Process one body
+            _bootstrap_make_initial_mosaic(body_name, bootstrap_config)
+            go_again = True
+            while go_again:
+                go_again = False
+                _bootstrap_sort_candidates(body_name)
+                for cand_idx in xrange(len(candidates)):
+                    cand_path, cand_metadata = candidates[cand_idx]
+                    if cand_metadata['bootstrap_body'] != body_name:
+                        continue
+                    offset_metadata = _bootstrap_find_offset(
+                               cand_path, cand_metadata, bootstrap_config,
+                               allow_stars=False, **kwargs)
+                    if (offset_metadata is not None and
+                        offset_metadata['offset'] is not None):
+                        _bootstrap_update_lists(
+                            body_name, cand_idx, offset_metadata)
+                        go_again = True
+                        break    
+    
+def bootstrap_add_file(image_path, metadata, bootstrap_config=None, **kwargs):
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_add_file')
 
     if bootstrap_config is None:
@@ -210,29 +262,8 @@ def bootstrap_add_file(image_path, metadata, bootstrap_config=None):
             _BOOTSTRAP_CANDIDATES[body_name].append((image_path,metadata))
             _BOOTSTRAP_CANDIDATES[body_name].sort(key=lambda x: 
                                                         abs(x[1]['midtime']))
-            logger.debug('Candidate %s', image_filename)
+            logger.debug('Candidate %s - %s', image_filename, body_name)
         else:
             logger.debug('No offset and not a candidate %s', image_filename)
 
-    
-    for body_name in BOOTSTRAP_BODY_LIST:
-        if body_name not in _BOOTSTRAP_CANDIDATES:
-            continue
-        candidates = _BOOTSTRAP_CANDIDATES[body_name]
-        if metadata is None or False: #_bootstrap_time_expired(body_name):
-            _bootstrap_make_initial_mosaic(body_name, bootstrap_config)
-            go_again = True
-            while go_again:
-                go_again = False
-                for cand_idx in xrange(len(candidates)):
-                    cand_path, cand_metadata = candidates[cand_idx]
-                    if cand_metadata['bootstrap_body'] != body_name:
-                        continue
-                    offset_metadata = _bootstrap_find_offset(
-                               cand_path, cand_metadata, bootstrap_config)
-                    if (offset_metadata is not None and
-                        offset_metadata['offset'] is not None):
-                        _bootstrap_update_lists(
-                            body_name, cand_idx, offset_metadata)
-                        go_again = True
-                        break
+    _bootstrap_process(metadata is None, bootstrap_config, **kwargs)

@@ -71,7 +71,7 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 FUZZY_BODY_LIST = ['TITAN', 'HYPERION'] # XXX
 
 # These bodies can be used for bootstrapping.
-BOOTSTRAP_BODY_LIST = ['ENCELADUS', 'RHEA']
+BOOTSTRAP_BODY_LIST = ['ENCELADUS', 'RHEA', 'TETHYS']
 
 ##################
 # CONFIGURATIONS #
@@ -149,13 +149,12 @@ BODIES_DEFAULT_CONFIG = {
     
     # The resolution in longitude and latitude (radians) for the metadata
     # latlon mask.
-    'lon_resolution': 1. * oops.RPD,
-    'lat_resolution': 1. * oops.RPD,
+    'mask_lon_resolution': 1. * oops.RPD,
+    'mask_lat_resolution': 1. * oops.RPD,
 
     # The latlon coordinate type and direction for the metadata latlon mask.
-    'latlon_type': 'centric',
-    'lon_direction': 'east',
-    
+    'mask_latlon_type': 'centric',
+    'mask_lon_direction': 'east',
 }
 
 RINGS_DEFAULT_CONFIG = {

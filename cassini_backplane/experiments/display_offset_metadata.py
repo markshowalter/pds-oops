@@ -11,12 +11,12 @@ from cb_config import *
 from cb_gui_offset_data import *
 from cb_util_file import *
 
-mosaic_dir = os.path.join(RESULTS_ROOT, 'COISS_2xxx')
+results_dir = os.path.join(RESULTS_ROOT, 'COISS_2xxx')
 
 root = tk.Tk()
 root.withdraw()
 
-file_initialdir = mosaic_dir
+file_initialdir = results_dir
 
 while True:
     toplevel = Toplevel()
@@ -28,7 +28,6 @@ while True:
         break
 
     file_initialdir, _ = os.path.split(offset_path)
-    
     img_path = file_offset_to_img_path(offset_path)
     
     metadata = file_read_offset_metadata(img_path)

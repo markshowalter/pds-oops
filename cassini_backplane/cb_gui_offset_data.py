@@ -79,12 +79,12 @@ def _callback_mousemove(x, y, metadata):
                   (body_name[:5]+' '+metadata['latitude_type']+' Lat:'))
                 metadata['label_body_latitude'].config(text=
                                          ('%7.3f'%val.vals))
-                val = metadata[body_name+'_resolution']
-                if not val.masked():
-                    metadata['label_body_name_resolution'].config(text=
-                                         (body_name[:5]+' Resolution:'))
-                    metadata['label_body_resolution'].config(text=
-                                         ('%7.3f'%val.vals))
+            val = metadata[body_name+'_resolution'][y,x]
+            if not val.masked():
+                metadata['label_body_name_resolution'].config(text=
+                                     (body_name[:5]+' Resolution:'))
+                metadata['label_body_resolution'].config(text=
+                                     ('%7.3f'%val.vals))
             val = metadata[body_name+'_phase'][y,x]
             if not val.masked():
                 metadata['label_body_name_phase'].config(text=
@@ -133,22 +133,24 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     set_obs_ext_bp(obs, (ext_u, ext_v))
     
     if show_rings:
-        metadata['ring_radius'] = (
-            obs.ext_bp.ring_radius('saturn:ring').vals.astype('float'))
-        metadata['ring_longitude'] = (
-            obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float'))
-        metadata['ring_resolution'] = (
-            obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
-                                                        astype('float'))
-        metadata['ring_phase'] = (
-            obs.ext_bp.phase_angle('saturn:ring').vals.astype('float') * 
-                                                            oops.DPR)
-        metadata['ring_emission'] = (
-            obs.ext_bp.emission_angle('saturn:ring').vals.astype('float') *
-                                                            oops.DPR)
-        metadata['ring_incidence'] = (
-            obs.ext_bp.incidence_angle('saturn:ring').vals.astype('float') *
-                                                            oops.DPR) 
+        bp_ring_radius = obs.ext_bp.ring_radius('saturn:ring')
+        if not np.all(bp_ring_radius.mask):
+            bp_ring_radius = bp_ring_radius.vals.astype('float')
+            metadata['ring_radius'] = bp_ring_radius
+            metadata['ring_longitude'] = (
+                obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float'))
+            metadata['ring_resolution'] = (
+                obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                                                            astype('float'))
+            metadata['ring_phase'] = (
+                obs.ext_bp.phase_angle('saturn:ring').vals.astype('float') * 
+                                                                oops.DPR)
+            metadata['ring_emission'] = (
+                obs.ext_bp.emission_angle('saturn:ring').vals.astype('float') *
+                                                                oops.DPR)
+            metadata['ring_incidence'] = (
+                obs.ext_bp.incidence_angle('saturn:ring').vals.astype('float')*
+                                                                oops.DPR) 
 
     if show_bodies:
         large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
@@ -209,8 +211,6 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             if mask is not None:
                 model = model.mask_where(mask)
             metadata[body_name+'_longitude'] = model
-            bp_resolution = restr_bp.center_resolution(body_name) # Single scalar
-            metadata[body_name+'_resolution'] = bp_resolution
             bp_phase = restr_bp.phase_angle(body_name) * oops.DPR
             model = (polymath.Scalar.as_scalar(np.zeros(ext_data.shape)).
                      mask_where_eq(0))
@@ -219,7 +219,19 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             if mask is not None:
                 model = model.mask_where(mask)
             metadata[body_name+'_phase'] = model
-            bp_emission = restr_bp.emission_angle(body_name) * oops.DPR
+            bp_emission = restr_bp.emission_angle(body_name)
+
+            bp_resolution = restr_bp.center_resolution(body_name) # Single scalar
+            bp_resolution = bp_resolution / bp_emission.cos()
+            model = (polymath.Scalar.as_scalar(np.zeros(ext_data.shape)).
+                     mask_where_eq(0))
+            model[v_min+ext_v:v_max+ext_v+1,
+                  u_min+ext_u:u_max+ext_u+1] = bp_resolution
+            if mask is not None:
+                model = model.mask_where(mask)
+            metadata[body_name+'_resolution'] = model
+
+            bp_emission *= oops.DPR
             model = (polymath.Scalar.as_scalar(np.zeros(ext_data.shape)).
                      mask_where_eq(0))
             model[v_min+ext_v:v_max+ext_v+1,
@@ -465,28 +477,28 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         gridrow += 1
 
     if show_bodies:
+        metadata['latitude_type'] = latlon_type[0].upper()
+        label = Label(addon_control_frame, 
+                      text='Body Latitude '+metadata['latitude_type']+':', 
+                      anchor='w', width=label_width)
+        label.grid(row=gridrow, column=gridcolumn, sticky=W)
+        metadata['label_body_name_latitude'] = label
+        label_latitude = Label(addon_control_frame, text='', 
+                               anchor='e', width=val_width)
+        label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+        metadata['label_body_latitude'] = label_latitude
+    
         metadata['longitude_type'] = (latlon_type[0].upper() + '/' +
                                       lon_direction[0].upper())
         label = Label(addon_control_frame, 
                       text='Body Longitude '+metadata['longitude_type']+':', 
                       anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn, sticky=W)
+        label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
         metadata['label_body_name_longitude'] = label
         label_longitude = Label(addon_control_frame, text='', 
                                 anchor='e', width=val_width)
-        label_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+        label_longitude.grid(row=gridrow, column=gridcolumn+4, sticky=W)
         metadata['label_body_longitude'] = label_longitude
-    
-        metadata['latitude_type'] = latlon_type[0].upper()
-        label = Label(addon_control_frame, 
-                      text='Body Latitude '+metadata['latitude_type']+':', 
-                      anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
-        metadata['label_body_name_latitude'] = label
-        label_latitude = Label(addon_control_frame, text='', 
-                               anchor='e', width=val_width)
-        label_latitude.grid(row=gridrow, column=gridcolumn+4, sticky=W)
-        metadata['label_body_latitude'] = label_latitude
     
         label = Label(addon_control_frame, text='Body Resolution:', 
                       anchor='w', width=label_width)

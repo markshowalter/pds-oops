@@ -992,13 +992,11 @@ def star_find_offset(obs, extend_fov=(0,0), star_config=None):
 
             if DEBUG_STARS_FILTER_IMGDISP:
                 toplevel = Tkinter.Tk()
-                frame_toplevel = Tkinter.Frame(toplevel)
                 imdisp = ImageDisp([filtered_data],
-                                   parent=frame_toplevel,
+                                   parent=toplevel,
                                    canvas_size=(512,512),
                                    allow_enlarge=True, enlarge_limit=10,
                                    auto_update=True)
-                frame_toplevel.pack()
                 Tkinter.mainloop()
 
         offset = None

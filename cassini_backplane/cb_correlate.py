@@ -82,12 +82,10 @@ def _correlate2d(image, model, normalize=False, retile=False):
 
     if DEBUG_CORRELATE_IMGDISP:
         toplevel = Tkinter.Tk()
-        frame_toplevel = Tkinter.Frame(toplevel)
-        imdisp = ImageDisp([image,model], parent=frame_toplevel,
+        imdisp = ImageDisp([image,model], parent=toplevel,
                            canvas_size=(512,512),
                            allow_enlarge=True, enlarge_limit=10,
                            auto_update=True)
-        frame_toplevel.pack()
         Tkinter.mainloop()
     
     # Padding to a power of 2 makes FFT _much_ faster
@@ -135,12 +133,10 @@ def _correlate_2d_masked(image, model, search_size_min, search_size_max,
         search_size_max_u, search_size_max_v = search_size_max
 
     toplevel = Tkinter.Tk()
-    frame_toplevel = Tkinter.Frame(toplevel)
-    imdisp = ImageDisp([model.data,model.mask], parent=frame_toplevel,
+    imdisp = ImageDisp([model.data,model.mask], parent=toplevel,
                        canvas_size=(512,512),
                        allow_enlarge=True, enlarge_limit=10,
                        auto_update=True)
-    frame_toplevel.pack()
     Tkinter.mainloop()
 
     ret = np.zeros((search_size_max_v*2+1, search_size_max_u*2+1))
@@ -163,12 +159,10 @@ def _correlate_2d_masked(image, model, search_size_min, search_size_max,
             ret[v_offset+search_size_max_v,
                 u_offset+search_size_max_u] = corr
 #            toplevel = Tkinter.Tk()
-#            frame_toplevel = Tkinter.Frame(toplevel)
-#            imdisp = ImageDisp([image,sub_model], parent=frame_toplevel,
+#            imdisp = ImageDisp([image,sub_model], parent=toplevel,
 #                               canvas_size=(512,512),
 #                               allow_enlarge=True, enlarge_limit=10,
 #                               auto_update=True)
-#            frame_toplevel.pack()
 #            Tkinter.mainloop()
     
     return ret
@@ -276,12 +270,10 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
         
         if DEBUG_CORRELATE_IMGDISP > 1:
             toplevel = Tkinter.Tk()
-            frame_toplevel = Tkinter.Frame(toplevel)
-            imdisp = ImageDisp([slice], parent=frame_toplevel,
+            imdisp = ImageDisp([slice], parent=toplevel,
                                canvas_size=(512,512),
                                allow_enlarge=True, enlarge_limit=10,
                                auto_update=True)
-            frame_toplevel.pack()
             Tkinter.mainloop()
             
         if len(peak[0]) != 1:

@@ -62,6 +62,7 @@ def process_random_file(root_path):
         new_dir = os.path.join(root_path, dir_list[dir_no])
         process_random_file(new_dir)
 
+process_image(r'COISS_2009\data\1487182149_1487415680\N1487303918_2_CALIB.IMG')
 process_image(r'COISS_2008\data\1484506648_1484573247/N1484530421_1_CALIB.IMG')
 process_image(r'COISS_2014\data\1501618408_1501647096\N1501645855_1_CALIB.IMG')
 
