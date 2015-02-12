@@ -105,8 +105,7 @@ def _callback_mousemove(x, y, metadata):
                                          ('%7.3f'%val.vals))
         
 def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
-                        latlon_type='centric', lon_direction='east',
-                        toplevel=None):
+                        latlon_type='centric', lon_direction='east'):
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']
@@ -253,12 +252,11 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             else:
                 mask = ~orig_model_mask | mask 
 
-    if toplevel is None:
-        toplevel = Tk()
+    toplevel = Toplevel()
     toplevel.title(obs.filename)
 
     imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,512), 
-                        parent=toplevel, toplevel=toplevel,
+                        parent=toplevel,
                         allow_enlarge=True,
                         auto_update=True, origin=(ext_u,ext_v))
 

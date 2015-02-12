@@ -32,5 +32,4 @@ while True:
     
     metadata = file_read_offset_metadata(img_path)
     obs = read_iss_file(img_path)
-    toplevel = Toplevel()
-    display_offset_data(obs, metadata, toplevel=toplevel)
+    display_offset_data(obs, metadata)

@@ -89,13 +89,13 @@ def _callback_mousemove(x, y, metadata):
     
     full_mask = metadata['full_mask']
     if not full_mask[y,x]:  # Invalid pixel
-        metadata['label_phase'].config(text='')
-        metadata['label_incidence'].config(text='')
-        metadata['label_emission'].config(text='')
-        metadata['label_resolution'].config(text='')
-        metadata['label_image_num'].config(text='')
-        metadata['label_image'].config(text='')
-        metadata['label_date'].config(text='')
+        metadata['label_phase'].config(text='N/A')
+        metadata['label_incidence'].config(text='N/A')
+        metadata['label_emission'].config(text='N/A')
+        metadata['label_resolution'].config(text='N/A')
+        metadata['label_image_num'].config(text='N/A')
+        metadata['label_image'].config(text='N/A')
+        metadata['label_date'].config(text='N/A')
     else:
         metadata['label_phase'].config(text=
                            ('%7.3f'%(metadata['phase'][y,x] * oops.DPR)))
@@ -106,13 +106,13 @@ def _callback_mousemove(x, y, metadata):
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
         metadata['label_image'].config(text=
-               metadata['filename_list'][metadata['image_number'][y,x]][:13])
+               metadata['filename_list'][metadata['image_number'][y,x]])
         metadata['label_image_num'].config(text=
                            ('%d'%metadata['image_number'][y,x]))
         metadata['label_date'].config(text=
                            cspice.et2utc(float(metadata['time'][y,x]), 'C', 0))
-        
-def display_body_mosaic(metadata, toplevel=None):
+
+def display_body_mosaic(metadata):
     metadata = metadata.copy() # Don't mutate the one given to us
 
     metadata['latitude'] = bodies_generate_latitudes(latitude_resolution=
@@ -120,12 +120,11 @@ def display_body_mosaic(metadata, toplevel=None):
     metadata['longitude'] = bodies_generate_longitudes(longitude_resolution=
                                     metadata['lon_resolution'])
 
-    if toplevel is None:
-        toplevel = Tk()
+    toplevel = Toplevel()
     toplevel.title(metadata['body_name'])
 
     imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,400),
-                        parent=toplevel, toplevel=toplevel,
+                        parent=toplevel,
                         allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)
 

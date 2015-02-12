@@ -23,5 +23,4 @@ while True:
     if path == '':
         break
     metadata = file_read_mosaic_metadata(path)
-    toplevel = Toplevel()
-    display_body_mosaic(metadata, toplevel=toplevel)
+    display_body_mosaic(metadata)
