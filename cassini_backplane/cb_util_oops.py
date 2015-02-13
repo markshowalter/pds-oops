@@ -1,23 +1,43 @@
+###############################################################################
+# cb_util_oops.py
+#
+# Routines related to oops.
+#
+# Exported routines:
+#    make_corner_meshgrid
+#    make_center_meshgrid
+#    make_ext_meshgrid
+#    set_obs_corner_bp
+#    set_obs_center_bp
+#    set_obs_ext_corner_bp
+#    set_obs_bp
+#    set_obs_ext_bp
+#    set_obs_ext_data    
+#    compute_ra_dec_limits
+#    compute_sun_saturn_distance
+###############################################################################
+
 import cb_logging
 import logging
 
-import oops
-import solar
 import numpy as np
-from polymath import *
+
+import oops
 
 from cb_util_image import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 #===============================================================================
 #
-# OOPS HELPERS 
+# MESHGRIDS AND BACKPLANES
 #
 #===============================================================================
 
 def make_corner_meshgrid(obs, extend_fov=(0,0)):
+    """Create a Meshgrid with points only in the four corners of the extended
+    FOV."""
     mg = oops.Meshgrid.for_fov(obs.fov,
              origin     =(-extend_fov[0]+0.5,-extend_fov[1]+0.5),
              limit      =(obs.data.shape[1]+extend_fov[0]-0.5,
@@ -27,7 +47,16 @@ def make_corner_meshgrid(obs, extend_fov=(0,0)):
              swap       =True)
     return mg
 
+def make_center_meshgrid(obs):
+    """Create a Meshgrid with only a single point in the center."""
+    mg = oops.Meshgrid.for_fov(obs.fov,
+             origin=(obs.data.shape[1]//2, obs.data.shape[0]//2),
+             limit =(obs.data.shape[1]//2, obs.data.shape[0]//2),
+             swap  =True)
+    return mg
+
 def make_ext_meshgrid(obs, extend_fov=(0,0)):
+    """Create a Meshgrid for the entire extended FOV."""
     mg = oops.Meshgrid.for_fov(obs.fov,
               origin=(-extend_fov[0]+.5, -extend_fov[1]+.5),
               limit =(obs.data.shape[1]+extend_fov[0]-.5,
@@ -36,28 +65,59 @@ def make_ext_meshgrid(obs, extend_fov=(0,0)):
     return mg
 
 def set_obs_corner_bp(obs, force=False):
-    # The non-extended FOV
+    """Create a Backplane for the corner points of the original FOV.
+    
+    Sets obs.corner_meshgrid and obs.corner_bp.
+    """
     if (not hasattr(obs, 'corner_bp') or obs.corner_meshgrid is None or
         obs.corner_bp is None or force):
         obs.corner_meshgrid = make_corner_meshgrid(obs)
         obs.corner_bp = oops.Backplane(obs, meshgrid=obs.corner_meshgrid)
 
+def set_obs_center_bp(obs, force=False):
+    """Create a Backplane for the center point of the original FOV.
+    
+    Sets obs.center_meshgrid and obs.center_bp.
+    """
+    if (not hasattr(obs, 'center_bp') or obs.center_meshgrid is None or
+        obs.center_bp is None or force):
+        obs.center_meshgrid = make_center_meshgrid(obs)
+        obs.center_bp = oops.Backplane(obs, meshgrid=obs.center_meshgrid)
+
 def set_obs_ext_corner_bp(obs, extend_fov, force=False):
-    # The extended FOV
+    """Create a Backplane for the corner points of the extended FOV.
+    
+    Sets obs.extend_fov, obs.ext_corner_meshgrid and obs.ext_corner_bp.
+    """
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
         not hasattr(obs, 'ext_corner_bp') or obs.extend_fov is None or
-        obs.ext_corner_meshgrid is None or obs.ext_corner_bp is None or force):
+        obs.ext_corner_meshgrid is None or
+        obs.ext_corner_bp is None or force):
         obs.extend_fov = extend_fov
         obs.ext_corner_meshgrid = make_corner_meshgrid(obs, extend_fov)
-        obs.ext_corner_bp = oops.Backplane(obs, meshgrid=obs.ext_corner_meshgrid)
+        obs.ext_corner_bp = oops.Backplane(obs,
+                                           meshgrid=obs.ext_corner_meshgrid)
 
 def set_obs_bp(obs, force=False):
-    # The non-extended FOV
+    """Create a Backplane for the original FOV.
+    
+    Sets obs.bp.
+    """
     if not hasattr(obs, 'bp') or obs.bp is None or force:
         obs.bp = oops.Backplane(obs)
 
 def set_obs_ext_bp(obs, extend_fov, force=False):
-    # The extended FOV
+    """Create a Backplane for the extended FOV.
+    
+    Sets obs.extend_fov, obs.ext_meshgrid, and obs.ext_bp.
+    """
+    if extend_fov == (0,0):
+        set_obs_bp(obs)
+        obs.extend_fov = extend_fov
+        obs.ext_meshgrid = None
+        obs.ext_bp = obs.bp
+        return
+    
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
         not hasattr(obs, 'ext_bp') or obs.extend_fov is None or
         obs.ext_meshgrid is None or obs.ext_bp is None or force):
@@ -66,34 +126,41 @@ def set_obs_ext_bp(obs, extend_fov, force=False):
         obs.ext_bp = oops.Backplane(obs, meshgrid=obs.ext_meshgrid)
 
 def set_obs_ext_data(obs, extend_fov, force=False):
-    # The extended FOV
+    """Pad the data and store the result.
+    
+    Sets obs.extend_fov, obs.ext_data.
+    """
     if (not hasattr(obs, 'extend_fov') or obs.extend_fov != extend_fov or
         not hasattr(obs, 'ext_data') or obs.extend_fov is None or
         obs.ext_data is None or force):
         obs.extend_fov = extend_fov
         obs.ext_data = pad_image(obs.data, extend_fov)
+
+
+#===============================================================================
+#
+# COMPUTATIONAL ASSISTANCE
+#
+#===============================================================================
         
 def compute_ra_dec_limits(obs, extend_fov=(0,0)):
     """Find the RA and DEC limits of an observation.
         
     Inputs:
-        obs            The observation, which isassumed to cover less than
+        obs            The observation, which is assumed to cover less than
                        half the sky. If either RA or DEC wraps around, the min
                        value will be greater than the max value.
-        extend_fov     The amount of padding to add in the (U,V) dimension
+        extend_fov     The amount of padding to add in the (U,V) dimension.
        
     Returns:
         ra_min, ra_max, dec_min, dec_max (radians)
     """
-    logger = logging.getLogger(LOGGING_NAME+'.ra_dec_limits')
+    logger = logging.getLogger(_LOGGING_NAME+'.ra_dec_limits')
     
-    # Create a meshgrid for the four corners of the image
-    corner_meshgrid = make_corner_meshgrid(obs, extend_fov)
-    
-    # Compute the RA and DEC for the corners
-    backplane = oops.Backplane(obs, corner_meshgrid)
-    ra = backplane.right_ascension()
-    dec = backplane.declination()
+    set_obs_ext_corner_bp(obs, extend_fov)
+
+    ra = obs.ext_corner_bp.right_ascension()
+    dec = obs.ext_corner_bp.declination()
     
     ra_min = ra.min()
     ra_max = ra.max()    
@@ -109,14 +176,6 @@ def compute_ra_dec_limits(obs, extend_fov=(0,0)):
         dec_min = dec[np.where(dec>np.pi)].min()
         dec_max = dec[np.where(dec<np.pi)].max()
 
-#    logger.debug('RA, DEC @ 0,0 %6.4f %7.4f', 
-#                 ra[ 0, 0].vals, dec[ 0, 0].vals)
-#    logger.debug('RA, DEC @ 0,N %6.4f %7.4f',
-#                 ra[ 0,-1].vals, dec[ 0,-1].vals)
-#    logger.debug('RA, DEC @ N,0 %6.4f %7.4f',
-#                 ra[-1, 0].vals, dec[-1, 0].vals)
-#    logger.debug('RA, DEC @ N,N %6.4f %7.4f',
-#                 ra[-1,-1].vals, dec[-1,-1].vals)
     logger.debug('RAMIN %6.4f RAMAX %6.4f DECMIN %7.4f DECMAX %7.4f',
                  ra_min, ra_max, dec_min, dec_max)
     
@@ -126,18 +185,12 @@ def compute_sun_saturn_distance(obs):
     """Compute the distance from the Sun to Saturn in AU."""
     target_sun_path = oops.Path.as_waypoint("SATURN").wrt('SUN')
     sun_event = target_sun_path.event_at_time(obs.midtime)
-    solar_range = sun_event.pos.norm().vals / solar.AU
+    solar_range = sun_event.pos.norm().vals / oops.AU
 
     return solar_range
 
-#===============================================================================
+#==============================================================================
 # 
-#===============================================================================
-
-def mask_to_array(mask, shape):
-    if np.shape(mask) == shape:
-        return mask
-    
-    new_mask = np.empty(shape)
-    new_mask[:,:] = mask
-    return new_mask
+# MISCELLANEOUS
+#
+#==============================================================================

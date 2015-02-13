@@ -1,27 +1,36 @@
+###############################################################################
+# cb_util_flux.py
+#
+# Routines related to image flux calibration.
+#
+# Exported routines:
+#    calibrate_iof_image_as_flux
+#    calibrate_iof_image_as_dn
+#
+#    compute_dn_from_star
+#
+#    plot_cassini_filter_transmission
+#    plot_johnson_filter_transmission
+#    plot_planck_vs_solar_flux
+###############################################################################
+
 import cb_logging
 import logging
 
-import oops
-from starcat.starcatalog import (Star, SCLASS_TO_SURFACE_TEMP, 
-                                 SCLASS_TO_B_MINUS_V)
-
-from cb_util_oops import *
-from cb_config import MIN_DETECTABLE_DN
+import os
 
 import numpy as np
 import scipy.constants as const
 import scipy.interpolate as interp
 import scipy.integrate as integrate
 import matplotlib.pyplot as plt
-import os
 
-# Contains solar flux, filter transmission convolved with quantum efficiency
-CISSCAL_CALIB_PATH = os.getenv('CISSCAL_CALIB_PATH')
+import oops
 
-# Contains filter transmission and PSF data
-CASSINI_CALIB_PATH = os.getenv('CASSINI_CALIB_PATH')
+from cb_config import *
+from cb_util_oops import *
 
-LOGGING_NAME = 'cb.' + __name__
+_LOGGING_NAME = 'cb.' + __name__
 
 
 #===============================================================================
@@ -30,7 +39,7 @@ LOGGING_NAME = 'cb.' + __name__
 #
 #===============================================================================
 
-def interpolate_and_convolve_2(x1, y1, x2, y2):
+def _interpolate_and_convolve_2(x1, y1, x2, y2):
     """Convolve two tabulations and return the intersected interval."""
     min_x = max(np.min(x1), np.min(x2))
     max_x = min(np.max(x1), np.max(x2))
@@ -41,10 +50,10 @@ def interpolate_and_convolve_2(x1, y1, x2, y2):
 
     return new_x, new_y1*new_y2
 
-def interpolate_and_convolve_3(x1, y1, x2, y2, x3, y3):
+def _interpolate_and_convolve_3(x1, y1, x2, y2, x3, y3):
     """Convolve three tabulations and return the intersected interval."""
-    min_x = max(np.min(x1), np.min(x2), np.min(x3))
-    max_x = min(np.max(x1), np.max(x2), np.max(x3))
+    min_x = max(np.ceil(np.min(x1)), np.ceil(np.min(x2)), np.ceil(np.min(x3)))
+    max_x = min(np.floor(np.max(x1)), np.floor(np.max(x2)), np.floor(np.max(x3)))
     new_x = np.arange(min_x, max_x+0.1)
 
     new_y1 = interp.interp1d(x1, y1)(new_x)
@@ -60,11 +69,11 @@ def interpolate_and_convolve_3(x1, y1, x2, y2, x3, y3):
 #
 #===============================================================================
 
-CISSCAL_DETECTOR_GAIN = {'NAC': 30.27, 'WAC': 27.68}
-CISSCAL_DETECTOR_GAIN_RATIO = {'NAC': [0.135386, 0.309569, 1.0, 2.357285],
-                               'WAC': [0.125446, 0.290637, 1.0, 2.360374]}
-CISSCAL_DETECTOR_SOLID_ANGLE = {'NAC': 3.6e-11, 'WAC': 3.6e-9} # Steradians
-CISSCAL_DETECTOR_OPTICS_AREA = {'NAC': 264.84, 'WAC': 29.32} # Aperture cm^2
+_CISSCAL_DETECTOR_GAIN = {'NAC': 30.27, 'WAC': 27.68}
+_CISSCAL_DETECTOR_GAIN_RATIO = {'NAC': [0.135386, 0.309569, 1.0, 2.357285],
+                                'WAC': [0.125446, 0.290637, 1.0, 2.360374]}
+_CISSCAL_DETECTOR_SOLID_ANGLE = {'NAC': 3.6e-11, 'WAC': 3.6e-9} # Steradians
+_CISSCAL_DETECTOR_OPTICS_AREA = {'NAC': 264.84, 'WAC': 29.32} # Aperture cm^2
 
 # From the CISSCAL User Guide March 20, 2009 section 5.9
 # Converting from DN to Flux:
@@ -87,83 +96,83 @@ CISSCAL_DETECTOR_OPTICS_AREA = {'NAC': 264.84, 'WAC': 29.32} # Aperture cm^2
 
 def _read_cisscal_calib_file(filename):
     """Read a CISSCAL calibration table."""
-    logger = logging.getLogger(LOGGING_NAME+'.read_cisscal_calib_file')
+    logger = logging.getLogger(_LOGGING_NAME+'.read_cisscal_calib_file')
     logger.debug('Reading "%s"', filename)
 
-    fp = open(filename, 'r')
-    while True:
-        line = fp.readline().strip()
-        if line == '\\begindata':
-            break
-    ret_list = []
-    while True:
-        line = fp.readline().strip()
-        if len(line) == 0:
-            break
-        if line == '\\enddata':
-            break
-        fields = line.split()
-        field_list = [float(x) for x in fields]
-        ret_list.append(field_list)
-    fp.close()
+    with open(filename, 'r') as fp:
+        for line in fp:
+            if line.startswith('\\begindata'):
+                break
+        else:
+            assert False
+        ret_list = []
+        for line in fp:
+            if line.startswith('\\enddata'):
+                break
+            fields = line.strip('\r\n').split()
+            field_list = [float(x) for x in fields]
+            ret_list.append(field_list)
     
     return ret_list
 
 
-CISSCAL_FILTER_TRANSMISSION_CACHE = {}
+_CISSCAL_FILTER_TRANSMISSION_CACHE = {}
 
-def cisscal_filter_transmission(obs):
+def _cisscal_filter_transmission(obs):
     """Return the (wavelengths, transmission) for the joint filters."""
     key = (obs.detector, obs.filter1, obs.filter2)
-    if key not in CISSCAL_FILTER_TRANSMISSION_CACHE:
-        filter_filename = 'iss' + obs.detector.lower()[:2] + obs.filter1.lower()
+    if key not in _CISSCAL_FILTER_TRANSMISSION_CACHE:
+        filter_filename = ('iss' + obs.detector.lower()[:2] + 
+                           obs.filter1.lower())
         filter_filename += obs.filter2.lower() + '_systrans.tab'
-        systrans_filename = os.path.join(CISSCAL_CALIB_PATH, 'efficiency',
+        systrans_filename = os.path.join(CISSCAL_CALIB_ROOT, 'efficiency',
                                          'systrans', filter_filename)
         systrans_list = _read_cisscal_calib_file(systrans_filename)
         systrans_wl = [x[0] for x in systrans_list] # Wavelength in nm
         systrans_xmit = [x[1] for x in systrans_list]
     
-        CISSCAL_FILTER_TRANSMISSION_CACHE[key] = (systrans_wl, systrans_xmit)
+        _CISSCAL_FILTER_TRANSMISSION_CACHE[key] = (systrans_wl, systrans_xmit)
     
-    return CISSCAL_FILTER_TRANSMISSION_CACHE[key]
+    return _CISSCAL_FILTER_TRANSMISSION_CACHE[key]
 
 
-CISSCAL_QE_CORRECTION_CACHE = {}
+_CISSCAL_QE_CORRECTION_CACHE = {}
 
-def cisscal_qe_correction(obs):
+def _cisscal_qe_correction(obs):
     """Return the (wavelengths, vals) for QE correction."""
     key = obs.detector
-    if key not in CISSCAL_QE_CORRECTION_CACHE:    
-        qecorr_filename = os.path.join(CISSCAL_CALIB_PATH, 'correction',
-                                       obs.detector.lower()+'_qe_correction.tab')
+    if key not in _CISSCAL_QE_CORRECTION_CACHE:    
+        qecorr_filename = os.path.join(
+                               CISSCAL_CALIB_ROOT, 'correction',
+                               obs.detector.lower()+'_qe_correction.tab')
         qecorr_list = _read_cisscal_calib_file(qecorr_filename)
         qecorr_wl = [x[0] for x in qecorr_list] # Wavelength in nm
         qecorr_val = [x[1] for x in qecorr_list]
 
-        CISSCAL_QE_CORRECTION_CACHE[key] = (qecorr_wl, qecorr_val)
+        _CISSCAL_QE_CORRECTION_CACHE[key] = (qecorr_wl, qecorr_val)
     
-    return CISSCAL_QE_CORRECTION_CACHE[key]
+    return _CISSCAL_QE_CORRECTION_CACHE[key]
 
 
-CISSCAL_SOLAR_FLUX_CACHE = None
+_CISSCAL_SOLAR_FLUX_CACHE = None
 
-def cisscal_solar_flux():
-    """Return the (wavelengths, flux) for the solar flux in phot/cm^2/s/nm at 1 AU."""
-    global CISSCAL_SOLAR_FLUX_CACHE
+def _cisscal_solar_flux():
+    """Return the (wavelengths, flux) for the solar flux in phot/cm^2/s/nm at
+    1 AU."""
+    global _CISSCAL_SOLAR_FLUX_CACHE
     
-    if CISSCAL_SOLAR_FLUX_CACHE is None:    
+    if _CISSCAL_SOLAR_FLUX_CACHE is None:    
         # Flux is in photons / cm^2 / s / angstrom at 1 AU
-        solarflux_filename = os.path.join(CISSCAL_CALIB_PATH, 'efficiency',
+        solarflux_filename = os.path.join(CISSCAL_CALIB_ROOT, 'efficiency',
                                           'solarflux.tab')
         solarflux_list = _read_cisscal_calib_file(solarflux_filename)
         solarflux_wl = [x[0]/10. for x in solarflux_list] # Wavelength in nm
         solarflux_flux = [x[1]*10. for x in solarflux_list]
         # Flux is now in photons / cm^2 / s / nm at 1 AU
     
-        CISSCAL_SOLAR_FLUX_CACHE = (solarflux_wl, solarflux_flux)
+        _CISSCAL_SOLAR_FLUX_CACHE = (solarflux_wl, solarflux_flux)
 
-    return CISSCAL_SOLAR_FLUX_CACHE
+    return _CISSCAL_SOLAR_FLUX_CACHE
 
 #===============================================================================
 
@@ -171,13 +180,13 @@ def _compute_cisscal_efficiency(obs):
     """Compute the efficiency factor without solar flux."""
     # From cassimg__dividebyefficiency.pro
 
-    logger = logging.getLogger(LOGGING_NAME+'._compute_cisscal_efficiency')
+    logger = logging.getLogger(_LOGGING_NAME+'._compute_cisscal_efficiency')
 
     # Read in filter transmission
-    systrans_wl, systrans_xmit = cisscal_filter_transmission(obs)
+    systrans_wl, systrans_xmit = _cisscal_filter_transmission(obs)
     
     # Read in QE correction
-    qecorr_wl, qecorr_val = cisscal_qe_correction(obs)
+    qecorr_wl, qecorr_val = _cisscal_qe_correction(obs)
 
     min_wl = np.ceil(np.max([np.min(systrans_wl),
                              np.min(qecorr_wl)]))
@@ -208,16 +217,17 @@ def _compute_cisscal_solar_flux_efficiency(obs):
     """Compute the efficiency factor including solar flux."""
     # From cassimg__dividebyefficiency.pro
 
-    logger = logging.getLogger(LOGGING_NAME+'._compute_cisscal_solar_flux_efficiency')
+    logger = logging.getLogger(_LOGGING_NAME+
+                               '._compute_cisscal_solar_flux_efficiency')
     
     # Read in filter transmission
-    systrans_wl, systrans_xmit = cisscal_filter_transmission(obs)
+    systrans_wl, systrans_xmit = _cisscal_filter_transmission(obs)
     
     # Read in QE correction
-    qecorr_wl, qecorr_val = cisscal_qe_correction(obs)
+    qecorr_wl, qecorr_val = _cisscal_qe_correction(obs)
     
     # Read in solar flux
-    solarflux_wl, solarflux_flux = cisscal_solar_flux()
+    solarflux_wl, solarflux_flux = _cisscal_solar_flux()
     
     # Compute distance Sun-Saturn
     solar_range = compute_sun_saturn_distance(obs)
@@ -261,7 +271,7 @@ def _compute_cisscal_solar_flux_efficiency(obs):
 
 #===============================================================================
 
-IOF_FLUX_CONVERSION_FACTOR_CACHE = {}
+_IOF_FLUX_CONVERSION_FACTOR_CACHE = {}
 
 def calibrate_iof_image_as_flux(obs):
     """Convert an image currently in I/F to flux.
@@ -271,11 +281,11 @@ def calibrate_iof_image_as_flux(obs):
     """
     # We undo step 4 and then redo it with no stellar flux
 
-    logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_flux')
+    logger = logging.getLogger(_LOGGING_NAME+'.calibrate_iof_image_as_flux')
 
     key = (obs.detector, obs.filter1, obs.filter2)
-    if key in IOF_FLUX_CONVERSION_FACTOR_CACHE:
-        factor = IOF_FLUX_CONVERSION_FACTOR_CACHE[key]
+    if key in _IOF_FLUX_CONVERSION_FACTOR_CACHE:
+        factor = _IOF_FLUX_CONVERSION_FACTOR_CACHE[key]
         logger.debug('Calibration for %s %s %s cached; factor = %f',
                      obs.detector, obs.filter1, obs.filter2, factor)
         return obs.data * factor
@@ -291,29 +301,29 @@ def calibrate_iof_image_as_flux(obs):
     # excluding solar flux
     factor /= _compute_cisscal_efficiency(obs)
 
-    IOF_FLUX_CONVERSION_FACTOR_CACHE[key] = factor
+    _IOF_FLUX_CONVERSION_FACTOR_CACHE[key] = factor
 
     logger.debug('Final adjustment factor = %e', factor)
             
     return obs.data * factor
 
 
-IOF_DN_CONVERSION_FACTOR_CACHE = {}
+_IOF_DN_CONVERSION_FACTOR_CACHE = {}
 
 def calibrate_iof_image_as_dn(obs, data=None):
     """Convert an image currently in I/F to post-LUT raw DN.
     
     The input observation data is in I/F.
     """
-    logger = logging.getLogger(LOGGING_NAME+'.calibrate_iof_image_as_dn')
+    logger = logging.getLogger(_LOGGING_NAME+'.calibrate_iof_image_as_dn')
 
     if data is None:
         # Can be overriden if we want to calibrate some other data block
         data = obs.data
         
     key = (obs.detector, obs.filter1, obs.filter2, obs.texp)
-    if key in IOF_DN_CONVERSION_FACTOR_CACHE:
-        factor = IOF_DN_CONVERSION_FACTOR_CACHE[key]
+    if key in _IOF_DN_CONVERSION_FACTOR_CACHE:
+        factor = _IOF_DN_CONVERSION_FACTOR_CACHE[key]
         logger.debug('Calibration for %s %s %s %.2f cached; factor = %f',
                      obs.detector, obs.filter1, obs.filter2, obs.texp, factor)
         return data * factor
@@ -336,8 +346,8 @@ def calibrate_iof_image_as_dn(obs, data=None):
     sum_factor = obs.data.shape[0] / 1024. * obs.data.shape[1] / 1024.
     
     factor = (factor / sum_factor *
-              (CISSCAL_DETECTOR_SOLID_ANGLE[obs.detector] *
-               CISSCAL_DETECTOR_OPTICS_AREA[obs.detector]))
+              (_CISSCAL_DETECTOR_SOLID_ANGLE[obs.detector] *
+               _CISSCAL_DETECTOR_OPTICS_AREA[obs.detector]))
     # photons / s
     
     # 2) dividebyexpot.pro
@@ -348,10 +358,10 @@ def calibrate_iof_image_as_dn(obs, data=None):
     
     # 1) dntoelectrons.pro
     #        ELECTRONS = DN * GAIN / GAIN_RATIO[GAIN_MODE_ID]
-    factor = (factor / CISSCAL_DETECTOR_GAIN[obs.detector]
-                     * CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
+    factor = (factor / _CISSCAL_DETECTOR_GAIN[obs.detector] *
+              _CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
 
-    IOF_DN_CONVERSION_FACTOR_CACHE[key] = factor
+    _IOF_DN_CONVERSION_FACTOR_CACHE[key] = factor
 
     logger.debug('Final adjustment factor = %e', factor)
             
@@ -363,72 +373,68 @@ def calibrate_iof_image_as_dn(obs, data=None):
 #
 #===============================================================================
 
-CASSINI_FILTER_TRANSMISSION = {} 
+_CASSINI_FILTER_TRANSMISSION = {} 
 
-def cassini_filter_transmission(detector, filter):
+def _cassini_filter_transmission(detector, filter):
     """Return the (wavelengths, transmission) for the given Cassini filter."""
 
-    logger = logging.getLogger(LOGGING_NAME+
+    logger = logging.getLogger(_LOGGING_NAME+
                                '.cassini_filter_transmission')
 
-    if len(CASSINI_FILTER_TRANSMISSION) == 0:
+    if len(_CASSINI_FILTER_TRANSMISSION) == 0:
         for iss_det in ['NAC', 'WAC']:
             base_dirname = iss_det[0].lower() + '_c_trans_sum'
-            filename = os.path.join(CASSINI_CALIB_PATH, base_dirname,
+            filename = os.path.join(CASSINI_CALIB_ROOT, base_dirname,
                                     'all_filters.tab') 
             logger.debug('Reading "%s"', filename)
-            filter_fp = open(filename, 'r')
-        
-            header = filter_fp.readline().strip('\r\n')
-            header_fields = header.split('\t')
-            assert header_fields[0] == 'WAVELENGTH (nm)'
-            filter_name_list = []
-            for i in xrange(1, len(header_fields)):
-                filter_name = header_fields[i]
-                # For unknown reasons the headers of the NAC and WAC files are
-                # formatted differently. They also have weird names for the
-                # polarized filters.
-                if filter_name[:7] == 'VIS POL': # NAC
-                    filter_name = 'P0'
-                elif filter_name[:6] == 'IR POL': # NAC
-                    filter_name = 'IRP0'
-                elif filter_name[:6] == 'IR_POL': # WAC
-                    filter_name = 'IRP0'
-                elif filter_name[0].isdigit():
-                    filter_name = filter_name[-3:]
-                else:
-                    filter_name = filter_name[:3]
+            with open(filename, 'r') as filter_fp:
+                header = filter_fp.readline().strip('\r\n')
+                header_fields = header.split('\t')
+                assert header_fields[0] == 'WAVELENGTH (nm)'
+                filter_name_list = []
+                for i in xrange(1, len(header_fields)):
+                    filter_name = header_fields[i]
+                    # For unknown reasons the headers of the NAC and WAC files are
+                    # formatted differently. They also have weird names for the
+                    # polarized filters.
+                    if filter_name[:7] == 'VIS POL': # NAC
+                        filter_name = 'P0'
+                    elif filter_name[:6] == 'IR POL': # NAC
+                        filter_name = 'IRP0'
+                    elif filter_name[:6] == 'IR_POL': # WAC
+                        filter_name = 'IRP0'
+                    elif filter_name[0].isdigit():
+                        filter_name = filter_name[-3:]
+                    else:
+                        filter_name = filter_name[:3]
+                    
+                    filter_name_list.append(filter_name)
                 
-                filter_name_list.append(filter_name)
-            
-            for i in xrange(len(filter_name_list)):
-                key = (iss_det, filter_name_list[i])
-                CASSINI_FILTER_TRANSMISSION[key] = ([], []) # wl, xmission
-            while True:
-                filter_line = filter_fp.readline().strip('\r\n')
-                if len(filter_line) == 0:
-                    break
-                filter_fields = filter_line.split('\t')
-                assert len(filter_fields) == len(filter_name_list)+1
-                if len(filter_fields[0]) == 0:
-                    continue
-                wl = float(filter_fields[0])
                 for i in xrange(len(filter_name_list)):
-                    filter_field = filter_fields[i+1].strip()
-                    if len(filter_field) > 0:
-                        key = (iss_det, filter_name_list[i])
-                        xmission = float(filter_field)
-                        CASSINI_FILTER_TRANSMISSION[key][0].append(wl)
-                        CASSINI_FILTER_TRANSMISSION[key][1].append(xmission)
-            filter_fp.close()    
+                    key = (iss_det, filter_name_list[i])
+                    _CASSINI_FILTER_TRANSMISSION[key] = ([], []) # wl, xmission
+                for filter_line in filter_fp:
+                    filter_line = filter_line.strip('\r\n')
+                    filter_fields = filter_line.split('\t')
+                    assert len(filter_fields) == len(filter_name_list)+1
+                    if len(filter_fields[0]) == 0:
+                        continue
+                    wl = float(filter_fields[0])
+                    for i in xrange(len(filter_name_list)):
+                        filter_field = filter_fields[i+1].strip('\r\n')
+                        if len(filter_field) > 0:
+                            key = (iss_det, filter_name_list[i])
+                            xmission = float(filter_field)
+                            _CASSINI_FILTER_TRANSMISSION[key][0].append(wl)
+                            _CASSINI_FILTER_TRANSMISSION[key][1].append(xmission)
     
-        pol = CASSINI_FILTER_TRANSMISSION[('NAC', 'P0')]
-        CASSINI_FILTER_TRANSMISSION[('NAC', 'P60')] = pol 
-        CASSINI_FILTER_TRANSMISSION[('NAC', 'P120')] = pol 
-        pol = CASSINI_FILTER_TRANSMISSION[('WAC', 'IRP0')]
-        CASSINI_FILTER_TRANSMISSION[('NAC', 'IRP90')] = pol 
+        pol = _CASSINI_FILTER_TRANSMISSION[('NAC', 'P0')]
+        _CASSINI_FILTER_TRANSMISSION[('NAC', 'P60')] = pol 
+        _CASSINI_FILTER_TRANSMISSION[('NAC', 'P120')] = pol 
+        pol = _CASSINI_FILTER_TRANSMISSION[('WAC', 'IRP0')]
+        _CASSINI_FILTER_TRANSMISSION[('NAC', 'IRP90')] = pol 
 
-    return CASSINI_FILTER_TRANSMISSION[(detector, filter)]
+    return _CASSINI_FILTER_TRANSMISSION[(detector, filter)]
 
 
 def plot_cassini_filter_transmission():
@@ -467,17 +473,17 @@ def plot_cassini_filter_transmission():
         'IRP90':('#4040c0', '--')
     }
     
-    _ = cassini_filter_transmission('NAC', 'CL1') # This reads all filters
+    cassini_filter_transmission('NAC', 'CL1') # This reads all filters
     for detector in ['NAC', 'WAC']:
         fig = plt.figure()
         plt.title(detector)
-        for key in sorted(CASSINI_FILTER_TRANSMISSION.keys()):
+        for key in sorted(_CASSINI_FILTER_TRANSMISSION.keys()):
             filter_det, filter_name = key
             if filter_det != detector:
                 continue
             if len(filter_name) == 1: # Bogus single-letter filters
                 continue
-            wl_list, xmission_list = CASSINI_FILTER_TRANSMISSION[key]
+            wl_list, xmission_list = _CASSINI_FILTER_TRANSMISSION[key]
             plt.plot(wl_list, xmission_list, color_info[filter_name][1],
                      color=color_info[filter_name][0], label=filter_name)
         plt.legend()
@@ -491,13 +497,13 @@ def plot_cassini_filter_transmission():
 #===============================================================================
 
 # From Bessel 1990
-JOHNSON_B_WL = np.arange(360.,561.,10)
-JOHNSON_B = np.array([
+_JOHNSON_B_WL = np.arange(360.,561.,10)
+_JOHNSON_B = np.array([
     0.000, 0.030, 0.134, 0.567, 0.920, 0.978, 1.000, 0.978, 0.935, 0.853, 0.740,
     0.640, 0.536, 0.424, 0.325, 0.235, 0.150, 0.095, 0.043, 0.009, 0.000])
 
-JOHNSON_V_WL = np.arange(470.,701.,10)
-JOHNSON_V = np.array([
+_JOHNSON_V_WL = np.arange(470.,701.,10)
+_JOHNSON_V = np.array([
     0.000, 0.030, 0.163, 0.458, 0.780, 0.967, 1.000, 0.973, 0.898, 0.792, 0.684,
     0.574, 0.461, 0.359, 0.270, 0.197, 0.135, 0.081, 0.045, 0.025, 0.017, 0.013,
     0.009, 0.000])
@@ -505,8 +511,8 @@ JOHNSON_V = np.array([
 def plot_johnson_filter_transmission():
     """Plot the Johnson B and V filter transmission functions"""
     fig = plt.figure()
-    plt.plot(JOHNSON_B_WL, JOHNSON_B, '-', color='blue', label='B')
-    plt.plot(JOHNSON_V_WL, JOHNSON_V, '-', color='green', label='V')
+    plt.plot(_JOHNSON_B_WL, _JOHNSON_B, '-', color='blue', label='B')
+    plt.plot(_JOHNSON_V_WL, _JOHNSON_V, '-', color='green', label='V')
     plt.legend()
     plt.show()
     
@@ -521,7 +527,7 @@ def _compute_planck_curve(wavelength, T):
     """Compute the Planck spectral radiance.
     
     Wavelength is in nm. Temperature is in K.
-    Result is in photons / cm^2 / s / nm / steradian
+    Result is in photons / cm^2 / s / nm / steradian.
     """
     wavelength = np.asarray(wavelength) * 1e-9
     
@@ -529,14 +535,14 @@ def _compute_planck_curve(wavelength, T):
             (wavelength**4.*(np.exp(const.h*const.c/
                                     (wavelength*const.k*T))-1.))) * 1e-9
 
-
 def plot_planck_vs_solar_flux():
     """Plot a scale Planck curve vs. the solar flux."""
     
-    solarflux_wl, solarflux_flux = cisscal_solar_flux()
+    solarflux_wl, solarflux_flux = _cisscal_solar_flux()
 
     planck_flux = _compute_planck_curve(solarflux_wl, 5778)
-    planck_flux *= oops.PI * (0.52/2 * oops.RPD) ** 2 # angular size of Sun at 1 AU
+    # Angular size of Sun at 1 AU
+    planck_flux *= oops.PI * (0.52/2 * oops.RPD) ** 2
     # The absolute flux seems to be off by a factor of ~10,000
     # No idea why. It doesn't matter, though, since we treat
     # it as dimensionless in other parts of the code.
@@ -545,13 +551,14 @@ def plot_planck_vs_solar_flux():
     scale_factor = np.sum(solarflux_flux) / np.sum(planck_flux)
     
     fig = plt.figure()
-    plt.plot(solarflux_wl, solarflux_flux, '-', color='red', lw=2.5, label='Sun')
+    plt.plot(solarflux_wl, solarflux_flux, '-', color='red', lw=2.5, 
+             label='Sun')
     plt.plot(solarflux_wl, planck_flux*scale_factor, '-', lw=2.5, color='blue',
              label='Planck')
-    wl, solarflux_v = interpolate_and_convolve_2(JOHNSON_V_WL, JOHNSON_V,
-                                                 solarflux_wl, solarflux_flux)
-    wl, planck_v = interpolate_and_convolve_2(JOHNSON_V_WL, JOHNSON_V,
-                                              solarflux_wl, planck_flux)
+    wl, solarflux_v = _interpolate_and_convolve_2(_JOHNSON_V_WL, _JOHNSON_V,
+                                                  solarflux_wl, solarflux_flux)
+    wl, planck_v = _interpolate_and_convolve_2(_JOHNSON_V_WL, _JOHNSON_V,
+                                               solarflux_wl, planck_flux)
 
     scale_factor = np.mean(solarflux_v) / np.mean(planck_v)
         
@@ -559,10 +566,10 @@ def plot_planck_vs_solar_flux():
     plt.plot(wl, planck_v*scale_factor, '--', color='blue', lw=1,
              label='Planck w/V')
 
-    wl, solarflux_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
-                                                 solarflux_wl, solarflux_flux)
-    wl, planck_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
-                                              solarflux_wl, planck_flux)
+    wl, solarflux_b = _interpolate_and_convolve_2(_JOHNSON_B_WL, _JOHNSON_B,
+                                                  solarflux_wl, solarflux_flux)
+    wl, planck_b = _interpolate_and_convolve_2(_JOHNSON_B_WL, _JOHNSON_B,
+                                               solarflux_wl, planck_flux)
 
     scale_factor = np.mean(solarflux_b) / np.mean(planck_b)
         
@@ -575,9 +582,9 @@ def plot_planck_vs_solar_flux():
         
     plt.show()
 
-
 def _v_magnitude_to_photon_flux(v, detector):
-    """Return the V-band photon flux for a star with the given Johnson V magnitude.
+    """Return the V-band photon flux for a star with the given Johnson V
+    magnitude.
     
     detector is the Cassini camera ('NAC' or 'WAC').
     
@@ -597,7 +604,8 @@ def _v_magnitude_to_photon_flux(v, detector):
     return flux
 
 def _b_magnitude_to_photon_flux(b, detector):
-    """Return the V-band photon flux for a star with the given Johnson B magnitude.
+    """Return the V-band photon flux for a star with the given Johnson B
+    magnitude.
     
     detector is the Cassini camera ('NAC' or 'WAC').
     
@@ -616,14 +624,13 @@ def _b_magnitude_to_photon_flux(b, detector):
     
     return flux
 
-
 def _compute_stellar_spectrum(obs, star):
     """Compute the stellar spectrum for a given star.
     
     Returned value is in photons / cm^2 / s
     """
     
-    logger = logging.getLogger(LOGGING_NAME+'.compute_stellar_spectrum')
+    logger = logging.getLogger(_LOGGING_NAME+'.compute_stellar_spectrum')
 
     # Planck is in photons / cm^2 / s / nm / steradian
     # However, it might as well be photons / cm^2 / s / nm because we're just
@@ -631,8 +638,8 @@ def _compute_stellar_spectrum(obs, star):
     planck_wl = np.arange(100., 1600.)
     planck = _compute_planck_curve(planck_wl, star.temperature)
     
-    wl_new, planck_v = interpolate_and_convolve_2(JOHNSON_V_WL, JOHNSON_V,
-                                                  planck_wl, planck)
+    wl_new, planck_v = _interpolate_and_convolve_2(_JOHNSON_V_WL, _JOHNSON_V,
+                                                   planck_wl, planck)
     # Total photons seen through V filter 
     planck_v_sum = np.sum(planck_v)
     # Predicted photons seen through V - photons / cm^2 / s
@@ -642,8 +649,8 @@ def _compute_stellar_spectrum(obs, star):
 #                 star.unique_number, star.temperature, predicted_v)
     scale_factor_v = predicted_v / planck_v_sum
 
-    wl_new, planck_b = interpolate_and_convolve_2(JOHNSON_B_WL, JOHNSON_B,
-                                                  planck_wl, planck)
+    wl_new, planck_b = _interpolate_and_convolve_2(_JOHNSON_B_WL, _JOHNSON_B,
+                                                   planck_wl, planck)
     # Total photons seen through B filter 
     planck_b_sum = np.sum(planck_b)
     # Predicted photons seen through V - photons / cm^2 / s
@@ -660,24 +667,23 @@ def _compute_stellar_spectrum(obs, star):
     # Return is in photons / cm^2 / s
     return planck_wl, planck*scale_factor_v
 
-
 def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     """Compute the original DN expected from a given spectrum.
     
     The spectrum is in photons / cm^2 / s / nm
     """
 
-    logger = logging.getLogger(LOGGING_NAME+'._compute_dn_from_spectrum')
+    logger = logging.getLogger(_LOGGING_NAME+'._compute_dn_from_spectrum')
 
     # Read in filter transmission
-    systrans_wl, systrans_xmit = cisscal_filter_transmission(obs)
+    systrans_wl, systrans_xmit = _cisscal_filter_transmission(obs)
     
     # Read in QE correction
-    qecorr_wl, qecorr_val = cisscal_qe_correction(obs)
+    qecorr_wl, qecorr_val = _cisscal_qe_correction(obs)
  
-    conv_wl, conv_flux = interpolate_and_convolve_3(systrans_wl, systrans_xmit,
-                                                    qecorr_wl, qecorr_val,
-                                                    spectrum_wl, spectrum)
+    conv_wl, conv_flux = _interpolate_and_convolve_3(
+                             systrans_wl, systrans_xmit, qecorr_wl, qecorr_val,
+                             spectrum_wl, spectrum)
 
     conv_flux_sum = integrate.simps(conv_flux, conv_wl)
     # photons / cm^2 / s
@@ -686,10 +692,10 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
                  obs.filter1, obs.filter2, conv_flux_sum)
 
     if False: # Make True to compare flux with a CISSCAL-calibrated file
-        weights_wl, weights = interpolate_and_convolve_2(systrans_wl,
-                                                         systrans_xmit,
-                                                         qecorr_wl,
-                                                         qecorr_val)
+        weights_wl, weights = _interpolate_and_convolve_2(systrans_wl,
+                                                          systrans_xmit,
+                                                          qecorr_wl,
+                                                          qecorr_val)
         assert conv_wl[0] == weights_wl[0] and conv_wl[-1] == weights_wl[-1]
     
         conv_flux_avg = conv_flux_sum / integrate.simps(weights, weights_wl)
@@ -705,7 +711,7 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     sum_factor = obs.data.shape[0] / 1024. * obs.data.shape[1] / 1024.
     
     data = (conv_flux_sum / sum_factor *
-            CISSCAL_DETECTOR_OPTICS_AREA[obs.detector])
+            _CISSCAL_DETECTOR_OPTICS_AREA[obs.detector])
     # photons / s
     
     # 2) dividebyexpot.pro
@@ -716,13 +722,12 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     
     # 1) dntoelectrons.pro
     #        ELECTRONS = DN * GAIN / GAIN_RATIO[GAIN_MODE_ID]
-    dn = (electrons / CISSCAL_DETECTOR_GAIN[obs.detector]
-                    * CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
+    dn = (electrons / _CISSCAL_DETECTOR_GAIN[obs.detector]
+                    * _CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
     
     logger.debug('Returned DN = %f', dn)
     
     return dn
-
 
 def compute_dn_from_star(obs, star):
     """Compute the theoretical integrated DN for a star."""
@@ -730,17 +735,3 @@ def compute_dn_from_star(obs, star):
     dn = _compute_dn_from_spectrum(obs, spectrum_wl, spectrum)
 
     return dn
-
-
-def compute_dimmest_visible_star_vmag(obs):
-    min_dn = MIN_DETECTABLE_DN[obs.detector] # photons / pixel
-    fake_star = Star()
-    fake_star.temperature = SCLASS_TO_SURFACE_TEMP['G0']
-    for mag in np.arange(5., 15., 0.5):
-        fake_star.unique_number = 0
-        fake_star.johnson_mag_v = mag
-        fake_star.johnson_mag_b = mag+SCLASS_TO_B_MINUS_V['G0']
-        dn = compute_dn_from_star(obs, fake_star)
-        if dn < min_dn:
-            return mag # This is conservative
-    return mag

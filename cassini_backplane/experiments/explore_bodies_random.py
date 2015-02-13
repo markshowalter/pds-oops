@@ -17,21 +17,16 @@ from imgdisp import *
 import Tkinter as tk
 import scipy.ndimage.filters as filt
 from psfmodel.gaussian import GaussianPSF
-from cb_correlate import *
-from cb_stars import *
-from cb_util_image import *
 from cb_offset import *
 import os
 
-def process_image(filename, interactive=True):
+def process_image(filename, interactive=True, **kwargs):
     print filename
     
     obs = iss.from_file(filename)
-    obs.data = calibrate_iof_image_as_dn(obs)
     print filename, 'DATA SIZE', obs.data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-    offset_u, offset_v, metadata = master_find_offset(obs, create_overlay=True)
-#                                                      allow_stars=False, allow_rings=False)
+    offset_u, offset_v, metadata = master_find_offset(obs, create_overlay=True, **kwargs)
     
     ext_data = metadata['ext_data']
     overlay = metadata['ext_overlay']
@@ -148,6 +143,40 @@ def process_random_file(root_path):
 
 # Rings and Pandora - offset from real position as seen by stars
 #process_image('t:/external/cassini/derived/COISS_2xxx\COISS_2009\data\1484846724_1485147239\N1484916376_1_CALIB.IMG')
+
+# A ring- too straight, shadow
+#process_image(r'T:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG')
+
+# Used to crash in finding ring shadow
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2008\data\1481719190_1481724981\W1481719983_2_CALIB.IMG', allow_stars=False, allow_moons=False, allow_saturn=False)
+
+# Good starfield - IR1 filter
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2049\data\1602565432_1602671572\N1602583170_5_CALIB.IMG')
+
+# Good star matching with F ring
+#process_image(r't:/clumps/data/ISS_055RF_FMOVIE001_VIMS/N1577809417_1_CALIB.IMG')
+
+# Good star matching 512x512 CLEAR
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2066\data\1671705825_1671884383\N1671716657_1_CALIB.IMG')
+
+# Stars through the rings - doesn't work
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2054\data\1620034503_1620036662\N1620036101_1_CALIB.IMG')
+
+# MT2+IRP0 used to crash
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2004\data\1466194667_1466198705\W1466197722_1_CALIB.IMG')
+
+# Thinks Saturn present but it's not
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2063\data\1656229607_1656238823\N1656238607_1_CALIB.IMG')
+
+# Saturn with ring shadows
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2043\data\1585391197_1585519454\W1585492454_1_CALIB.IMG')
+
+# Saturn occluding rings but the rings are showing through
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2080\data\1738716783_1738795297\W1738780648_1_CALIB.IMG')
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2012\data\1497079709_1497122802\W1497120023_1_CALIB.IMG')
+
+# Star field doesn't meet photometry
+process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2071\data\1696329488_1696440486\N1696331406_1_CALIB.IMG')
 
 while True:
     process_random_file('t:/external/cassini/derived/COISS_2xxx')

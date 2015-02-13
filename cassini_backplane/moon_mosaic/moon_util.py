@@ -120,18 +120,16 @@ def mosaic_paths(options, body_name):
     mosaic_res_data = ('_%06.3f_%05.3f' % (options.latitude_resolution,
                                            options.longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-data')
-    metadata_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+body_name+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path)
+    return (data_path, large_png_path)
 
 def mosaic_paths_spec(latitude_resolution, longitude_resolution,
                       body_name):
     mosaic_res_data = ('_%06.3f_%05.3f' % (latitude_resolution,
                                            longitude_resolution))
     data_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-data')
-    metadata_path = os.path.join(ROOT, 'mosaic-data', body_name+mosaic_res_data+'-metadata.pickle')
     large_png_path = os.path.join(ROOT, 'png', 'full-'+body_name+mosaic_res_data+'.png')
-    return (data_path, metadata_path, large_png_path)
+    return (data_path, large_png_path)
 
 #def bkgnd_paths(options, body_name):
 #    bkgnd_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
@@ -236,23 +234,23 @@ def write_repro(repro_path, repro_data):
     pickle.dump(repro_data, repro_pickle_fp)
     repro_pickle_fp.close()
 
-def read_mosaic_metadata(metadata_path):
-    if not os.path.exists(metadata_path):
-        return None, None, None, None, None, None
-    metadata_pickle_fp = open(metadata_path, 'rb')
-#    metadata_
-
-    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
-     mosaicdata.image_numbers, mosaicdata.ETs, 
-     mosaicdata.emission_angles, mosaicdata.incidence_angles,
-     mosaicdata.phase_angles) = result
-
-    # Save metadata
-    metadata = result[1:] # Everything except img
-    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
-    pickle.dump(metadata, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.body_name_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
-    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
-    mosaic_metadata_fp.close()
+#def read_mosaic_metadata(metadata_path):
+#    if not os.path.exists(metadata_path):
+#        return None, None, None, None, None, None
+#    metadata_pickle_fp = open(metadata_path, 'rb')
+##    metadata_
+#
+#    (mosaicdata.img, mosaicdata.longitudes, mosaicdata.resolutions,
+#     mosaicdata.image_numbers, mosaicdata.ETs, 
+#     mosaicdata.emission_angles, mosaicdata.incidence_angles,
+#     mosaicdata.phase_angles) = result
+#
+#    # Save metadata
+#    metadata = result[1:] # Everything except img
+#    mosaic_metadata_fp = open(mosaicdata.metadata_path, 'wb')
+#    pickle.dump(metadata, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.body_name_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_name_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.image_path_list, mosaic_metadata_fp)
+#    pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
+#    mosaic_metadata_fp.close()

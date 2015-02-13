@@ -18,6 +18,7 @@ from Tkinter import *
 from PIL import Image
 import oops.inst.cassini.iss as iss
 import fring_util
+from cb_util_file import *
 from cb_offset import *
 from cb_rings import *
 import cProfile, pstats, StringIO
@@ -35,8 +36,8 @@ cmd_line = sys.argv[1:]
 if len(cmd_line) == 0:
     cmd_line = [
 #                '-a',
-                '--max-subprocesses', '3',
-
+#                '--max-subprocesses', '3',
+                'ISS_030RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_036RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_085RF_FMOVIE003_PRIME_1',
 #                '--start-obsid', 'ISS_106RF_FMOVIE002_PRIME',
@@ -48,8 +49,8 @@ if len(cmd_line) == 0:
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
 
-'ISS_080RF_FMOVIE005_PRIME',
-#'ISS_098RI_TMAPN30LP001_CIRS',
+#'ISS_080RF_FMOVIE005_PRIME',
+#'ISS_098RI_TMAPN30LP001_CIRS/W1608705204_1',
 #'ISS_072RI_SPKHRLPDF001_PRIME',
 #'ISS_105RI_TDIFS20HP001_CIRS',
 #'ISS_105RI_TMAPN45LP001_CIRS',
@@ -60,7 +61,7 @@ if len(cmd_line) == 0:
 #'ISS_109RI_TDIFS20HP001_CIRS',
 #'ISS_112RF_FMOVIE002_PRIME',
 #'ISS_132RI_FMOVIE001_VIMS',
-
+'ISS_115RF_FMOVIEEQX001_PRIME',
 #'ISS_080RF_FMOVIE005_PRIME/N1597390953_1',
 
 #'ISS_051RI_LPMRDFMOV001_PRIME',
@@ -94,10 +95,10 @@ if len(cmd_line) == 0:
 
                 '--allow-exception',
 #                '--no-auto-offset',
-                 '--recompute-auto-offset',
-                 '--recompute-reproject',
+#                 '--recompute-auto-offset',
+#                 '--recompute-reproject',
 #                 '--no-reproject',
-#                '--display-offset-reproject',
+                '--display-offset-reproject',
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
@@ -272,14 +273,16 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
             print 'Ignored because of --no-auto_offset'
         return
         
-    if os.path.exists(offrepdata.offset_path+'.pickle'):
+    if os.path.exists(offrepdata.offset_path):
         if option_no_update:
             if options.verbose:
                 print 'Ignored because offset file already exists'
             return # Offset file already exists, don't update
         # Save the manual offset!
-        trash1, offrepdata.manual_offset, trash2 = fring_util.read_offset(offrepdata.offset_path)
-        time_offset = os.stat(offrepdata.offset_path+'.pickle').st_mtime
+        metadata = file_read_offset_metadata(offrepdata.image_path)
+        if 'manual_offset' in metadata:
+            offrepdata.manual_offset = metadata['manual_offset']
+        time_offset = os.stat(offrepdata.offset_path).st_mtime
     else:
         time_offset = 0
         
@@ -300,12 +303,12 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     obs = iss.from_file(offrepdata.image_path)
     offrepdata.obs = obs
     try:
-        offset_u, offset_v, offrepdata.off_metadata = master_find_offset(obs,
-                                                 allow_stars=not options.no_allow_stars,
-                                                 allow_moons=not options.no_allow_moons,
-                                                 create_overlay=True,
-                                                 star_overlay_box_width=5,
-                                                 star_overlay_box_thickness=2)                                                                             
+        offrepdata.off_metadata = master_find_offset(obs,
+                         allow_stars=not options.no_allow_stars,
+                         allow_moons=not options.no_allow_moons,
+                         create_overlay=True,
+                         star_overlay_box_width=5,
+                         star_overlay_box_thickness=2)
     except:
         if options.verbose:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
@@ -313,22 +316,22 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
         print sys.exc_info()
         if options.allow_exception:
             raise
-        offset_u = None
-        offset_v = None
         offrepdata.off_metadata = {}
-    if offset_u is None:
-        offrepdata.the_offset = None
+    if ('offset' in offrepdata.off_metadata and 
+        offrepdata.off_metadata['offset'] is not None):
+        offrepdata.the_offset = offrepdata.off_metadata['offset']
+        if options.verbose:
+            print 'FOUND %6.2f, %6.2f' % (offrepdata.the_offset[0], offrepdata.the_offset[1])
     else:
-        offrepdata.the_offset = (offset_u, offset_v)
-    if offset_u is None:
+        offrepdata.the_offset = None
         if options.verbose:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY BAD IMAGE'
     
-    if offset_u is not None and options.verbose:
-        print 'FOUND %6.2f, %6.2f' % (offrepdata.the_offset[0], offrepdata.the_offset[1])
+    if offrepdata.manual_offset:
+        offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset
+        
     if save_results:
-        fring_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
-                              offrepdata.off_metadata)
+        file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
 
 
 #####################################################################################
@@ -356,7 +359,7 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_incidence_angle = metadata['mean_incidence']
         offrepdata.repro_time = metadata['time']
         
-        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
+        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution*oops.RPD)
         offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_long_mask]
 
 def _write_repro_data(offrepdata):
@@ -379,23 +382,23 @@ def _reproject_one_image(offrepdata):
 
     obs = offrepdata.obs
 
-    offset_u = None
-    offset_v = None
+    offset = None
     
     if offrepdata.manual_offset is not None:
-        offset_u, offset_v = offrepdata.manual_offset
+        offset = offrepdata.manual_offset
     elif offrepdata.the_offset is not None:
-        offset_u, offset_v = offrepdata.the_offset
+        offset = offrepdata.the_offset
     else:
         print 'NO OFFSET - REPROJECTION FAILED'
         _update_offrepdata_repro(offrepdata, None)
         return
     
     try:
-        ret = rings_fring_reproject(obs, offset_u, offset_v,
-                                    options.longitude_resolution,
-                                    options.radius_inner, options.radius_outer,
-                                    options.radius_resolution)
+        ret = rings_reproject(obs, offset,
+                              options.longitude_resolution*oops.RPD,
+                              options.radius_resolution,
+                              options.radius_inner, options.radius_outer,
+                              corotating='F')
     except:
         if options.verbose:
             print 'REPROJECTION FAILED'
@@ -433,20 +436,27 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
     else:
         time_repro = 0
     
-    if not os.path.exists(offrepdata.offset_path+'.pickle'):
+    if not os.path.exists(offrepdata.offset_path):
         if options.verbose:
             print 'NO OFFSET FILE - ABORTING'
         return
     
-    time_offset = os.stat(offrepdata.offset_path+'.pickle').st_mtime
+    time_offset = os.stat(offrepdata.offset_path).st_mtime
     if time_repro >= time_offset and not option_recompute:
         # The repro file exists and is more recent than the image, and we're not forcing a recompute
         if options.verbose:
             print 'Ignored because repro file is up to date'
         return
 
-    (offrepdata.the_offset, offrepdata.manual_offset,
-     offrepdata.off_metadata) = fring_util.read_offset(offrepdata.offset_path)
+    offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
+    if offrepdata.off_metadata['offset'] is None:
+        offrepdata.the_offset = None
+    else:
+        offrepdata.the_offset = offrepdata.off_metadata['offset']
+    if not 'manual_offset' in offrepdata.off_metadata: 
+        offrepdata.manual_offset = None
+    else:
+        offrepdata.manual_offset = offrepdata.off_metadata['manual_offset']
     
     if offrepdata.the_offset is None and offrepdata.manual_offset is None:
         if options.verbose:
@@ -508,7 +518,7 @@ def shift_image(image, offset_u, offset_v):
 # Draw the offset curves
 def draw_offset_overlay(offrepdata, offrepdispdata):
     # Blue - 0,0 offset
-    # Yellow - auto offset
+    # Red - auto offset
     # Green - manual offset
     try:
         offset_overlay = offrepdata.off_metadata['overlay'].copy()
@@ -528,7 +538,7 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
             x_diff = int(offrepdata.the_offset[0] - offrepdata.manual_offset[0])
             y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
         offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
-    
+ 
     x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
     x_pixels = x_pixels.astype('int')
     y_pixels = y_pixels.astype('int')
@@ -537,17 +547,15 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
     if offrepdata.the_offset is not None:
         # Auto offset - red
         x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.the_offset[0],
-                                        offset_v=offrepdata.the_offset[1])
+                                        offset=offrepdata.the_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
         offset_overlay[y_pixels, x_pixels, 0] = 255
 
     if offrepdata.manual_offset is not None:
-        # Auto offset - green
+        # Manual offset - green
         x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
-                                        offset_u=offrepdata.manual_offset[0],
-                                        offset_v=offrepdata.manual_offset[1])
+                                        offset=offrepdata.manual_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
         offset_overlay[y_pixels, x_pixels, 1] = 255
@@ -568,9 +576,9 @@ def callback_offset(x, y, offrepdata, offrepdispdata):
         return
     
     if offrepdispdata.off_longitudes is not None:
-        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%offrepdispdata.off_longitudes[y,x]))
-        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
-                                                                                                            offrepdata.obs.midtime)))
+        offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%(offrepdispdata.off_longitudes[y,x]*oops.DPR)))
+        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
+                                                                                                            offrepdata.obs.midtime)*oops.DPR)))
     if offrepdispdata.off_radii is not None:
         offrepdispdata.label_off_radius.config(text=('%7.3f'%offrepdispdata.off_radii[y,x]))
 
@@ -644,11 +652,12 @@ def refresh_repro_img(offrepdata, offrepdispdata):
 def command_commit_changes(offrepdata, offrepdispdata):
     if offrepdispdata.entry_x_offset.get() == "" or offrepdispdata.entry_y_offset.get() == "":
         offrepdata.manual_offset = None
+        offrepdata.off_metadata['manual_offset'] = None 
     else:
         offrepdata.manual_offset = (float(offrepdispdata.entry_x_offset.get()),
                                     float(offrepdispdata.entry_y_offset.get()))
-    fring_util.write_offset(offrepdata.offset_path, offrepdata.the_offset, offrepdata.manual_offset,
-                          offrepdata.off_metadata)
+        offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset 
+    file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
     _write_repro_data(offrepdata)
 
 # Setup the offset/reproject window with no data
@@ -656,7 +665,7 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     set_obs_bp(offrepdata.obs)
     
     offrepdispdata.off_radii = offrepdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
+    offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float')
     offrepdispdata.off_longitudes = rings_fring_inertial_to_corotating(offrepdispdata.off_longitudes,
                                                                        offrepdata.obs.midtime)
     
@@ -667,6 +676,8 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     # The original image and overlaid ring curves
     offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(512,512),
                                              allow_enlarge=True, auto_update=True)
+#    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
+    
 
     # The reprojected image
     if offrepdata.repro_img is None:
@@ -866,10 +877,22 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
     if options.verbose:
         print '** Display', offrepdata.obsid, '/', offrepdata.image_name
     if offrepdata.off_metadata is None:
-        (offrepdata.the_offset, offrepdata.manual_offset,
-         offrepdata.off_metadata) = fring_util.read_offset(offrepdata.offset_path)
+        offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
+        if offrepdata.off_metadata is None:
+            offrepdata.the_offset = None
+            offrepdata.manual_offset = None
+        else:
+            if offrepdata.off_metadata['offset'] is None:
+                offrepdata.the_offset = None
+            else:
+                offrepdata.the_offset = offrepdata.off_metadata['offset']
+            if 'manual_offset' not in offrepdata.off_metadata:
+                offrepdata.manual_offset = None
+            else:
+                offrepdata.manual_offset = offrepdata.off_metadata['manual_offset']
 
-    if option_invalid_offset and (offrepdata.the_offset is not None or offrepdata.manual_offset is not None):
+    if (option_invalid_offset and 
+        (offrepdata.the_offset is not None or offrepdata.manual_offset is not None)):
         if options.verbose:
             print 'Skipping because not invalid'
         return
@@ -907,9 +930,9 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     if offrepdispdata.repro_longitudes is None:
         return
 
-    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%offrepdispdata.repro_longitudes[x]))
-    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
-                                                                                                    offrepdata.obs.midtime)))
+    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%(offrepdispdata.repro_longitudes[x]*oops.DPR)))
+    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
+                                                                                                    offrepdata.obs.midtime)*oops.DPR)))
     
     radius = y*options.radius_resolution+options.radius_inner
     offrepdispdata.label_radius.config(text = '%7.3f'%radius)
@@ -935,7 +958,7 @@ obsid_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
 #    if obsid == 'ISS_006RI_LPHRLFMOV001_PRIME':
 #        continue
     if options.start_obsid != '' and not found_obsid:
@@ -948,7 +971,7 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '
     offrepdata.image_name = image_name
     offrepdata.image_path = image_path
     
-    offrepdata.offset_path = fring_util.offset_path(options, image_path, image_name)
+    offrepdata.offset_path = file_offset_path(image_path)
     offrepdata.repro_path = fring_util.repro_path(options, image_path, image_name)
 
     offrepdata.subprocess_run = False

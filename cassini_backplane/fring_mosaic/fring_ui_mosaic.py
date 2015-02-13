@@ -13,6 +13,7 @@ import numpy as np
 import sys
 import cspice
 import subprocess
+import vicar
 import scipy.ndimage.interpolation as interp
 import colorsys
 from imgdisp import ImageDisp, FloatEntry
@@ -27,7 +28,7 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                'ISS_036RF_FMOVIE001_VIMS',
+                'ISS_030RF_FMOVIE001_VIMS',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
@@ -99,6 +100,11 @@ def _update_mosaicdata(mosaicdata, metadata):
     full_longitudes[np.logical_not(mosaicdata.long_mask)] = -10
     mosaicdata.longitudes = full_longitudes
 
+def save_vicar(mosaicdata):
+    v = vicar.VicarImage()
+    v.set_array(mosaicdata.img)
+#     v.to_file('j:/Temp/'+mosaicdata.obsid+'.IMG')
+    
 def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     # Input files: image_path_list (includes repro suffix)
     # Output files:
@@ -142,15 +148,16 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     print 'Making mosaic for', mosaicdata.obsid
     
-    mosaic_metadata = rings_fring_mosaic_init(options.longitude_resolution,
-                                              options.radius_inner, options.radius_outer,
-                               options.radius_resolution)
+    mosaic_metadata = rings_mosaic_init(options.longitude_resolution,
+                                        options.radius_resolution,
+                                        options.radius_inner, options.radius_outer)
+
     for i, repro_path in enumerate(mosaicdata.repro_path_list):
         repro_metadata = fring_util.read_repro(repro_path)
         if repro_metadata is not None:
             if options.verbose:
                 print 'Adding mosaic data for', repro_path
-            rings_fring_mosaic_add(mosaic_metadata, repro_metadata, i)
+            rings_mosaic_add(mosaic_metadata, repro_metadata, i)
 
     _update_mosaicdata(mosaicdata, mosaic_metadata)
 
@@ -168,6 +175,8 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     pickle.dump(mosaicdata.repro_path_list, mosaic_metadata_fp)
     mosaic_metadata_fp.close()
     
+    save_vicar(mosaicdata)    
+    
     blackpoint = max(np.min(mosaicdata.img), 0)
     whitepoint = np.max(mosaicdata.img)
     img = mosaicdata.img
@@ -177,6 +186,14 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     img = img[75:326,::15].copy()
     
     gamma = 0.5
+
+    # For poster DPS 2014 ISS_044RF_FMOVIE001_VIMS
+#     blackpoint = 0.
+#     whitepoint = 0.05977
+#     gamma = 0.65
+#     img = img[90:310,:].copy()
+    
+    # 
     # The +0 forces a copy - necessary for PIL
     scaled_mosaic = np.cast['int8'](ImageDisp.scale_image(img, blackpoint,
                                                          whitepoint, gamma))[::-1,:]+0
@@ -428,7 +445,7 @@ obsid_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args, '_CALIB.IMG'):
+for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
     repro_path = fring_util.repro_path(options, image_path, image_name)
     
     if cur_obsid == None:

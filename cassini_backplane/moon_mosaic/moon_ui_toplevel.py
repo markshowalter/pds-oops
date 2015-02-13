@@ -53,9 +53,7 @@ class GUIData:
         self.obsid_db = None
         self.obsid_selection = None
         self.img_selection = None
-        self.entry_radius_inner = None
-        self.entry_radius_outer = None
-        self.entry_radius_resolution = None
+        self.entry_latitude_resolution = None
         self.entry_longitude_resolution = None
         
 #####################################################################################
@@ -69,9 +67,7 @@ class GUIData:
 # Returns a database of observation IDs, each entry of which is a list of OffRepStatus
 #
 def get_file_status(guidata):
-    radius_inner = guidata.entry_radius_inner.value()
-    radius_outer = guidata.entry_radius_outer.value()
-    radius_resolution = guidata.entry_radius_resolution.value()
+    latitude_resolution = guidata.entry_latitude_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
     
     obsid_db = {}
@@ -116,8 +112,7 @@ def get_file_status(guidata):
         if cur_obsid != obsid:
             if len(status_list) != 0:
                 prefix_mosaic = get_mosaic_status(cur_obsid, max_repro_mtime)
-                prefix_bkgnd = get_bkgnd_status(cur_obsid)
-                obsid_db[cur_obsid] = (prefix_mosaic, prefix_bkgnd, status_list)
+                obsid_db[cur_obsid] = (prefix_mosaic, status_list)
             status_list = []
             max_repro_mtime = 0
             cur_obsid = obsid
@@ -128,13 +123,12 @@ def get_file_status(guidata):
         
     if len(status_list) != 0:
         prefix_mosaic = get_mosaic_status(cur_obsid, max_repro_mtime)
-        prefix_bkgnd = get_bkgnd_status(cur_obsid)
-        obsid_db[cur_obsid] = (prefix_mosaic, prefix_bkgnd, status_list)
+        obsid_db[cur_obsid] = (prefix_mosaic, status_list)
 
     return obsid_db
 
 def cache_offset_status_for_obsid(obsid_db, obsid):
-    prefix_mosaic, prefix_bkgnd, status_list = obsid_db[obsid]
+    prefix_mosaic, status_list = obsid_db[obsid]
     for offrepstatus in status_list:
         read_one_offset_status(offrepstatus)
         
@@ -164,15 +158,12 @@ def read_one_offset_status(offrepstatus):
         offrepstatus.offset_status = 'XX'
     
 def get_mosaic_status(cur_obsid, max_repro_mtime):
-    radius_inner = guidata.entry_radius_inner.value()
-    radius_outer = guidata.entry_radius_outer.value()
-    radius_resolution = guidata.entry_radius_resolution.value()
+    latitude_resolution = guidata.entry_latitude_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
     (data_path, metadata_path,
-     png_path) = moon_util.mosaic_paths_spec(radius_inner, radius_outer,
-                                                                  radius_resolution,
-                                                                  longitude_resolution,
-                                                                  cur_obsid)
+     png_path) = moon_util.mosaic_paths_spec(latitude_resolution,
+                                             longitude_resolution,
+                                             cur_obsid)
     if (not os.path.exists(data_path+'.npy') or
         not os.path.exists(metadata_path) or
         not os.path.exists(png_path)):
@@ -185,52 +176,10 @@ def get_mosaic_status(cur_obsid, max_repro_mtime):
         prefix = 'M'
     return prefix
 
-def get_bkgnd_status(cur_obsid):
-    radius_inner = guidata.entry_radius_inner.value()
-    radius_outer = guidata.entry_radius_outer.value()
-    radius_resolution = guidata.entry_radius_resolution.value()
-    longitude_resolution = guidata.entry_longitude_resolution.value()
-
-    (data_path, metadata_path,
-     png_path) = moon_util.mosaic_paths_spec(radius_inner, radius_outer,
-                                                                  radius_resolution,
-                                                                  longitude_resolution,
-                                                                  cur_obsid)
-
-    if (not os.path.exists(data_path+'.npy') or
-        not os.path.exists(metadata_path) or
-        not os.path.exists(png_path)):
-        max_mosaic_mtime = 0
-    else:
-        max_mosaic_mtime = max(os.stat(data_path+'.npy').st_mtime,
-                               os.stat(metadata_path).st_mtime,
-                               os.stat(png_path).st_mtime)
-    
-    (reduced_mosaic_data_filename, reduced_mosaic_metadata_filename,
-     bkgnd_mask_filename, bkgnd_model_filename,
-     bkgnd_metadata_filename) = moon_util.bkgnd_paths_spec(radius_inner, radius_outer,
-                                                          radius_resolution,
-                                                          longitude_resolution,
-                                                          cur_obsid)
-    if (not os.path.exists(bkgnd_mask_filename+'.npy') or
-        not os.path.exists(bkgnd_model_filename+'.npy') or
-        not os.path.exists(bkgnd_metadata_filename)):
-        prefix = 'X'
-    elif (os.stat(bkgnd_mask_filename+'.npy').st_mtime < max_mosaic_mtime or
-          os.stat(bkgnd_model_filename+'.npy').st_mtime < max_mosaic_mtime or
-          os.stat(bkgnd_metadata_filename).st_mtime < max_mosaic_mtime):
-        prefix = 'D'
-    else:
-        if max_mosaic_mtime == 0:
-            prefix = 'b'
-        else:
-            prefix = 'B'
-    return prefix
-
 def mosaic_status_names(obsid_db):
     obsid_names = []
     for key in sorted(obsid_db.keys()):
-        obsid_names.append(obsid_db[key][0]+' '+obsid_db[key][1]+' '+key)
+        obsid_names.append(obsid_db[key][0]+' '+key)
     return obsid_names
 
     
@@ -278,13 +227,10 @@ def update_one_list(listbox, new_list_entries, char_skip=0):
 # Make command-line arguments 
 #
 def cmdline_arguments(guidata):
-    radius_inner = guidata.entry_radius_inner.value()
-    radius_outer = guidata.entry_radius_outer.value()
-    radius_resolution = guidata.entry_radius_resolution.value()
+    latitude_resolution = guidata.entry_latitude_resolution.value()
     longitude_resolution = guidata.entry_longitude_resolution.value()
 
-    return ['--radius_inner', str(radius_inner), '--radius_outer', str(radius_outer),
-            '--radius_resolution', '%.3f'%radius_resolution,
+    return ['--latitude_resolution', '%.3f'%latitude_resolution,
             '--longitude_resolution', '%.3f'%longitude_resolution]
 
 #
@@ -294,7 +240,7 @@ def offrep_obsid_list_buttonrelease_handler(event, guidata):
     obsid_selections = guidata.listbox_obsid.listbox.curselection()
     if len(obsid_selections) == 0:
         return
-    guidata.obsid_selection = guidata.listbox_obsid[int(obsid_selections[0])][4:]
+    guidata.obsid_selection = guidata.listbox_obsid[int(obsid_selections[0])][2:]
     offrep_update_img_list(guidata)
 
 #
@@ -305,7 +251,7 @@ def offrep_update_img_list(guidata):
     guidata.img_selection = None
     guidata.cur_img_list = []
     if guidata.obsid_selection != None:
-        for data in guidata.obsid_db[guidata.obsid_selection][2]:
+        for data in guidata.obsid_db[guidata.obsid_selection][1]:
             if data.offset_status == '--': # Offset file doesn't exist
                 img_string = '[--] [%s] %s' % (data.repro_status, data.image_name)
             else:
@@ -325,7 +271,7 @@ def offrep_img_list_buttonrelease_handler(event, guidata):
     img_selections = guidata.listbox_img.listbox.curselection()
     if guidata.obsid_selection is None:
         return
-    guidata.img_selection = guidata.obsid_db[guidata.obsid_selection][2][int(img_selections[0])]
+    guidata.img_selection = guidata.obsid_db[guidata.obsid_selection][1][int(img_selections[0])]
     subprocess.Popen([moon_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
                       '--no-auto-offset', '--no-reproject',
                       guidata.obsid_selection + '/' + guidata.img_selection.image_name] +
@@ -562,27 +508,18 @@ def offrep_setup_obs_lists(guidata, imglist=False):
     
     # Specs for reprojection
     frame_reprojection = Frame(frame_controls)
-    label = Label(frame_reprojection, text='Radius inner:')
+    label = Label(frame_reprojection, text='Latitude resolution:')
     label.pack(side=LEFT)
-    guidata.entry_radius_inner = IntegerEntry(frame_reprojection, value=options.radius_inner)
-    guidata.entry_radius_inner.pack(side=LEFT)
-    label = Label(frame_reprojection, text='Radius outer:')
-    label.pack(side=LEFT)
-    guidata.entry_radius_outer = IntegerEntry(frame_reprojection, value=options.radius_outer)
-    guidata.entry_radius_outer.pack(side=LEFT)
-    label = Label(frame_reprojection, text='Radial resolution:')
-    label.pack(side=LEFT)
-    guidata.entry_radius_resolution = FloatEntry(frame_reprojection, value=options.radius_resolution)
-    guidata.entry_radius_resolution.pack(side=LEFT)
+    guidata.entry_latitude_resolution = FloatEntry(frame_reprojection, value=options.latitude_resolution)
+    guidata.entry_latitude_resolution.pack(side=LEFT)
     frame_reprojection.grid(row=controls_row, column=0, columnspan=5, sticky=W)
     controls_row += 1
     
-    frame_reprojection2 = Frame(frame_controls)
-    label = Label(frame_reprojection2, text='Longitude resolution:')
+    label = Label(frame_reprojection, text='Longitude resolution:')
     label.pack(side=LEFT)
-    guidata.entry_longitude_resolution = FloatEntry(frame_reprojection2, value=options.longitude_resolution)
+    guidata.entry_longitude_resolution = FloatEntry(frame_reprojection, value=options.longitude_resolution)
     guidata.entry_longitude_resolution.pack(side=LEFT)
-    frame_reprojection2.grid(row=controls_row, column=0, columnspan=5, sticky=W)
+    frame_reprojection.grid(row=controls_row, column=0, columnspan=5, sticky=W)
     controls_row += 1
 
     frame_reprojection3 = Frame(frame_controls)

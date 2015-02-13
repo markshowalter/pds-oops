@@ -43,7 +43,7 @@ if len(cmd_line) == 0:
 #                 '--recompute-auto-offset',
                  '--recompute-reproject',
 #                 '--no-reproject',
-                '--display-offset-reproject',
+#                '--display-offset-reproject',
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
@@ -281,9 +281,9 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
 
 def _update_offrepdata_repro(offrepdata, metadata):
     if metadata is None:
-        offrepdata.repro_good_mask = None
-        offrepdata.repro_good_lat_mask = None
-        offrepdata.repro_good_long_mask = None
+        offrepdata.repro_full_mask = None
+        offrepdata.repro_lat_idx_range = None
+        offrepdata.repro_long_idx_range = None
         offrepdata.repro_img = None
         offrepdata.repro_longitudes = None
         offrepdata.repro_resolutions = None
@@ -292,9 +292,9 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_incidence_angles = None
         offrepdata.repro_time = None
     else:
-        offrepdata.repro_good_mask = metadata['good_mask']
-        offrepdata.repro_good_lat_mask = metadata['good_lat_mask']
-        offrepdata.repro_good_long_mask = metadata['good_long_mask']
+        offrepdata.repro_full_mask = metadata['full_mask']
+        offrepdata.repro_lat_idx_range = metadata['lat_idx_range']
+        offrepdata.repro_long_idx_range = metadata['long_idx_range']
         offrepdata.repro_img = metadata['img']
         offrepdata.repro_resolutions = metadata['resolution']
         offrepdata.repro_phase_angles = metadata['phase']
@@ -303,18 +303,18 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_time = metadata['time']
         
         full_latitudes = moons_generate_latitudes(latitude_resolution=options.latitude_resolution)
-        offrepdata.repro_latitudes = full_latitudes[offrepdata.repro_good_lat_mask]
+        offrepdata.repro_latitudes = full_latitudes[offrepdata.repro_lat_idx_range[0]:offrepdata.repro_lat_idx_range[1]+1]
         full_longitudes = moons_generate_longitudes(longitude_resolution=options.longitude_resolution)
-        offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_good_long_mask]
+        offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_long_idx_range[0]:offrepdata.repro_long_idx_range[1]+1]
 
 def _write_repro_data(offrepdata):
     metadata = None
     if offrepdata.repro_img is not None:
         metadata = {}
         metadata['img'] = offrepdata.repro_img
-        metadata['good_lat_mask'] = offrepdata.repro_good_lat_mask
-        metadata['good_long_mask'] = offrepdata.repro_good_long_mask
-        metadata['good_mask'] = offrepdata.repro_good_mask
+        metadata['lat_idx_range'] = offrepdata.repro_lat_idx_range
+        metadata['long_idx_range'] = offrepdata.repro_long_idx_range
+        metadata['full_mask'] = offrepdata.repro_full_mask
         metadata['resolution'] = offrepdata.repro_resolutions
         metadata['phase'] = offrepdata.repro_phase_angles
         metadata['emission'] = offrepdata.repro_emission_angles

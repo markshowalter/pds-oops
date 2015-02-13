@@ -1,3 +1,10 @@
+###############################################################################
+# imgdisp.py
+#
+# ImageDisp is a generic Tcl/Tk-based GUI interface for displaying images and
+# associated metadata.
+###############################################################################
+
 from Tkinter import *
 import ImageTk
 from PIL import Image
@@ -16,14 +23,22 @@ class ImageDisp(Frame):
     (e.g. white/blackpoint, gamma) allowing callbacks to be registered for
     various events."""
     
-    def __init__(self, imgdata_list, overlay_list=None, color_column_list=None,
-                 parent=None, canvas_size=None, flip_y=False, origin=(0,0),
-                 allow_enlarge=False, enlarge_limit=5,
-                 one_zoom=True, auto_update=False,
-                 whitepoint_ignore_frac=1.00):
+    def __init__(self, 
+                 imgdata_list, 
+                 overlay_list=None, color_column_list=None,
+                 parent=None, toplevel=None, 
+                 canvas_size=None, 
+                 flip_y=False, origin=(0,0),
+                 allow_enlarge=False, enlarge_limit=5, one_zoom=True, 
+                 auto_update=True,
+                 overlay_transparency=0.55,
+                 blackpoint=None, blackpoint_min=None, blackpoint_max=None,
+                 whitepoint=None, whitepoint_min=None, whitepoint_max=None,
+                 whitepoint_ignore_frac=1.00,
+                 gamma=0.5, gamma_min=0., gamma_max=3.):
         """The constructor for the ImageDisp class.
         
-        Input:
+        Inputs:
         
         imgdata_list   A list of 2-D (height x width) numpy arrays, each
                        containing a single image's data. May also be a single
@@ -33,52 +48,116 @@ class ImageDisp(Frame):
                        all controlled by the same image controls. All images
                        must have the same dimensions.
                        
-        overlay_list   An optional list of 3-D (height x width x 3 or
-                       height x width x 4) color overlays, one per image.
-                       The values should be floating point from 0.0 - 1.0.
-                       If present, the fourth level indicates alpha level
-                       with 0 being invisible and 1 being opaque.
+        overlay_list   An optional list of 2-D (height x width) or 3-D 
+                       (height x width x {3,4}) color overlays, one per image.
+                       A list entry may be None indicating no overlay for that
+                       image, or the entire argument may be None indicating no
+                       overlays at all.
+                       The height and width may be an integer multiple of
+                       the image dimensions. In this case, the image is scaled
+                       up (with each pixel replicated in an NxM grid) so that
+                       the overlay corresponds with a sub-pixel area.
+                       If the array values are integers, they are assumed to
+                       range from 0-255. Otherwise, the array values should be
+                       floating point from 0.0 - 1.0.
+                       If the overlay is 2-D, the overlay is red. Otherwise,
+                       the third dimension is either (R,G,B) or (R,G,B,A).
+                       If present, the alpha value (A) represents the 
+                       transparency of the overlay, with 0.0 being invisible
+                       and 1.0 being opaque. This alpha level is combined with
+                       the overlay transparency slider to produce the final
+                       transparency value.
+                       If no alpha channel is provided, the overlay is opaque
+                       except where it is (0,0,0), in which case it is 
+                       transparent.
 
         color_column_list
-                       An optional list of 2-D (width x 3) colors. Each 
-                       vertical slice of an image is multiplied by the
-                       corresponding RGB values in the column. This is useful
-                       for tinting each column as a single color without
-                       having to specify a full overlay.
+                       An optional list of 2-D (width x 3) colors. Array
+                       values should be floating point. The third dimension
+                       is (R,G,B). Each vertical slice of an image is
+                       multiplied by the corresponding RGB values in the 
+                       column. This is useful for tinting each column as a 
+                       single color without having to specify a full overlay.
+                       Note, however, that the overlay transparency slider
+                       has no effect and there is no alpha channel.
         
         parent         The parent (enclosing) Tkinter widget, if any.
         
+        toplevel       The Toplevel Tkinter widget, it any. If not provided,
+                       this defaults to parent.
+        
         canvas_size    The size (width, height) of the Canvas widget to display
-                       the image. Defaults to the full size of the image.
+                       the image. The Canvas will always be this size, 
+                       regardless of the size of the image. If the image at the
+                       current zoom level is larger than the canvas, scrollbars
+                       will appear. Defaults to the full size of the image.
                        
         flip_y         By default (0,0) is in the top left corner of the
                        display. If flip_y is True then the image is flipped
                        across a horizontal line and (0,0) is at the bottom
                        left corner of the display.
         
+        origin         An optional tuple (x,y) giving the pixel location of
+                       the origin (0,0). This is used to display the mouse
+                       pointer location and to adjust the pixel location passed
+                       to callbacks.
+                       
         allow_enalrge  True to allow the zoom levels to become negative
-                       (enlarging each image datum to be large than a single
+                       (enlarging each image datum to be larger than a single
                        display pixel).
                  
         enlarge_limit  The maximum magnification permitted if allow_enlarge
                        is True.
                        
         one_zoom       True to provide only one zoom slider that affects
-                       both x and y equally. False to provide two slides to
+                       both x and y equally. False to provide two sliders to
                        allow zoom for x and y separately.
                        
         auto_update    The initial setting of the Auto Update checkbox.
                        True to refresh the image instantly whenever a slider
                        is moved.
                        
+        overlay_transparency
+                       The initial value for the overlay transparency slider.
+                       
+        blackpoint     The initial blackpoint setting. None to use the minimum
+                       value from all images.
+        
+        blackpoint_min The minimum value for the blackpoint slider. None to use
+                       the minimum value from all images.
+                       
+        blackpoint_max The maximum value for the blackpoint slider. None to use
+                       the maximum value from all images.
+                       
+        whitepoint     The initial whitepoint setting. None to use the maximum
+                       value from all images as adjusted by 
+                       whitepoint_ignore_frac.
+                       
+        whitepoint_min The minimum value for the whitepoint slider. None to use
+                       the minimum value from all images.
+                       
+        whitepoint_max The maximum value for the whitepoint slider. None to use
+                       the maximum value from all images.
+                       
         whitepoint_ignore_frac
                        The percentile to use to determine the maximum
-                       whitepoint. Defaults to the brightest datum in
+                       whitepoint. 1.0 means to use the brightest datum in
                        any image.
+        
+        gamma          The initial gamma setting.
+        
+        gamma_min      The minimum value for the gamma slider.
+        
+        gamma_max      The maximum value for the gamma slider.
         """
         
         ### Init the Tk Frame
         Frame.__init__(self, parent)
+        if toplevel is None:
+            toplevel = parent
+        self.toplevel = toplevel
+        if toplevel is not None:
+            toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
 
         if type(imgdata_list) != type([]) and type(imgdata_list) != type(()):
             imgdata_list = [imgdata_list]
@@ -92,7 +171,12 @@ class ImageDisp(Frame):
         self.canvas_size_y = imheight
         self.flip_y = flip_y
         self.origin = origin
+        self.override_blackpoint = blackpoint
+        self.override_whitepoint = whitepoint
         self.whitepoint_ignore_frac = whitepoint_ignore_frac
+        self.gamma = gamma
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
                 
         ### Construct the canvases
         
@@ -132,7 +216,7 @@ class ImageDisp(Frame):
         self.var_auto_update = IntVar()
         self.var_display_img_overlay = IntVar()
         self.var_overlay_transparency = DoubleVar()
-        self.var_overlay_transparency.set(1.)
+        self.var_overlay_transparency.set(overlay_transparency)
         self.var_blackpoint = DoubleVar()
         self.var_whitepoint = DoubleVar()
         self.var_gamma = DoubleVar()
@@ -196,7 +280,8 @@ class ImageDisp(Frame):
         label.grid(row=gridrow, column=0, sticky=W)
         self.scale_gamma = Scale(control_frame,
                                  orient=HORIZONTAL,
-                                 resolution=0.001, from_=0., to=3.,
+                                 resolution=0.01,
+                                 from_=self.gamma_min, to=self.gamma_max,
                                  variable=self.var_gamma,
                                  command=self._command_refresh_image_scales)
         self.scale_gamma.grid(row=gridrow, column=1)
@@ -265,18 +350,30 @@ class ImageDisp(Frame):
         
         ### Make another frame for other programs to add their own controls
         
-        self.addon_control_frame = Frame(self)
-        self.addon_control_frame.pack(side=RIGHT, fill=BOTH, expand=YES)
+        self.addon_control_frame = Frame(controls_parent_frame)
+        self.addon_control_frame.pack(side=LEFT, fill=X, anchor=N)
         
-        controls_parent_frame.pack()
+        controls_parent_frame.pack(anchor=W, fill=X, expand=True)
         self.pack()
         self.update_image_data(imgdata_list, overlay_list, color_column_list)
+
+
+    #==========================================================================
+    # PUBLIC METHODS
+    #==========================================================================
 
     def update_image_data(self, imgdata_list, overlay_list=None,
                           color_column_list=None, recompute_scales=True):
         """Update the image data with new arrays.
         
-        See the constructor for argument details.
+        Inputs:
+        
+        imagedata_list     See the ImageDisp constructor.
+        overlay_list       See the ImageDisp constructor.
+        color_column_list  See the ImageDisp constructor.
+        recompute_scales   True to recompute blackpoint, whitepoint, and gamma
+                           limits and current slider values. False to leave the
+                           current settings alone.
         """
         
         if type(imgdata_list) != type([]) and type(imgdata_list) != type(()):
@@ -363,52 +460,67 @@ class ImageDisp(Frame):
                                         self.whitepoint_ignore_frac),
                                                  0, len(img_sorted)-1)]
                     self.imgdata_max_list.append(perc_wp)
-            blackpoint = np.min(self.imgdata_min_list)
-            whitepoint = np.max(self.imgdata_max_list)
-            self.scale_blackpoint.config(from_=blackpoint,
-                                         to=whitepoint,
-                                         resolution=(whitepoint-blackpoint)/
-                                                    1000)
-            self.scale_whitepoint.config(from_=blackpoint,
-                                         to=whitepoint,
-                                         resolution=(whitepoint-blackpoint)/
-                                                    1000)
+            themin = np.min(self.imgdata_min_list)
+            themax = np.max(self.imgdata_max_list)
+            self.scale_blackpoint.config(from_=themin,
+                                         to=themax,
+                                         resolution=(themax-themin)/
+                                                    1000.)
+            self.scale_whitepoint.config(from_=themin,
+                                         to=themax,
+                                         resolution=(themax-themin)/
+                                                    1000.)
+            blackpoint = themin
+            if self.override_blackpoint:
+                blackpoint = self.override_blackpoint
+            whitepoint = themax
+            if self.override_whitepoint:
+                whitepoint = self.override_whitepoint
             self.var_blackpoint.set(blackpoint)
             self.var_whitepoint.set(whitepoint)
-            self.var_gamma.set(0.5)
+            self.var_gamma.set(self.gamma)
      
         # Update the display
         self._update_internal_data()
         self._update_pil_images()
         
     def set_overlay(self, num, overlay):
-        """Replace one overlay and redraw.
+        """Replace one overlay and redraw the image.
         
         Inputs:
         
-        num     - The image number to replace the overlay of
-        overlay - The new overlay data (height x width x 3)
+        num                The image number to replace the overlay of.
+        overlay            The new overlay data. See the ImageDisp constructor
+                           for full details.
         """
-
         self.overlay_list[num] = overlay
         self.update_image_data(self.imgdata_list, self.overlay_list,
                                self.color_column_list, recompute_scales=False)
 
     def set_color_column(self, num, color_column):
-        """Replace one color column and redraw.
+        """Replace one color column and redraw the image.
         
         Inputs:
         
-        num          - The image number to replace the overlay of
-        color_column - The new color column data (width x 3)
+        num                The image number to replace the overlay of.
+        color_column       The new color column data. See the ImageDisp
+                           constructor for full details.
         """
-
         self.color_column_list[num] = color_column
         self.update_image_data(self.imgdata_list, self.overlay_list,
                                self.color_column_list, recompute_scales=False)
 
     def set_image_params(self, blackpoint, whitepoint, gamma):
         """Force setting of blackpoint, whitepoint, and gamma.
+        
+        Inputs:
+        
+        blackpoint         The new value for the blackpoint slider.        
+        whitepoint         The new value for the whitepoint slider.
+        gamma              The new value for the gamma slider.
+        
+        Note that the minimum and maximum values for each slider remains
+        unchanged.
         """
         self.var_blackpoint.set(blackpoint)
         self.var_whitepoint.set(whitepoint)
@@ -434,10 +546,10 @@ class ImageDisp(Frame):
         
         Inputs:
         
-        img        - The 2-D image
-        blackpoint - Any element below the blackpoint will be black
-        whitepoint - Any element above the whitepoint will be white
-        gamma      - Non-linear stretch (1.0 = linear stretch)
+        img                The 2-D image.
+        blackpoint         Any element below the blackpoint will be black.
+        whitepoint         Any element above the whitepoint will be white.
+        gamma              Non-linear stretch (1.0 = linear stretch).
         """ 
 
         if whitepoint < blackpoint:
@@ -450,6 +562,77 @@ class ImageDisp(Frame):
                                   (whitepoint-blackpoint))**gamma*256)
         greyscale_img = np.clip(greyscale_img, 0, 255) # Clip black and white
         return greyscale_img
+
+    def bind_mousemove(self, img_num, callback_func):
+        """Bind a mouse move callback for a single image.
+        
+        Inputs:
+        
+        img_num            The number of the image
+        callback_func      The function to be called on mouse move; it is 
+                           called with params (x, y) in image (not screen 
+                           pixel) coordinates.
+        """
+        canvas = self.canvas_list[img_num]
+        canvas.bind("<Motion>",
+                    lambda event, callback_func=callback_func, img_num=img_num:
+                    self._mousemove_callback_handler(event, img_num,
+                                                     callback_func))
+
+    def bind_b1press(self, img_num, callback_func):
+        """Bind a button-one callback for a single image.
+        
+        Inputs:
+        
+        img_num            The number of the image
+        callback_func      The function to be called on mouse move; it is 
+                           called with params (x, y) in image (not screen 
+                           pixel) coordinates.
+        """        
+        canvas = self.canvas_list[img_num]
+        canvas.bind("<Button-1>",
+                    lambda event, callback_func=callback_func, img_num=img_num:
+                    self._b1press_callback_handler(event, img_num,
+                                                   callback_func))
+
+    def bind_ctrl_b1press(self, img_num, callback_func):
+        """Bind a Control+button-one callback for a single image.
+        
+        Inputs:
+        
+        img_num            The number of the image
+        callback_func      The function to be called on mouse move; it is 
+                           called with params (x, y) in image (not screen 
+                           pixel) coordinates.
+        """
+        
+        canvas = self.canvas_list[img_num]
+        canvas.bind("<Control-Button-1>",
+                    lambda event, callback_func=callback_func, img_num=img_num:
+                    self._b1press_ctrl_callback_handler(event, img_num,
+                                                        callback_func))
+
+    def bind_shift_b1press(self, img_num, callback_func):
+        """Bind a Shift+button-one callback for a single image.
+        
+        Inputs:
+        
+        img_num            The number of the image
+        callback_func      The function to be called on mouse move; it is 
+                           called with params (x, y) in image (not screen 
+                           pixel) coordinates.
+        """
+        
+        canvas = self.canvas_list[img_num]
+        canvas.bind("<Shift-Button-1>",
+                    lambda event, callback_func=callback_func, img_num=img_num:
+                    self._b1press_shift_callback_handler(event, img_num,
+                                                         callback_func))
+
+
+    #==========================================================================
+    # INTERNAL METHODS
+    #==========================================================================
 
     def _get_zoom_factors(self):
         """Internal - Get the X and Y zoom factors accounting for single or
@@ -629,6 +812,11 @@ class ImageDisp(Frame):
             canvas.xview_moveto(scroll_x_min)
             canvas.yview_moveto(scroll_y_min)
 
+    def _command_wm_delete(self):
+        """Internal - callback for window manager closing window."""
+        self.toplevel.destroy()
+        self.toplevel.quit()
+        
     def _command_update_now(self):
         """Internal - callback for update now button."""
         update1 = self._update_transparency()
@@ -757,7 +945,7 @@ class ImageDisp(Frame):
         else:
             self.label_val.config(text='Mouse val: %12.7f' % val)
         if callback_func is not None:
-            callback_func(x, y)
+            callback_func(x-self.origin[0], y-self.origin[1])
         
     def _b1press_callback_handler(self, event, img_num, callback_func):
         """Internal - callback for button-one press."""
@@ -807,69 +995,6 @@ class ImageDisp(Frame):
             y = self.imgdata_list[img_num].shape[0] - y -1
         callback_func(x, y)
         
-    def bind_mousemove(self, img_num, callback_func):
-        """Bind a mouse move callback for a single image.
-        
-        Inputs:
-        
-        img_num       - The number of the image
-        callback_func - The function to be called on mouse move;
-                        it is called with params (x, y) in image coordinates
-        """
-        
-        canvas = self.canvas_list[img_num]
-        canvas.bind("<Motion>",
-                    lambda event, callback_func=callback_func, img_num=img_num:
-                    self._mousemove_callback_handler(event, img_num,
-                                                     callback_func))
-
-    def bind_b1press(self, img_num, callback_func):
-        """Bind a button-one callback for a single image.
-        
-        Inputs:
-        
-        img_num       - The number of the image
-        callback_func - The function to be called on button-one press;
-                        it is called with params (x, y) in image coordinates
-        """
-        
-        canvas = self.canvas_list[img_num]
-        canvas.bind("<Button-1>",
-                    lambda event, callback_func=callback_func, img_num=img_num:
-                    self._b1press_callback_handler(event, img_num,
-                                                   callback_func))
-
-    def bind_ctrl_b1press(self, img_num, callback_func):
-        """Bind a Control+button-one callback for a single image.
-        
-        Inputs:
-        
-        img_num       - The number of the image
-        callback_func - The function to be called on button-one press;
-                        it is called with params (x, y) in image coordinates
-        """
-        
-        canvas = self.canvas_list[img_num]
-        canvas.bind("<Control-Button-1>",
-                    lambda event, callback_func=callback_func, img_num=img_num:
-                    self._b1press_ctrl_callback_handler(event, img_num,
-                                                        callback_func))
-
-    def bind_shift_b1press(self, img_num, callback_func):
-        """Bind a Shift+button-one callback for a single image.
-        
-        Inputs:
-        
-        img_num       - The number of the image
-        callback_func - The function to be called on button-one press;
-                        it is called with params (x, y) in image coordinates
-        """
-        
-        canvas = self.canvas_list[img_num]
-        canvas.bind("<Shift-Button-1>",
-                    lambda event, callback_func=callback_func, img_num=img_num:
-                    self._b1press_shift_callback_handler(event, img_num,
-                                                         callback_func))
 
 #===============================================================================
 # 
@@ -970,7 +1095,8 @@ class ScrolledList(Frame):
         .hscroll:      [ as passed to constructor ]
     """
 
-    def __init__(self, master=None, width=40, height=25, vscroll=True, hscroll=False, **kwargs):
+    def __init__(self, master=None, width=40, height=25, 
+                 vscroll=True, hscroll=False, **kwargs):
         """Constructor for ScrolledList.
         """
         Frame.__init__ (self, master)
@@ -1269,43 +1395,43 @@ if __name__ == '__main__':
 
     # Test drawing algorithms
     
-    img = np.zeros((500,500))
-    for angle in np.arange(0., 360., 10):
-        draw_line(img, 250, 250,
-                  250+200*np.cos(angle*np.pi/180),
-                  250+200*np.sin(angle*np.pi/180), 1.)
-    plt.imshow(img, cmap=plt.get_cmap('Greys'))
-    plt.show()
-
-    img = np.zeros((500,500))
-    for angle in np.arange(0., 360., 10):
-        draw_line(img, 250, 250, 
-                  250+200*np.cos(angle*np.pi/180), 
-                  250+200*np.sin(angle*np.pi/180), 1., 10)    
-    plt.imshow(img, cmap=plt.get_cmap('Greys'))
-    plt.show()
-    
-    img = np.zeros((500,500))
-    for r in np.arange(3, 200, 30):
-        draw_circle(img, 250, 250, r, 1.) 
-    plt.imshow(img, cmap=plt.get_cmap('Greys'))
-    plt.show()
-
-    img = np.zeros((750,750))
-    n = 0
-    thickness = 1
-    for r in np.arange(3, 300, 15):
-        draw_circle(img, 375, 375, r, 1., thickness)
-        thickness += 1
-        if thickness > 10:
-            thickness = 1
-            
-    plt.imshow(img, cmap=plt.get_cmap('Greys'))
-    plt.show()
+#     img = np.zeros((500,500))
+#     for angle in np.arange(0., 360., 10):
+#         draw_line(img, 250, 250,
+#                   250+200*np.cos(angle*np.pi/180),
+#                   250+200*np.sin(angle*np.pi/180), 1.)
+#     plt.imshow(img, cmap=plt.get_cmap('Greys'))
+#     plt.show()
+# 
+#     img = np.zeros((500,500))
+#     for angle in np.arange(0., 360., 10):
+#         draw_line(img, 250, 250, 
+#                   250+200*np.cos(angle*np.pi/180), 
+#                   250+200*np.sin(angle*np.pi/180), 1., 10)    
+#     plt.imshow(img, cmap=plt.get_cmap('Greys'))
+#     plt.show()
+#     
+#     img = np.zeros((500,500))
+#     for r in np.arange(3, 200, 30):
+#         draw_circle(img, 250, 250, r, 1.) 
+#     plt.imshow(img, cmap=plt.get_cmap('Greys'))
+#     plt.show()
+# 
+#     img = np.zeros((750,750))
+#     n = 0
+#     thickness = 1
+#     for r in np.arange(3, 300, 15):
+#         draw_circle(img, 375, 375, r, 1., thickness)
+#         thickness += 1
+#         if thickness > 10:
+#             thickness = 1
+#             
+#     plt.imshow(img, cmap=plt.get_cmap('Greys'))
+#     plt.show()
     
     # Test ImageDisp
     
-    test_data_dir = os.environ["OOPS_TEST_DATA"]
+    test_data_dir = os.environ["OOPS_TEST_DATA_PATH"]
     
     iss_nac_fn1 = os.path.join(test_data_dir, 'cassini', 'ISS',
                                'N1649465323_1.IMG')
