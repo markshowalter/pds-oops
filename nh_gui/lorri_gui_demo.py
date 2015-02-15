@@ -12,6 +12,8 @@ import oops
 import oops.inst.nh.lorri as lorri
 from psfmodel.gaussian import GaussianPSF
 
+import cProfile, pstats, StringIO
+
 # This routine is called for any mouse move event on any image.
 # It updates the visible metadata fields.
 def _callback_mousemove(x, y, metadata):
@@ -147,6 +149,9 @@ def display_one_image(obs, data=None, overlay=None, title=''):
 # The main code 
 #===============================================================================
 
+pr = cProfile.Profile()
+pr.enable()
+
 master_root = tk.Tk()
 master_root.withdraw() # Get rid of the default window
 
@@ -155,23 +160,47 @@ test_data_dir = os.environ["OOPS_TEST_DATA_PATH"]
 lorri_fn1 = os.path.join(test_data_dir, 'nh', 'LORRI',
                          'LOR_0034969199_0X630_SCI_1.FIT')
 
-obs = lorri.from_file(lorri_fn1)
+obs_spice_spice = lorri.from_file(lorri_fn1, geom='spice', pointing='spice')
+obs_spice_spice.fov = oops.fov.OffsetFOV(obs_spice_spice.fov, (-4,-13))
 
-# Inverse video version
-inv_data = np.max(obs.data)-obs.data
+obs_spice_fits = lorri.from_file(lorri_fn1, geom='spice', pointing='fits90')
+obs_spice_fits.fov = oops.fov.OffsetFOV(obs_spice_fits.fov, (-49,-28))
 
-# Overlay based on incidence angle of Europa
-bp = oops.Backplane(obs)
-bp_incidence = bp.incidence_angle('europa')
-inc_min = np.min(bp_incidence.mvals)
-inc_max = np.max(bp_incidence.mvals)
-bp_incidence = (bp_incidence-inc_min) / (inc_max-inc_min)
-bp_incidence = bp_incidence.mvals.filled(0)
-overlay = np.zeros(obs.data.shape + (3,))
-overlay[:,:,0] = bp_incidence
+obs_fits_spice = lorri.from_file(lorri_fn1, geom='fits', pointing='spice')
+obs_fits_spice.fov = oops.fov.OffsetFOV(obs_fits_spice.fov, (-4,-12))
 
-display_one_image(obs, title='Positive Image')
-display_one_image(obs, data=inv_data, title='Negative Image')
-display_one_image(obs, overlay=overlay, title='Overlay Image')
+obs_fits_fits= lorri.from_file(lorri_fn1, geom='fits', pointing='fits90')
+obs_fits_fits.fov = oops.fov.OffsetFOV(obs_fits_fits.fov, (-48,-27))
+
+for title, obs in [('SPICE/SPICE', obs_spice_spice),
+#                    ('SPICE/FITS', obs_spice_fits),
+#                    ('FITS/SPICE', obs_fits_spice), 
+                   ('FITS/FITS', obs_fits_fits)]:
+    # Overlay based on incidence angle of Europa
+    bp = oops.Backplane(obs)
+    bp_incidence = bp.incidence_angle('europa')
+    inc_min = np.min(bp_incidence.mvals)
+    inc_max = np.max(bp_incidence.mvals)
+    bp_incidence = (bp_incidence-inc_min) / (inc_max-inc_min)
+    bp_incidence = bp_incidence.mvals.filled(0)
+    overlay = np.zeros(obs.data.shape + (3,))
+    overlay[:,:,0] = bp_incidence
+
+#     bp_incidence = bp.incidence_angle('jupiter')
+#     inc_min = np.min(bp_incidence.mvals)
+#     inc_max = np.max(bp_incidence.mvals)
+#     bp_incidence = (bp_incidence-inc_min) / (inc_max-inc_min)
+#     bp_incidence = bp_incidence.mvals.filled(0)
+#     overlay[:,:,1] = bp_incidence
     
+    display_one_image(obs, title=title, overlay=overlay)
+
+pr.disable()
+s = StringIO.StringIO()
+sortby = 'cumulative'
+ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+ps.print_stats()
+ps.print_callers()
+print s.getvalue()
+
 tk.mainloop()
