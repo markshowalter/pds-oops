@@ -40,6 +40,22 @@ def _callback_mousemove(x, y, metadata):
         val = '%7.3f' % dec.vals
     metadata['label_dec'].config(text=val)
 
+    europa_long = metadata['europa_long'][y,x] * oops.DPR
+
+    if europa_long.masked():
+        val = 'N/A'
+    else:
+        val = '%7.3f' % europa_long.vals
+    metadata['label_europa_long'].config(text=val)
+
+    europa_lat = metadata['europa_lat'][y,x] * oops.DPR
+
+    if europa_lat.masked():
+        val = 'N/A'
+    else:
+        val = '%7.3f' % europa_lat.vals
+    metadata['label_europa_lat'].config(text=val)
+
 
 # This routine is called on a left button click. It performs Gaussian
 # astrometry and displays the resulting X,Y center.
@@ -76,12 +92,16 @@ def display_one_image(obs, data=None, overlay=None, title=''):
     bp = oops.Backplane(obs)
     bp_ra = bp.right_ascension()
     bp_dec = bp.declination()
+    bp_longitude = bp.longitude('europa')
+    bp_latitude = bp.latitude('europa')
 
     metadata = {}
 
     metadata['img'] = data
     metadata['ra'] = bp_ra
     metadata['dec'] = bp_dec
+    metadata['europa_long'] = bp_longitude
+    metadata['europa_lat'] = bp_latitude
 
     # Create the GUI object
 
@@ -103,7 +123,7 @@ def display_one_image(obs, data=None, overlay=None, title=''):
     gridrow = 0
     gridcolumn = 0
 
-    label_width = 10
+    label_width = 13
     val_width = 7
 
     addon_control_frame = imgdisp.addon_control_frame
@@ -124,6 +144,24 @@ def display_one_image(obs, data=None, overlay=None, title=''):
                          anchor='e', width=val_width)
     label_dec.grid(row=gridrow, column=gridcolumn+1, sticky=tk.W)
     metadata['label_dec'] = label_dec
+    gridrow += 1
+
+    label = tk.Label(addon_control_frame, text='Europa Long:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky=tk.W)
+    label_long = tk.Label(addon_control_frame, text='', 
+                          anchor='e', width=val_width)
+    label_long.grid(row=gridrow, column=gridcolumn+1, sticky=tk.W)
+    metadata['label_europa_long'] = label_long
+    gridrow += 1
+
+    label = tk.Label(addon_control_frame, text='Europa Lat:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky=tk.W)
+    label_lat = tk.Label(addon_control_frame, text='', 
+                         anchor='e', width=val_width)
+    label_lat.grid(row=gridrow, column=gridcolumn+1, sticky=tk.W)
+    metadata['label_europa_lat'] = label_lat
     gridrow += 1
 
     label = tk.Label(addon_control_frame, text='Centroid X:', 
@@ -161,20 +199,20 @@ lorri_fn1 = os.path.join(test_data_dir, 'nh', 'LORRI',
                          'LOR_0034969199_0X630_SCI_1.FIT')
 
 obs_spice_spice = lorri.from_file(lorri_fn1, geom='spice', pointing='spice')
-obs_spice_spice.fov = oops.fov.OffsetFOV(obs_spice_spice.fov, (-4,-13))
+obs_spice_spice.fov = oops.fov.OffsetFOV(obs_spice_spice.fov, (-4,-12))
 
 obs_spice_fits = lorri.from_file(lorri_fn1, geom='spice', pointing='fits90')
-obs_spice_fits.fov = oops.fov.OffsetFOV(obs_spice_fits.fov, (-49,-28))
+obs_spice_fits.fov = oops.fov.OffsetFOV(obs_spice_fits.fov, (-48,-29))
 
 obs_fits_spice = lorri.from_file(lorri_fn1, geom='fits', pointing='spice')
 obs_fits_spice.fov = oops.fov.OffsetFOV(obs_fits_spice.fov, (-4,-12))
 
 obs_fits_fits= lorri.from_file(lorri_fn1, geom='fits', pointing='fits90')
-obs_fits_fits.fov = oops.fov.OffsetFOV(obs_fits_fits.fov, (-48,-27))
+obs_fits_fits.fov = oops.fov.OffsetFOV(obs_fits_fits.fov, (-48,-29))
 
 for title, obs in [('SPICE/SPICE', obs_spice_spice),
-#                    ('SPICE/FITS', obs_spice_fits),
-#                    ('FITS/SPICE', obs_fits_spice), 
+                    ('SPICE/FITS', obs_spice_fits),
+                    ('FITS/SPICE', obs_fits_spice), 
                    ('FITS/FITS', obs_fits_fits)]:
     # Overlay based on incidence angle of Europa
     bp = oops.Backplane(obs)
