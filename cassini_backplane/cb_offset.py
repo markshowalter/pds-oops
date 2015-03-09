@@ -174,12 +174,17 @@ def master_find_offset(obs,
             'bootstrap_candidate'
                                True if the image is a good candidate for 
                                future bootstrapping attempts.
-            'bootstrap_reference'
-                               True if the image is a good candidate for
-                               future use as a bootstrap reference.
             'bootstrap_body'   The largest (pixel size) body in the image.
             'bootstrapped'     True if the image was navigated using 
                                bootstrapping.
+            'bootstrap_mosaic_path'
+                               The file path where the mosaic data that was
+                               used to attempt bootstrapping this image
+                               is stored.
+            'bootstrap_mosaic_filenames'
+                               The list of filenames used to create the mosaic.
+            'bootstrap_status' A string describing attempts at bootstrapping:
+                        None        Bootstrapping not attempted
                                
           Large data that might be too big to store in an offset file:
             
@@ -262,9 +267,11 @@ def master_find_offset(obs,
     metadata['overlay'] = unpad_image(overlay, extend_fov)
     # Bootstrapping
     metadata['bootstrap_candidate'] = False
-    metadata['bootstrap_reference'] = False
     metadata['bootstrap_body'] = None
     metadata['bootstrapped'] = False
+    metadata['bootstrap_mosaic_path'] = None
+    metadata['bootstrap_mosaic_filenames'] = None
+    metadata['bootstrap_status'] = None
     
     
                 ###########################
@@ -283,36 +290,44 @@ def master_find_offset(obs,
     
     large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
     large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
-    large_bodies_by_range.sort(key=lambda x: x[1]['range'], reverse=True)
-    large_bodies_by_size = [(x, large_body_dict[x]) for x in large_body_dict]
-    # Sort by area of the enclosing square
-    large_bodies_by_size.sort(key=lambda x: 
-                  (x[1]['u_max_unclipped']-x[1]['u_min_unclipped'])*
-                  (x[1]['v_max_unclipped']-x[1]['v_min_unclipped']), 
-                  reverse=True)
+    large_bodies_by_range.sort(key=lambda x: x[1]['range'])
+#    large_bodies_by_size = [(x, large_body_dict[x]) for x in large_body_dict]
+#    # Sort by area of the enclosing square
+#    large_bodies_by_size.sort(key=lambda x: 
+#                  reverse=True)
     
-    logger.debug('Large body inventory %s', [x[0] for x in large_bodies_by_size])
+    logger.debug('Large body inventory %s', [x[0] for x in large_bodies_by_range])
 
-    if len(large_bodies_by_size) > 0:
-        metadata['bootstrap_body'] = large_bodies_by_size[0][0]
-        logger.debug('Bootstrap body %s', metadata['bootstrap_body'])
+    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
         
-    metadata['large_bodies'] = [x[0] for x in large_bodies_by_size]
-        
-    # See if any of the bodies take up the entire image    
+    for front_body_name, inv in large_bodies_by_range:
+        size = (inv['u_max']-inv['u_min'])*(inv['v_max']-inv['v_min']) 
+        if size >= offset_config['min_body_area']:
+            break
+    else:
+        front_body_name = None
+
     entirely_body = False
-    if len(large_bodies_by_range) > 0:
-        for body_name, inv in large_bodies_by_range:
-            if body_name == 'SATURN' and not allow_saturn:
-                continue
-            if body_name != 'SATURN' and not allow_moons:
-                continue
-            corner_body_mask = (obs.ext_corner_bp.where_intercepted(body_name).
-                                vals)
+        
+    if front_body_name is not None:
+        # See if the front-most actually visible body takes up the entire image    
+        if ((front_body_name == 'SATURN' and allow_saturn) or
+            (front_body_name != 'SATURN' and allow_moons)):
+            corner_body_mask = (
+                obs.ext_corner_bp.where_intercepted(front_body_name).
+                    vals)
             if np.all(corner_body_mask):
-                logger.debug('Image appears to be covered by %s', body_name)
-                entirely_body = body_name
-                metadata['body_only'] = body_name
+                logger.debug('Image appears to be covered by %s', front_body_name)
+                entirely_body = front_body_name
+                metadata['body_only'] = front_body_name
+
+    if front_body_name in FUZZY_BODY_LIST:
+        front_body_name = None
+
+    metadata['bootstrap_body'] = front_body_name
+    if front_body_name is not None:
+        logger.debug('Bootstrap body %s', metadata['bootstrap_body'])
+
 
     # See if the main rings take up the entire image
     # XXX THIS IS NOT A VALID TEST    
@@ -396,8 +411,9 @@ def master_find_offset(obs,
             bodies_metadata[body_name] = body_metadata
             
     if entirely_body:
-        if (bodies_cartographic_data is None or
-            entirely_body not in bodies_cartographic_data):
+        if (entirely_body not in FUZZY_BODY_LIST and
+            (bodies_cartographic_data is None or
+             entirely_body not in bodies_cartographic_data)):
             # Nothing we can do here except bootstrap
             metadata['bootstrap_candidate'] = True
             logger.debug('Single body without cartographic data - forcing '+
@@ -646,7 +662,8 @@ def master_find_offset(obs,
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #
                 #########################################
     
-    if offset is None and bad_body and not good_body:
+    if (offset is None and bad_body and not good_body and
+        metadata['bootstrap_body'] is not None):
         logger.debug('Marking as bootstrap candidate')
         metadata['bootstrap_candidate'] = True
     

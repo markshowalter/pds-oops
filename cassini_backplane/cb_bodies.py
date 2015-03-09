@@ -24,6 +24,7 @@ import os
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
+import scipy.ndimage.filters as filt
 import matplotlib.pyplot as plt
 import PIL.Image
 
@@ -32,8 +33,6 @@ import polymath
 import gravity
 import cspice
 from pdstable import PdsTable
-from imgdisp import *
-import Tkinter as tk
 
 from cb_config import *
 from cb_util_image import *
@@ -54,8 +53,12 @@ _BODIES_LATITUDE_SLOP = 1e-6  # resolution we will be using
 _BODIES_MIN_LATITUDE = -oops.HALFPI
 _BODIES_MAX_LATITUDE = oops.HALFPI-_BODIES_LATITUDE_SLOP*2
 _BODIES_MAX_LONGITUDE = oops.TWOPI-_BODIES_LONGITUDE_SLOP*2
-_BODIES_REPRO_MIN_LAMBERT = 0.05
-_BODIES_REPRO_MAX_EMISSION = 85. * oops.RPD
+
+# Lambert is set mainly based on the depth of craters - if the incidence angle
+# is too large the crater interior is shadowed and we don't get a good
+# reprojection.
+_BODIES_REPRO_MAX_INCIDENCE = 80. * oops.RPD
+_BODIES_REPRO_MAX_EMISSION = 80. * oops.RPD
 
 
 def _bodies_create_cartographic(bp, body_data):
@@ -171,7 +174,6 @@ def bodies_create_model(obs, body_name, inventory,
         v_min >= extend_fov[1] and v_max <= obs.data.shape[0]-1-extend_fov[1]):
         # Body is entirely visible - no part is off the edge
         entirely_visible = True
-        logger.debug('Entirely visible')
         
     curvature_threshold_frac = bodies_config['curvature_threshold_frac']
     curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
@@ -214,6 +216,11 @@ def bodies_create_model(obs, body_name, inventory,
                  'V %d to %d',
                  body_name, obs.data.shape[1], obs.data.shape[0],
                  u_min, u_max, v_min, v_max)
+    if entirely_visible:
+        logger.debug('Entirely visible')
+    else:
+        logger.debug('Not entirely visible')
+
     if metadata['curvature_ok']:
         logger.debug('Curvature OK')
     else:
@@ -264,11 +271,12 @@ def bodies_create_model(obs, body_name, inventory,
     if not np.any(limb_mask):
         limb_incidence_min = 1e38
         limb_incidence_max = 1e38
+        logger.debug('No limb')
     else:
         limb_incidence_min = np.min(incidence[limb_mask].vals)
         limb_incidence_max = np.max(incidence[limb_mask].vals)
-    logger.debug('Limb incidence angle min %.2f max %.2f',
-                 limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
+        logger.debug('Limb incidence angle min %.2f max %.2f',
+                     limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
     limb_threshold = bodies_config['limb_incidence_threshold']
     # If we can see the entire body, then we only need part of the limb to be
     # OK. If the body is partially off the edge, then we need the entire limb
@@ -351,8 +359,8 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
     assert latlon_type in ('centric', 'graphic', 'squashed')
     assert lon_direction in ('east', 'west')
 
-    logger.debug('Lat/Lon Type %s, Lon Direction %s', latlon_type,
-                 lon_direction)
+#    logger.debug('Lat/Lon Type %s, Lon Direction %s', latlon_type,
+#                 lon_direction)
 
     latitude = polymath.Scalar.as_scalar(latitude)
     longitude = polymath.Scalar.as_scalar(longitude)
@@ -388,13 +396,13 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
 def bodies_reproject(obs, body_name, offset=None,
             latitude_resolution=_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
             longitude_resolution=_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-            min_lambert=_BODIES_REPRO_MIN_LAMBERT,
+            max_incidence=_BODIES_REPRO_MAX_INCIDENCE,
             max_emission=_BODIES_REPRO_MAX_EMISSION,
             zoom=_BODIES_DEFAULT_REPRO_ZOOM, 
             zoom_order=_BODIES_DEFAULT_REPRO_ZOOM_ORDER,
             latlon_type='centric', lon_direction='east',
             mask_only=False, override_backplane=None,
-            subimage_edges=None):
+            subimage_edges=None, mask_bad_areas=False):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -407,7 +415,7 @@ def bodies_reproject(obs, body_name, offset=None,
                                  (rad/pix).
         longitude_resolution     The longitude resolution of the new image
                                  (rad/pix).
-        min_lambert              The minimum Lambert factor (cos i) to permit
+        max_incidence            The maximum incidence angle (rad) to permit
                                  for a valid pixel.
         max_emission             The maximum emission angle (rad) to permit
                                  for a valid pixel.
@@ -431,6 +439,10 @@ def bodies_reproject(obs, body_name, offset=None,
                                  the subimage used for the Meshgrid when
                                  override_backplane is used. None to indicate
                                  the Backplane is the size of obs.data.
+        mask_bad_areas           True to remove pixels nearby bad pixels before
+                                 reprojecting. This is used to deal with images
+                                 that have every other line contain zeroes due
+                                 to a transmission error.
                                  
     Returns:
             If mask_only is False, a dictionary containing
@@ -479,14 +491,14 @@ def bodies_reproject(obs, body_name, offset=None,
     else:
         bp = oops.Backplane(obs)
     
-    if min_lambert is not None or not mask_only:
+    if max_incidence is not None or not mask_only:
         lambert = bp.lambert_law(body_name).vals.astype('float')
+        bp_incidence = bp.incidence_angle(body_name).vals.astype('float') 
 
     bp_emission = bp.emission_angle(body_name).vals.astype('float')
     
     if not mask_only:
         bp_phase = bp.phase_angle(body_name).vals.astype('float')
-        bp_incidence = bp.incidence_angle(body_name).vals.astype('float') 
 
         # Resolution takes into account the emission angle - the "along sight"
         # projection
@@ -507,14 +519,20 @@ def bodies_reproject(obs, body_name, offset=None,
         subimg = obs.data[v_min:v_max+1,u_min:u_max+1]
     else:
         subimg = obs.data
+
+    if not mask_only:
+        zero_mask = (subimg == 0.)    
+        if mask_bad_areas:
+            zero_mask = filt.maximum_filter(zero_mask, 3)
+        body_mask_inv = np.logical_or(body_mask_inv, zero_mask)
         
     # A pixel is OK if it falls on the body, the Lambert model is
     # bright enough, the emission angle is large enough, and the
     # data isn't exactly ZERO.
     ok_body_mask_inv = body_mask_inv
-    if min_lambert is not None:
+    if max_incidence is not None:
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv,
-                                         lambert < min_lambert)
+                                         bp_incidence > max_incidence)
     if max_emission is not None:
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv, 
                                          bp_emission > max_emission)
@@ -526,10 +544,10 @@ def bodies_reproject(obs, body_name, offset=None,
     empty_mask = not np.any(ok_body_mask)
     
     if not mask_only:
-        # Divide the data by the lambert model in an attempt to account for
-        # projected illumination
+        # Divide the data by the Lambert model and multiply by the cosine of
+        # the emission angle to account for projected illumination and viewing
         lambert[ok_body_mask_inv] = 1e38
-        adj_data = obs.data / lambert
+        adj_data = obs.data / lambert * np.cos(bp_emission)
         adj_data[ok_body_mask_inv] = 0.
         lambert[ok_body_mask_inv] = 0.
         bp_emission[ok_body_mask_inv] = 1e38
@@ -806,7 +824,9 @@ def bodies_mosaic_init(body_name,
     
     return ret
 
-def bodies_mosaic_add(mosaic_metadata, repro_metadata):
+def bodies_mosaic_add(mosaic_metadata, repro_metadata, 
+                      resolution_threshold=1.,
+                      copy_slop=0):
     """Add a reprojected image to an existing mosaic.
     
     For each valid pixel in the reprojected image, it is copied to the
@@ -859,10 +879,29 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata):
     mosaic_time = mosaic_metadata['time']
     
     # Calculate where the new resolution is better
-    better_resolution_mask = repro_res < mosaic_res
+    better_resolution_mask = (repro_res * resolution_threshold) < mosaic_res
+#    plt.figure()
+#    plt.imshow(better_resolution_mask)
+#    if copy_slop > 0:
+#        better_resolution_mask = filt.maximum_filter(better_resolution_mask,
+#                                                     copy_slop*2+1)
+#    plt.figure()
+#    plt.imshow(better_resolution_mask)
+    
     replace_mask = np.logical_and(repro_mask,
                                   np.logical_or(better_resolution_mask, 
                                                 np.logical_not(mosaic_mask)))
+
+    if copy_slop > 0:
+        replace_mask = filt.maximum_filter(replace_mask, copy_slop*2+1)
+        replace_mask = np.logical_and(repro_mask, replace_mask)
+
+#    plt.figure()
+#    plt.imshow(repro_mask)
+#
+#    plt.figure()
+#    plt.imshow(replace_mask)
+#    plt.show()
 
     mosaic_img[replace_mask] = repro_img[replace_mask]
     mosaic_res[replace_mask] = repro_res[replace_mask] 

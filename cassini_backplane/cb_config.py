@@ -68,10 +68,11 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 
 # These are bodies that shouldn't be used for navigation because they
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
-FUZZY_BODY_LIST = ['TITAN', 'HYPERION'] # XXX
+FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE', 'TITAN'] # XXX
 
 # These bodies can be used for bootstrapping.
-BOOTSTRAP_BODY_LIST = ['ENCELADUS', 'RHEA', 'TETHYS']
+BOOTSTRAP_BODY_LIST = ['DIONE', 'ENCELADUS', 'IAPETUS', 'MIMAS', 'PHOEBE',
+                       'RHEA', 'TETHYS']
 
 ##################
 # CONFIGURATIONS #
@@ -181,6 +182,10 @@ BOOTSTRAP_DEFAULT_CONFIG = {
 }
 
 OFFSET_DEFAULT_CONFIG = {
+    # A body has to be at least this many pixels in area for us to pay 
+    # attention to it for bootstrapping purposes.
+    'min_body_area': 9,
+    
     # If there are at least this many bodies in the image, then we trust the
     # body-based model correlation result.
     'num_bodies_threshold': 3,

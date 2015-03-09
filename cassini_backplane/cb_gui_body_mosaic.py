@@ -106,13 +106,13 @@ def _callback_mousemove(x, y, metadata):
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
         metadata['label_image'].config(text=
-               metadata['filename_list'][metadata['image_number'][y,x]])
+               metadata['filename_list'][metadata['image_number'][y,x]][:13])
         metadata['label_image_num'].config(text=
                            ('%d'%metadata['image_number'][y,x]))
         metadata['label_date'].config(text=
                            cspice.et2utc(float(metadata['time'][y,x]), 'C', 0))
 
-def display_body_mosaic(metadata):
+def display_body_mosaic(metadata, title=None):
     metadata = metadata.copy() # Don't mutate the one given to us
 
     metadata['latitude'] = bodies_generate_latitudes(latitude_resolution=
@@ -121,7 +121,9 @@ def display_body_mosaic(metadata):
                                     metadata['lon_resolution'])
 
     toplevel = Toplevel()
-    toplevel.title(metadata['body_name'])
+    if title is None:
+        title = metadata['body_name']
+    toplevel.title(title)
 
     imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,400),
                         parent=toplevel,

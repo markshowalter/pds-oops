@@ -80,7 +80,6 @@ MOSAICS = [
 #     ('DIONE', 1714678134, 1714693817),
 
 #    ('ENCELADUS', 1487299402, 1487302209),
-    
 #     ('ENCELADUS', 1500041648, 1500069258),
 #     ('ENCELADUS', 1516151439, 1516171418),
 #     ('ENCELADUS', 1597175743, 1597239766),
@@ -126,8 +125,7 @@ MOSAICS = [
 #     ('RHEA', 1734909944, 1734922104),
 #     ('RHEA', 1741540671, 1741579125),
 
-     ('TETHYS', 1506213903, 1506222566),
-
+#     ('TETHYS', 1506213903, 1506222566),
 #     ('TETHYS', 1558900157, 1558913368),
 #     ('TETHYS', 1561660053, 1561674548),
 #     ('TETHYS', 1563651352, 1563698228),
@@ -135,7 +133,7 @@ MOSAICS = [
 #     ('TETHYS', 1600993006, 1600994982),
 #     ('TETHYS', 1606213368, 1606215570),
 #     ('TETHYS', 1634166777, 1634217061),
-#     ('TETHYS', 1660458484, 1660474380),
+     ('TETHYS', 1660458484, 1660474380),
 #     ('TETHYS', 1713136229, 1713154519),
 #     ('TETHYS', 1716174363, 1716189859),
 #     ('TETHYS', 1719609520, 1719615428),
@@ -173,6 +171,8 @@ for body_name, img_start_num, img_end_num in MOSAICS:
 # Find bootstrapping candidates
  
 for image_path in yield_image_filenames(img_start_num, img_end_num):
+#                                        restrict_list=['N1496876400', 'N1496876347', 'N1496883920']):
+#                restrict_list=['N1496876347', 'W1496877602', 'N1496883920']):
     _, image_filename = os.path.split(image_path)
     offset_path = file_img_to_offset_path(image_path)
     if not os.path.exists(offset_path):
@@ -181,6 +181,6 @@ for image_path in yield_image_filenames(img_start_num, img_end_num):
  
     metadata = file_read_offset_metadata(image_path) # XXX
      
-    bootstrap_add_file(image_path, metadata)
+    bootstrap_add_file(image_path, metadata, redo_bootstrapped=True)
  
 bootstrap_add_file(None, None)

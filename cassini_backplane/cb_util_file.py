@@ -67,6 +67,8 @@ def yield_image_filenames(img_start_num, img_end_num, camera='NW',
                     continue
                 if img_name[0] not in camera:
                     continue
+                if restrict_list and img_name[:11] not in restrict_list:
+                    continue
                 yield os.path.join(img_dir, img_name)
             if done:
                 break

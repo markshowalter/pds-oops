@@ -5,6 +5,8 @@
 import Tkinter as tk
 import tkFileDialog
 
+import os
+
 from cb_config import *
 from cb_gui_body_mosaic import *
 from cb_util_file import *
@@ -23,4 +25,6 @@ while True:
     if path == '':
         break
     metadata = file_read_mosaic_metadata(path)
-    display_body_mosaic(metadata)
+    _, filename = os.path.split(path)
+    title = filename + ' / ' + metadata['body_name']
+    display_body_mosaic(metadata, title=title)
