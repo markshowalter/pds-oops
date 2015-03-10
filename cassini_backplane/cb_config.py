@@ -194,11 +194,11 @@ OFFSET_DEFAULT_CONFIG = {
         
     # If the bodies cover at least this fraction of the image, then we trust
     # the body-based model correlation result. 
-    'bodies_cov_threshold': 0., # 0.0005,
+    'bodies_cov_threshold': 0.0005,
     
     # If the total model covers at least this fraction of the image, then we 
     # might trust it.
-    'model_cov_threshold': 0.,#0.0005,
+    'model_cov_threshold': 0.0005,
     
     # AND
     

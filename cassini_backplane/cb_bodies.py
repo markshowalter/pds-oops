@@ -245,10 +245,14 @@ def bodies_create_model(obs, body_name, inventory,
         subimage_edges=(u_min,u_max,v_min,v_max))
 
     metadata['latlon_mask'] = latlon_mask
-    
+
     if mask_only:
         return None, metadata
-    
+
+    if not np.any(latlon_mask):
+        logger.debug('No pixels in mask - aborting')
+        return None, metadata
+        
     # Analyze the limb
     
     incidence = restr_bp.incidence_angle(body_name)

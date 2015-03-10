@@ -302,19 +302,22 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
 
-    label = Label(addon_control_frame, text='Bootstrap Ref:', 
+    label = Label(addon_control_frame, text='Bootstrapped:', 
                   anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
     label = Label(addon_control_frame, 
-                  text=str(metadata['bootstrap_reference']), 
+                  text=str(metadata['bootstrapped']), 
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky=W)
 
-    label = Label(addon_control_frame, text='Bootstrapped:', 
+    label = Label(addon_control_frame, text='Bootstrap Mosaic:', 
                   anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
+    mosaic_path = metadata['bootstrap_mosaic_path']
+    if mosaic_path is not None:
+        _, mosaic_path = os.path.split(mosaic_path) 
     label = Label(addon_control_frame, 
-                  text=str(metadata['bootstrapped']), 
+                  text=mosaic_path, 
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky=W)
     gridrow += 1

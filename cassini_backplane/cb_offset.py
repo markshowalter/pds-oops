@@ -331,7 +331,7 @@ def master_find_offset(obs,
 
     # See if the main rings take up the entire image
     # XXX THIS IS NOT A VALID TEST    
-    entirely_rings = False    
+    entirely_rings = False
     radii = obs.ext_corner_bp.ring_radius('saturn:ring').vals.astype('float')
     if len(large_bodies_by_range) == 0:
         radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
@@ -407,8 +407,9 @@ def master_find_offset(obs,
                     cartographic_data=bodies_cartographic_data,
                     bodies_config=bodies_config,
                     mask_only=mask_only)
-            bodies_model_list.append((body_model, body_metadata))
             bodies_metadata[body_name] = body_metadata
+            if body_model is not None:
+                bodies_model_list.append((body_model, body_metadata))
             
     if entirely_body:
         if (entirely_body not in FUZZY_BODY_LIST and
@@ -446,21 +447,25 @@ def master_find_offset(obs,
 
     model_list = []
     used_model_str_list = []
-    good_body = False
-    bad_body = False
+
     # XXX Deal with moons on the far side of the rings
     if rings_model is not None and rings_curvature_ok and rings_features_ok:
         # Only include the rings if they are going to provide a valid
         # navigation reference
         model_list = model_list + [rings_model]
         used_model_str_list.append('rings')
+
+    good_body = False # True if we have cartographic data OR
+                      #         the limb and curvature are both OK
+    bad_body = False  # True if the closest useable body is not a good body
+
     if len(bodies_model_list) > 0:
-        for body_model, body_metadata in bodies_model_list:
-            if body_model in FUZZY_BODY_LIST:
+        for body_model, body_metadata in bodies_model_list: # Sorted by range
+            body_name = body_metadata['body_name']
+            if body_name in FUZZY_BODY_LIST:
                 # Fuzzy bodies can't be used for navigation, but can be used
                 # later to create the overlay
                 continue
-            body_name = body_metadata['body_name']
             if ((bodies_cartographic_data is None or
                  body_name not in bodies_cartographic_data) and
                 (not body_metadata['curvature_ok'] or
@@ -662,6 +667,8 @@ def master_find_offset(obs,
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #
                 #########################################
     
+    # For moons, we mark a bootstrap candidate if the closest useable body
+    # is "bad" - bad limb or curvature, no cartographic data
     if (offset is None and bad_body and not good_body and
         metadata['bootstrap_body'] is not None):
         logger.debug('Marking as bootstrap candidate')

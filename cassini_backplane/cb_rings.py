@@ -586,14 +586,18 @@ def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
 # F ring routines
 ##
 
-FRING_ROTATING_ET = cspice.utc2et("2007-1-1")
+FRING_ROTATING_ET = None
 FRING_MEAN_MOTION = 581.964 * oops.RPD # rad/day
 FRING_A = 140221.3
 FRING_E = 0.00235
 FRING_W0 = 24.2 * oops.RPD # deg
 FRING_DW = 2.70025 * oops.RPD # deg/day                
 
-def _compute_fring_longitude_shift(et): 
+def _compute_fring_longitude_shift(et):
+    global FRING_ROTATING_ET
+    if FRING_ROTATING_ET is none:
+        FRING_ROTATING_ET = cspice.utc2et("2007-1-1")
+ 
     return - (FRING_MEAN_MOTION * 
               ((et - FRING_ROTATING_ET) / 86400.)) % oops.TWOPI
 

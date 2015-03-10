@@ -4,43 +4,29 @@ Created on Apr 11, 2014
 @author: rfrench
 '''
 
+import logging
 import random
-import numpy as np
-import numpy.ma as ma
-import oops.inst.cassini.iss as iss
-import oops.inst.nh.lorri as lorri
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import cspice
-from polymath import *
-from imgdisp import *
-import Tkinter as tk
-import scipy.ndimage.filters as filt
-from psfmodel.gaussian import GaussianPSF
-from cb_offset import *
 import os
+
+from cb_logging import *
+from cb_offset import *
+from cb_gui_offset_data import *
+from cb_util_file import *
 
 def process_image(filename, interactive=True, **kwargs):
     print filename
     
-    obs = iss.from_file(filename)
+    obs = read_iss_file(filename)
     print filename, 'DATA SIZE', obs.data.shape, 'TEXP', obs.texp, 'FILTERS', obs.filter1, obs.filter2
 
-    offset_u, offset_v, metadata = master_find_offset(obs, create_overlay=True, **kwargs)
+    metadata = master_find_offset(obs, create_overlay=True, **kwargs)
     
     ext_data = metadata['ext_data']
     overlay = metadata['ext_overlay']
     
-    if interactive and ext_data is not None:
-        ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
-        ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
-        imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,768), allow_enlarge=True,
-                            origin=(ext_u,ext_v))
-        tk.mainloop()
-
-    return offset_u, offset_v, 0, 0, 0
-
-def process_random_file(root_path):
+    display_offset_data(obs, metadata)
+    
+def process_random_file(root_path=COISS_2XXX_DERIVED_ROOT):
     filenames = sorted(os.listdir(root_path))
     dir_list = []
     filename_list = []
@@ -65,6 +51,15 @@ def process_random_file(root_path):
         dir_no = random.randint(0, len(dir_list)-1)
         new_dir = os.path.join(root_path, dir_list[dir_no])
         process_random_file(new_dir)
+
+log_set_default_level(logging.DEBUG)
+
+while True:
+    process_random_file()
+
+#===============================================================================
+# 
+#===============================================================================
 
 # Star field through filters - stars visible that we think shouldn't be
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2068\data\1683279174_1683355540\N1683354649_1_CALIB.IMG')
@@ -163,23 +158,20 @@ def process_random_file(root_path):
 #process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2054\data\1620034503_1620036662\N1620036101_1_CALIB.IMG')
 
 # MT2+IRP0 used to crash
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2004\data\1466194667_1466198705\W1466197722_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2004\data\1466194667_1466198705\W1466197722_1_CALIB.IMG')
 
 # Thinks Saturn present but it's not
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2063\data\1656229607_1656238823\N1656238607_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2063\data\1656229607_1656238823\N1656238607_1_CALIB.IMG')
 
 # Saturn with ring shadows
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2043\data\1585391197_1585519454\W1585492454_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2043\data\1585391197_1585519454\W1585492454_1_CALIB.IMG')
 
 # Saturn occluding rings but the rings are showing through
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2080\data\1738716783_1738795297\W1738780648_1_CALIB.IMG')
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2012\data\1497079709_1497122802\W1497120023_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2080\data\1738716783_1738795297\W1738780648_1_CALIB.IMG')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2012\data\1497079709_1497122802\W1497120023_1_CALIB.IMG')
 
 # Star field doesn't meet photometry
-process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2071\data\1696329488_1696440486\N1696331406_1_CALIB.IMG')
-
-while True:
-    process_random_file('t:/external/cassini/derived/COISS_2xxx')
+#process_image(r't:/external/cassini/derived/COISS_2xxx\COISS_2071\data\1696329488_1696440486\N1696331406_1_CALIB.IMG')
 
 
 
