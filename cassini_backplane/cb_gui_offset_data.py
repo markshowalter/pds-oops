@@ -315,9 +315,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     label.grid(row=gridrow, column=gridcolumn+6, sticky=W)
     mosaic_path = metadata['bootstrap_mosaic_path']
     if mosaic_path is not None:
-        _, mosaic_path = os.path.split(mosaic_path) 
-    label = Label(addon_control_frame, 
-                  text=mosaic_path, 
+        _, mosaic_path = os.path.split(mosaic_path)
+    label = Label(addon_control_frame,
+                  text=mosaic_path,
                   anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky=W)
     gridrow += 1

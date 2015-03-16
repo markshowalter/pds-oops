@@ -4,8 +4,9 @@
 # Routines related to bodies.
 #
 # Exported routines:
-#    XXX
 #    bodies_create_model
+#
+#    bodies_interpolate_missing_stripes
 #
 #    bodies_generate_latitudes
 #    bodies_generate_longitudes
@@ -327,6 +328,27 @@ def bodies_create_model(obs, body_name, inventory,
 #
 #==============================================================================
 
+def bodies_interpolate_missing_stripes(data):
+    """Interpolate missing horizontal data in an image.
+    
+    This routine handles an image that has the right side of some lines missing
+    due to data transmission limitations. A pixel is interpolated if it is
+    missing (zero) and the pixels immediately above and below are present
+    (not zero)."""
+    zero_mask = (data == 0.)
+    data_up = np.zeros(data.shape)
+    data_up[:-1,:] = data[1:,:]
+    data_down = np.zeros(data.shape)
+    data_down[1:,:] = data[:-1,:]
+    up_mask = (data_up != 0.)
+    down_mask = (data_down != 0.)
+    good_mask = np.logical_and(zero_mask, up_mask)
+    good_mask = np.logical_and(good_mask, down_mask)
+    data_mean = (data_up+data_down)/2.
+    ret_data = data.copy()
+    ret_data[good_mask] = data_mean[good_mask]
+    return ret_data
+
 def bodies_generate_latitudes(latitude_start=_BODIES_MIN_LATITUDE,
                               latitude_end=_BODIES_MAX_LATITUDE,
                               latitude_resolution=
@@ -397,12 +419,13 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
 #
 #==============================================================================
 
-def bodies_reproject(obs, body_name, offset=None,
+def bodies_reproject(
+            obs, body_name, data=None, offset=None,
             latitude_resolution=_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
             longitude_resolution=_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
             max_incidence=_BODIES_REPRO_MAX_INCIDENCE,
             max_emission=_BODIES_REPRO_MAX_EMISSION,
-            zoom=_BODIES_DEFAULT_REPRO_ZOOM, 
+            zoom_amt=_BODIES_DEFAULT_REPRO_ZOOM, 
             zoom_order=_BODIES_DEFAULT_REPRO_ZOOM_ORDER,
             latlon_type='centric', lon_direction='east',
             mask_only=False, override_backplane=None,
@@ -412,6 +435,8 @@ def bodies_reproject(obs, body_name, offset=None,
     Inputs:
         obs                      The Observation.
         body_name                The name of the moon.
+        data                     The image data to use for the reprojection. If
+                                 None, use obs.data.
         offset                   The offsets in (U,V) to apply to the image
                                  when computing the latitude and longitude
                                  values.
@@ -423,7 +448,7 @@ def bodies_reproject(obs, body_name, offset=None,
                                  for a valid pixel.
         max_emission             The maximum emission angle (rad) to permit
                                  for a valid pixel.
-        zoom                     The amount to magnify the original image for
+        zoom_amt                 The amount to magnify the original image for
                                  pixel value interpolation.
         zoom_order               The spline order to use for zooming.
         latlon_type              The coordinate system to use for latitude and
@@ -442,7 +467,7 @@ def bodies_reproject(obs, body_name, offset=None,
         subimage_edges           A tuple (u_min,u_max,v_min,v_max) describing
                                  the subimage used for the Meshgrid when
                                  override_backplane is used. None to indicate
-                                 the Backplane is the size of obs.data.
+                                 the Backplane is the size of data.
         mask_bad_areas           True to remove pixels nearby bad pixels before
                                  reprojecting. This is used to deal with images
                                  that have every other line contain zeroes due
@@ -479,6 +504,9 @@ def bodies_reproject(obs, body_name, offset=None,
     """
     logger = logging.getLogger(_LOGGING_NAME+'.bodies_reproject')
 
+    if data is None:
+        data = obs.data
+        
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
     orig_fov = None
@@ -520,15 +548,14 @@ def bodies_reproject(obs, body_name, offset=None,
 
     if subimage_edges is not None:
         u_min, u_max, v_min, v_max = subimage_edges
-        subimg = obs.data[v_min:v_max+1,u_min:u_max+1]
+        subimg = data[v_min:v_max+1,u_min:u_max+1]
     else:
-        subimg = obs.data
+        subimg = data
 
     if not mask_only:
         zero_mask = (subimg == 0.)    
         if mask_bad_areas:
             zero_mask = filt.maximum_filter(zero_mask, 3)
-        body_mask_inv = np.logical_or(body_mask_inv, zero_mask)
         
     # A pixel is OK if it falls on the body, the Lambert model is
     # bright enough, the emission angle is large enough, and the
@@ -541,8 +568,7 @@ def bodies_reproject(obs, body_name, offset=None,
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv, 
                                          bp_emission > max_emission)
     if not mask_only:
-        ok_body_mask_inv = np.logical_or(ok_body_mask_inv,
-                                         subimg == 0.)
+        ok_body_mask_inv = np.logical_or(ok_body_mask_inv, zero_mask)
     ok_body_mask = np.logical_not(ok_body_mask_inv)
 
     empty_mask = not np.any(ok_body_mask)
@@ -551,7 +577,7 @@ def bodies_reproject(obs, body_name, offset=None,
         # Divide the data by the Lambert model and multiply by the cosine of
         # the emission angle to account for projected illumination and viewing
         lambert[ok_body_mask_inv] = 1e38
-        adj_data = obs.data / lambert * np.cos(bp_emission)
+        adj_data = data / lambert * np.cos(bp_emission)
         adj_data[ok_body_mask_inv] = 0.
         lambert[ok_body_mask_inv] = 0.
         bp_emission[ok_body_mask_inv] = 1e38
@@ -641,8 +667,8 @@ def bodies_reproject(obs, body_name, offset=None,
     u_pixels = u.vals
     v_pixels = v.vals
     
-    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= obs.data.shape[1]-1)
-    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= obs.data.shape[0]-1)
+    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= data.shape[1]-1)
+    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= data.shape[0]-1)
     goodmask = np.logical_and(goodumask, goodvmask)
     goodmask = np.logical_and(goodmask, ~pixmask)
     
@@ -665,21 +691,22 @@ def bodies_reproject(obs, body_name, offset=None,
         good_lat = good_lat[goodmask]
         good_lon = good_lon[goodmask]    
 
-        if zoom == 1:
+        if zoom_amt == 1:
             zoom_data = adj_data
         else:
-            zoom_data = ndinterp.zoom(adj_data, zoom, order=zoom_order)
+            zoom_data = ndinterp.zoom(adj_data, zoom_amt, order=zoom_order)
 
         bad_data_mask = (adj_data == 0.)
         # Replicate the mask in each zoom x zoom block
-        if zoom == 1:
+        if zoom_amt == 1:
             bad_data_mask_zoom = bad_data_mask
         else:
-            bad_data_mask_zoom = ndinterp.zoom(bad_data_mask, zoom, order=0)
+            bad_data_mask_zoom = ndinterp.zoom(bad_data_mask, zoom_amt, 
+                                               order=0)
         zoom_data[bad_data_mask_zoom] = 0.
     
-        interp_data = zoom_data[(good_v*zoom).astype('int'), 
-                                (good_u*zoom).astype('int')]
+        interp_data = zoom_data[(good_v*zoom_amt).astype('int'), 
+                                (good_u*zoom_amt).astype('int')]
 
         repro_img = ma.zeros((latitude_pixels, longitude_pixels), 
                              dtype=np.float32)

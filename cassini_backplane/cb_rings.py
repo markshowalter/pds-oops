@@ -648,7 +648,7 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
 #==============================================================================
 
 def rings_reproject(
-            obs, offset=None,
+            obs, data=None, offset=None,
             longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
             radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
             radius_inner=None,
@@ -665,6 +665,8 @@ def rings_reproject(
     
     Inputs:
         obs                      The Observation.
+        data                     The image data to use for the reprojection. If
+                                 None, use obs.data.
         offset                   The offsets in (U,V) to apply to the image
                                  when computing the longitude and radius
                                  values.
@@ -721,6 +723,9 @@ def rings_reproject(
     logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
     assert corotating in (None, 'F')
+
+    if data is None:
+        data = obs.data
     
     if longitude_range is None:
         longitude_start = 0.
@@ -738,9 +743,9 @@ def rings_reproject(
     # Get all the info for each pixel
     meshgrid = None
     start_u = 0
-    end_u = obs.data.shape[1]-1
+    end_u = data.shape[1]-1
     start_v = 0
-    end_v = obs.data.shape[0]-1
+    end_v = data.shape[0]-1
     if uv_range is not None:
         start_u, end_u, start_v, end_v = uv_range
         meshgrid = oops.Meshgrid.for_fov(obs.fov,
@@ -756,7 +761,7 @@ def rings_reproject(
     bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
     bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float') 
     saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
-    data = obs.data.copy()
+    data = data.copy()
     data[saturn_shadow] = 0
     
     # The number of pixels in the final reprojection

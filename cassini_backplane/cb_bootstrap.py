@@ -81,9 +81,10 @@ def _bootstrap_mask_overlap(mask1, mask2):
     
     return np.logical_and(mask1, mask2)
     
-def _bootstrap_bodies_reproject(obs, body_name, offset, bootstrap_config)
+def _bootstrap_bodies_reproject(obs, body_name, offset, bootstrap_config):
+    data = bodies_interpolate_missing_stripes(obs.data)
     repro_metadata = bodies_reproject(
-          obs, body_name, offset=offset,
+          obs, body_name, data=data, offset=offset,
           latitude_resolution=bootstrap_config['lat_resolution'], 
           longitude_resolution=bootstrap_config['lon_resolution'],
           latlon_type=bootstrap_config['latlon_type'],
