@@ -77,7 +77,6 @@ def master_find_offset(obs,
                         
                    allow_saturn=True,
                    allow_moons=True,
-                       bodies_use_lambert=True,
                        bodies_cartographic_data=None,
                        bodies_config=None,
                    
@@ -105,7 +104,6 @@ def master_find_offset(obs,
                                  Saturn.
         allow_moons              True to allow finding the offset based on
                                  moons.
-        bodies_use_lambert       True to use Lambert shading for moons.
         bodies_cartographic_data The metadata to use for cartographic
                                  surfaces (see cb_bodies).
         bodies_config            Config parameters for bodies.
@@ -201,16 +199,22 @@ def master_find_offset(obs,
     
     logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
     
-    logger.debug('Date %s X %d Y %d TEXP %.3f %s+%s %s SAMPLING %s GAIN %d',
+    logger.debug('Processing %s', obs.full_path)
+    logger.debug('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
+                 'SAMPLING %s / GAIN %d',
                  cspice.et2utc(obs.midtime, 'C', 0),
-                 obs.data.shape[1], obs.data.shape[0], obs.texp,
-                 obs.filter1, obs.filter2, obs.detector, obs.sampling,
+                 obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
+                 obs.filter1, obs.filter2, obs.sampling,
                  obs.gain_mode)
-    logger.debug('create_overlay %d, allow_stars %d, allow_saturn %d, '+
-                 'allow_moons %d, allow_rings %d',
-                 create_overlay, allow_stars, allow_saturn, allow_moons,
-                 allow_rings)
-    
+    logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
+                 'allow_rings %d',
+                 allow_stars, allow_saturn, allow_moons, allow_rings)
+    if bodies_cartographic_data is None:
+        logger.debug('No cartographic data provided')
+    else:
+        logger.debug('Cartographic data provided for: %s',
+                     str(sorted(bodies_cartographic_data.keys())))
+        
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
         
@@ -403,7 +407,6 @@ def master_find_offset(obs,
             body_model, body_metadata = bodies_create_model(
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
-                    lambert=bodies_use_lambert,
                     cartographic_data=bodies_cartographic_data,
                     bodies_config=bodies_config,
                     mask_only=mask_only)
@@ -569,9 +572,9 @@ def master_find_offset(obs,
                         peak = new_peak
                         
         if model_offset is None:
-            logger.debug('Final model offset FAILED')
+            logger.debug('Final model offset N/A')
         else:
-            logger.debug('Final model offset U,V %d %d', 
+            logger.debug('Final model offset    U,V %d %d', 
                          model_offset[0], model_offset[1])
     
             shifted_model = shift_image(final_model, -model_offset[0], 
@@ -631,6 +634,13 @@ def master_find_offset(obs,
                 offset = model_offset
                 metadata['model_overrides_stars'] = True
                 metadata['used_objects_type'] = 'model'
+
+    if star_offset is None:
+        logger.debug('Final star offset N/A')
+    else:
+        logger.debug('Final star offset     U,V %d %d good stars %d', 
+                     star_offset[0], star_offset[1],
+                     stars_metadata['num_good_stars'])
 
     if offset is None:
         logger.debug('Final combined offset FAILED')

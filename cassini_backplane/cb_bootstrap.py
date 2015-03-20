@@ -1,10 +1,13 @@
+#### XXX CRASH WHEN ADDING MOSAIC #89 for IAPETUS
+#### XXX MAKE SLIDING WINDOW FOR TIME SLOT - DON'T JUST DELETE THE WHOLE LIST
+
 ###############################################################################
 # cb_bootstrap.py
 #
 # Routines related to bootstrapping.
 #
 # Exported routines:
-#    bootstrap_viable
+#    bootstrap_add_file
 ###############################################################################
 
 import cb_logging
@@ -24,29 +27,13 @@ from cb_offset import *
 from cb_util_file import *
 from cb_util_oops import *
 
-_LOGGING_NAME = 'cb.' + __name__
+_LOGGING_MODULE_NAME = __name__
 
-
-_BOOTSTRAP_ANGLE_TOLERANCE = 0.5 * oops.RPD
 
 _BOOTSTRAP_INIT_KNOWNS = {}
 _BOOTSTRAP_CANDIDATES = {}
 _BOOTSTRAP_MOSAICS = {}
     
-
-def bootstrap_viable(ref_path, ref_metadata, cand_path, cand_metadata):
-    logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_viable')
-
-    if (ref_metadata['filter1'] != cand_metadata['filter1'] or
-        ref_metadata['filter2'] != cand_metadata['filter2']):
-        logger.debug('Incompatible - different filters')
-        return False
-    
-    if ref_metadata['bootstrap_body'] != cand_metadata['bootstrap_body']:
-        logger.debug('Incompatible - different bodies')
-        return False
-    
-    return True
 
 def _bootstrap_mask_overlap(mask1, mask2):
     # Scale the masks along each dimension to be the size of the maximum
@@ -93,8 +80,10 @@ def _bootstrap_bodies_reproject(obs, body_name, offset, bootstrap_config):
     return repro_metadata
     
 def _bootstrap_find_offset_and_update(cand_path, cand_metadata, 
+                                      image_logfile_level,
                                       bootstrap_config, **kwargs):
-    logger = logging.getLogger(_LOGGING_NAME+'._bootstrap_find_offset_and_update')
+    logger = logging.getLogger(_LOGGING_NAME+
+                               '._bootstrap_find_offset_and_update')
 
     _, cand_filename = os.path.split(cand_path)
     logger.info('Bootstrapping candidate %s', cand_filename)
@@ -112,39 +101,76 @@ def _bootstrap_find_offset_and_update(cand_path, cand_metadata,
         logger.debug('No overlap with current mosaic - aborting')
         cand_metadata['bootstrap_mosaic_path'] = file_mosaic_path(
                                                           mosaic_metadata)
-        cand_metadata['bootstrap_mosaic_filenames'] = mosaic_metadata[
-                                                          'filename_list']
+        cand_metadata['bootstrap_mosaic_path_list'] = mosaic_metadata[
+                                                          'path_list']
         cand_metadata['bootstrap_status'] = 'No overlap'
         file_write_offset_metadata(cand_path, cand_metadata)
         return None
     
-    cand_obs = read_iss_file(cand_path)
-
-    cart_dict = {body_name: mosaic_metadata}
+    # Set up per-image logging
+    image_log_filehandler = None
+    if image_logfile_level is not None:
+        image_log_path = file_img_to_log_path(cand_path, bootstrap=True)
+        
+        if os.path.exists(image_log_path):
+            os.remove(image_log_path) # XXX Need option to not do this
+       
+        # This is added to the "cb." hierarchy, which is used by all other
+        # cb_ modules     
+        image_log_filehandler = cb_logging.log_add_file_handler(
+                                        image_log_path, image_logfile_level)
     
-    new_metadata = master_find_offset(cand_obs, create_overlay=True,
-                                      bodies_cartographic_data=cart_dict,
-                                      **kwargs) # XXX
+    try:   
+        cand_obs = read_iss_file(cand_path)
+    except:
+        logger.exception('File reading failed - %s', cand_path)
+        cb_logging.log_remove_file_handler(image_log_filehandler)
+        return
 
+    try:
+        cart_dict = {body_name: mosaic_metadata}
+        
+        new_metadata = master_find_offset(cand_obs, create_overlay=True,
+                                          bodies_cartographic_data=cart_dict,
+                                          **kwargs) # XXX
+    except:
+        logger.exception('Offset finding failed - %s', cand_path)
+        cb_logging.log_remove_file_handler(image_log_filehandler)
+        return
+
+    cb_logging.log_remove_file_handler(image_log_filehandler)        
+    
     if new_metadata['offset'] is None:
         logger.debug('Bootstrapping failed')
         cand_metadata['bootstrap_mosaic_path'] = file_mosaic_path(
                                                           mosaic_metadata)
-        cand_metadata['bootstrap_mosaic_filenames'] = mosaic_metadata[
-                                                          'filename_list']
+        cand_metadata['bootstrap_mosaic_path_list'] = mosaic_metadata[
+                                                          'path_list']
         cand_metadata['bootstrap_status'] = 'Offset failed'
-        file_write_offset_metadata(cand_path, cand_metadata)
-        return None
-    
+        
+        try:
+            file_write_offset_metadata(cand_path, cand_metadata)
+        except:
+            logger.exception('Offset file writing failed - %s', 
+                                   cand_path)
+            cb_logging.log_remove_file_handler(image_log_filehandler)
+            return None
+
     # Store the mosaic path so we can reproduce this navigation in the future
     new_metadata['bootstrap_mosaic_path'] = file_mosaic_path(mosaic_metadata)
-    new_metadata['bootstrap_mosaic_filenames'] = mosaic_metadata[
-                                                         'filename_list']
+    new_metadata['bootstrap_mosaic_path_list'] = mosaic_metadata[
+                                                         'path_list']
     new_metadata['bootstrap_status'] = 'Success'
     
     logger.debug('Bootstrapping successful - updating mosaic')
     new_metadata['bootstrapped'] = True
-    file_write_offset_metadata(cand_path, new_metadata)
+
+    try:
+        file_write_offset_metadata(cand_path, new_metadata)
+    except:
+        logger.exception('Offset file writing failed - %s', cand_path)
+        cb_logging.log_remove_file_handler(image_log_filehandler)
+        return None
     
     if (new_metadata['filter1'] != 'CL1' or 
         new_metadata['filter2'] != 'CL2'):
@@ -158,14 +184,6 @@ def _bootstrap_find_offset_and_update(cand_path, cand_metadata,
                       resolution_threshold=1.05)
 
     file_write_mosaic_metadata(mosaic_metadata)
-        
-#         plt.figure()
-#         plt.imshow(mosaic_metadata['img'])
-#         plt.show()
-#         display_body_mosaic(mosaic_metadata)
-        
-#    display_offset_data(ref_obs, ref_metadata, show_rings=False, show_bodies=False)
-#     display_offset_data(cand_obs, new_metadata, show_rings=False, show_bodies=False)
 
     return new_metadata
 
@@ -198,23 +216,37 @@ def _bootstrap_make_initial_mosaic(body_name, bootstrap_config):
         
     _BOOTSTRAP_MOSAICS[body_name] = mosaic_metadata
 
-    file_write_mosaic_metadata(mosaic_metadata)
-    
 #     plt.imshow(mosaic_metadata['img'])
 #     plt.show()
     
 #     print 'Initial mosaic'    
 #     display_body_mosaic(mosaic_metadata)
     
-def _bootstrap_update_lists(body_name, cand_idx, new_metadata):
+def _bootstrap_time_expired(body_name, metadata, bootstrap_config):
+    known_time = None
+    candidate_time = None
+    # KNOWN and CANDIDATE lists are pre-sorted
+    if (body_name in _BOOTSTRAP_INIT_KNOWNS and
+        len(_BOOTSTRAP_INIT_KNOWNS[body_name]) > 0):
+        known_time = _BOOTSTRAP_INIT_KNOWNS[body_name][0][1]['midtime'] 
+    if (body_name in _BOOTSTRAP_CANDIDATES and
+        len(_BOOTSTRAP_CANDIDATES[body_name]) > 0):
+        candidate_time = _BOOTSTRAP_CANDIDATES[body_name][0][1]['midtime'] 
     
-    _BOOTSTRAP_INIT_KNOWNS[body_name].append((cand_path, new_metadata))
-        
-    _BOOTSTRAP_INIT_KNOWNS[body_name].sort(key=lambda x: 
-                                            abs(x[1]['midtime']))
+    if known_time is None and candidate_time is None:
+        return False
+    
+    if known_time is None:
+        min_time = candidate_time
+    elif candidate_time is None:
+        min_time = known_time
+    else:
+        min_time = min(known_time, candidate_time)
+    time_diff = metadata['midtime'] - min_time
+    allowed_diff = (bootstrap_config['body_list'][body_name] * 
+                    bootstrap_config['orbit_frac'])
 
-def _bootstrap_time_expired(body_name):
-    return False # XXX
+    return time_diff > allowed_diff
     
 def _bootstrap_sort_candidates(body_name):
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_sort_candidates')
@@ -237,15 +269,33 @@ def _bootstrap_sort_candidates(body_name):
         logger.debug('  %s - %s', filename, candidates[i][1]['.sort_metric'])
         
         
-def _bootstrap_process_all(force, bootstrap_config, **kwargs):
-    for body_name in sorted(_BOOTSTRAP_CANDIDATES):
-        if body_name not in BOOTSTRAP_BODY_LIST:
-            continue
-        if force or _bootstrap_time_expired(body_name):
-            _bootstrap_process_one(body_name, bootstrap_config, **kwargs)
-            
-def _bootstrap_process_one(body_name, bootstrap_config, **kwargs):
+def _bootstrap_process_one_body(body_name,
+                                image_logfile_level,
+                                bootstrap_config, **kwargs):
+    logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_process_one_body')
+
     if body_name not in _BOOTSTRAP_INIT_KNOWNS:
+        _BOOTSTRAP_INIT_KNOWNS[body_name] = []
+    if body_name not in _BOOTSTRAP_CANDIDATES:
+        _BOOTSTRAP_CANDIDATES[body_name] = []
+
+    if len(_BOOTSTRAP_CANDIDATES[body_name]) == 0:
+        _BOOTSTRAP_INIT_KNOWNS[body_name] = []
+        return
+        
+    logger.debug('Processing %s', body_name)
+    logger.debug('Known list:')
+    for known_path, known_metadata in _BOOTSTRAP_INIT_KNOWNS[body_name]:
+        _, known_filename = os.path.split(known_path)
+        logger.debug('  %s', known_filename)
+    logger.debug('Candidate list:')
+    for candidate_path, candidate_metadata in _BOOTSTRAP_CANDIDATES[body_name]:
+        _, candidate_filename = os.path.split(candidate_path)
+        logger.debug('  %s', candidate_filename)
+
+    if len(_BOOTSTRAP_INIT_KNOWNS[body_name]) == 0:
+        logger.debug('No known images to make mosaic - aborting')
+        _BOOTSTRAP_CANDIDATES[body_name] = []
         return
     
     _bootstrap_make_initial_mosaic(body_name, bootstrap_config)
@@ -259,7 +309,9 @@ def _bootstrap_process_one(body_name, bootstrap_config, **kwargs):
             if cand_metadata['bootstrap_body'] != body_name:
                 continue
             offset_metadata = _bootstrap_find_offset_and_update(
-                       cand_path, cand_metadata, bootstrap_config,
+                       cand_path, cand_metadata, 
+                       image_logfile_level,
+                       bootstrap_config,
                        allow_stars=False, **kwargs)
             if (offset_metadata is not None and
                 offset_metadata['offset'] is not None):
@@ -267,32 +319,54 @@ def _bootstrap_process_one(body_name, bootstrap_config, **kwargs):
                 del candidates[cand_idx]
                 go_again = True
                 break    
+
+    _BOOTSTRAP_INIT_KNOWNS[body_name] = []
+    _BOOTSTRAP_CANDIDATES[body_name] = []
+    del _BOOTSTRAP_MOSAICS[body_name]
     
-def bootstrap_add_file(image_path, metadata, bootstrap_config=None,
+def bootstrap_add_file(image_path, metadata, log_root='cb', 
+                       image_logfile_level=None,
+                       bootstrap_config=None,
                        redo_bootstrapped=False, **kwargs):
+    """XXX DOCUMENT THIS"""
+    global _LOGGING_NAME
+    _LOGGING_NAME = log_root + '.' + _LOGGING_MODULE_NAME
+    
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_add_file')
 
     if bootstrap_config is None:
         bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
         
     if metadata is None:
-        _bootstrap_process_all(True, bootstrap_config, **kwargs)
+        # End of the file list - force everything to process
+        for body_name in _BOOTSTRAP_CANDIDATES:
+            _bootstrap_process_one_body(body_name, 
+                                        image_logfile_level,
+                                        bootstrap_config, **kwargs)
         return
         
     body_name = metadata['bootstrap_body']
     if body_name is None:
         return
 
+    if body_name not in bootstrap_config['body_list']:
+        return
+    
     _, image_filename = os.path.split(image_path)
     already_bootstrapped = ('bootstrapped' in metadata and 
                             metadata['bootstrapped'])
 
-    if metadata['offset'] is not None and not already_bootstrapped:
+    if _bootstrap_time_expired(body_name, metadata, bootstrap_config):
+        _bootstrap_process_one_body(body_name,
+                                    image_logfile_level,
+                                    bootstrap_config)
+
+    if metadata is not None and metadata['offset'] is not None and not already_bootstrapped:
 #        if metadata['camera'] == 'WAC':
 #            logger.debug('Known offset but ignoring WAC - %s', image_filename)
 #            return
         if metadata['filter1'] != 'CL1' or metadata['filter2'] != 'CL2':
-            logger.debug('Known offset but not clear filter - %s', 
+            logger.debug('%s - Known offset but not clear filter', 
                          image_filename)
             return
         if body_name not in _BOOTSTRAP_INIT_KNOWNS:
@@ -300,7 +374,7 @@ def bootstrap_add_file(image_path, metadata, bootstrap_config=None,
         _BOOTSTRAP_INIT_KNOWNS[body_name].append((image_path,metadata))
         _BOOTSTRAP_INIT_KNOWNS[body_name].sort(key=lambda x: 
                                                abs(x[1]['midtime']))
-        logger.debug('Known offset %s', image_filename)
+        logger.debug('%s - Known offset for %s', image_filename, body_name)
     elif (metadata['bootstrap_candidate'] or 
           (already_bootstrapped and redo_bootstrapped)):
         if body_name not in _BOOTSTRAP_CANDIDATES:
@@ -308,8 +382,8 @@ def bootstrap_add_file(image_path, metadata, bootstrap_config=None,
         _BOOTSTRAP_CANDIDATES[body_name].append((image_path,metadata))
         _BOOTSTRAP_CANDIDATES[body_name].sort(key=lambda x: 
                                                     abs(x[1]['midtime']))
-        logger.debug('Candidate %s - %s', image_filename, body_name)
+        logger.debug('%s - Candidate for %s', image_filename, body_name)
+        
     else:
-        logger.debug('No offset and not a candidate %s', image_filename)
+        logger.debug('%s - No offset and not a candidate', image_filename)
 
-    _bootstrap_process_all(metadata is None, bootstrap_config, **kwargs)

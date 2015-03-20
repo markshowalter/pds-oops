@@ -11,7 +11,7 @@ from cb_config import *
 from cb_gui_offset_data import *
 from cb_util_file import *
 
-results_dir = os.path.join(RESULTS_ROOT, 'COISS_2xxx')
+results_dir = os.path.join(RESULTS_ROOT, 'offsets')
 
 root = tk.Tk()
 root.withdraw()

@@ -105,8 +105,9 @@ def _callback_mousemove(x, y, metadata):
                            ('%7.3f'%(metadata['emission'][y,x] * oops.DPR)))
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
-        metadata['label_image'].config(text=
-               metadata['filename_list'][metadata['image_number'][y,x]][:13])
+        path = metadata['path_list'][metadata['image_number'][y,x]]
+        _, filename = os.path.split(path)
+        metadata['label_image'].config(text=filename[:13])
         metadata['label_image_num'].config(text=
                            ('%d'%metadata['image_number'][y,x]))
         metadata['label_date'].config(text=

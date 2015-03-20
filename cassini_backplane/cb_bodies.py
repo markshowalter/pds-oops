@@ -117,7 +117,6 @@ def _bodies_create_cartographic(bp, body_data):
     return model
 
 def bodies_create_model(obs, body_name, inventory,
-                        lambert=True,
                         extend_fov=(0,0),
                         cartographic_data={},
                         bodies_config=None,
@@ -130,8 +129,6 @@ def bodies_create_model(obs, body_name, inventory,
         inventory          The dictionary returned from the inventory()
                            method of an Observation. Used to find the
                            clipping rectangle.
-        lambert            True to shade the model using a cos(i) Lambert 
-                           factor.
         extend_fov         The amount beyond the image in the (U,V) dimension
                            to generate the model.
         cartographic_data  A dictionary of body names containing cartographic
@@ -239,7 +236,7 @@ def bodies_create_model(obs, body_name, inventory,
     latlon_mask = bodies_reproject(obs, body_name, 
         latitude_resolution=bodies_config['mask_lat_resolution'], 
         longitude_resolution=bodies_config['mask_lon_resolution'],
-        zoom=1,
+        zoom_amt=1,
         latlon_type=bodies_config['mask_latlon_type'],
         lon_direction=bodies_config['mask_lon_direction'],
         mask_only=True, override_backplane=restr_bp,
@@ -295,7 +292,7 @@ def bodies_create_model(obs, body_name, inventory,
     
     # Make the actual model
     
-    if lambert:
+    if bodies_config['use_lambert']:
         restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
         restr_model[restr_body_mask_inv] = 0.
     else:
@@ -477,7 +474,7 @@ def bodies_reproject(
             If mask_only is False, a dictionary containing
 
         'body_name'        The name of the body.
-        'filename'         The filename from the Observation.
+        'path'             The full path from the Observation.
         'full_mask'        The mask of pixels that contain reprojected data.
                            True means the pixel is valid.
         'lat_idx_range'    The range (min,max) of latitudes in the returned
@@ -764,7 +761,7 @@ def bodies_reproject(
     ret = {}
     
     ret['body_name'] = body_name
-    ret['filename'] = obs.filename
+    ret['path'] = obs.full_path
     ret['full_mask'] = full_mask
     ret['lat_idx_range'] = (min_latitude_pixel, max_latitude_pixel)
     ret['lat_resolution'] = latitude_resolution
@@ -821,7 +818,7 @@ def bodies_mosaic_init(body_name,
         'incidence'        The per-pixel incidence angle.
         'image_number'     The per-pixel image number giving the image
                            used to fill the data for each pixel.
-        'filename_list'    The filenames indexed by image_number.
+        'path_list'        The paths indexed by image_number.
         'time'             The per-pixel time (TDB).
     """
     latitude_pixels = int(oops.PI / latitude_resolution)
@@ -849,7 +846,7 @@ def bodies_mosaic_init(body_name,
                                 dtype=np.float32)
     ret['image_number'] = np.zeros((latitude_pixels, longitude_pixels), 
                                    dtype=np.int32)
-    ret['filename_list'] = []
+    ret['path_list'] = []
     ret['time'] = np.zeros((latitude_pixels, longitude_pixels), 
                            dtype=np.float32)
     
@@ -939,8 +936,8 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     mosaic_phase[replace_mask] = repro_phase[replace_mask] 
     mosaic_emission[replace_mask] = repro_emission[replace_mask] 
     mosaic_incidence[replace_mask] = repro_incidence[replace_mask]
-    mosaic_image_number[replace_mask] = len(mosaic_metadata['filename_list']) 
-    mosaic_metadata['filename_list'].append(repro_metadata['filename'])
+    mosaic_image_number[replace_mask] = len(mosaic_metadata['path_list']) 
+    mosaic_metadata['path_list'].append(repro_metadata['path'])
     mosaic_time[replace_mask] = repro_metadata['time'] 
     mosaic_mask[replace_mask] = True
 

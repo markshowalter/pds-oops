@@ -70,10 +70,6 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
 FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE', 'TITAN'] # XXX
 
-# These bodies can be used for bootstrapping.
-BOOTSTRAP_BODY_LIST = ['DIONE', 'ENCELADUS', 'IAPETUS', 'MIMAS', 'PHOEBE',
-                       'RHEA', 'TETHYS']
-
 ##################
 # CONFIGURATIONS #
 ##################
@@ -148,6 +144,10 @@ BODIES_DEFAULT_CONFIG = {
     # terminator.
     'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
     
+    # Whether or not Lambert shading should be used, as opposed to just a
+    # solid unshaded shape or cartographic reprojection.
+    'use_lambert': True,
+    
     # The resolution in longitude and latitude (radians) for the metadata
     # latlon mask.
     'mask_lon_resolution': 1. * oops.RPD,
@@ -172,6 +172,20 @@ RINGS_DEFAULT_CONFIG = {
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
+    # These bodies can be used for bootstrapping.
+    # Includes the orbital period (seconds).
+    'body_list': {'DIONE':       2.736915 * 86400,
+                  'ENCELADUS':   1.370218 * 86400,
+                  'IAPETUS':    79.3215   * 86400,
+                  'MIMAS':       0.942    * 86400,
+                  'PHOEBE':    550.564636 * 86400, 
+                  'RHEA':        4.518212 * 86400,
+                  'TETHYS':      1.887802 * 86400},
+    
+    # The fraction of an orbit that a moon can move and still be OK for
+    # creating a mosaic.
+    'orbit_frac': 0.25,
+    
     # The resolution in longitude and latitude (radians) for the mosaic.
     'lon_resolution': 0.1 * oops.RPD,
     'lat_resolution': 0.1 * oops.RPD,
