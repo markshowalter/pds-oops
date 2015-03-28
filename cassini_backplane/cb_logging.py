@@ -100,7 +100,7 @@ def log_set_console_format(full=True):
 def log_add_console_handler(level=logging.DEBUG):
     global _LOG_CONSOLE_HANDLER
     _LOG_CONSOLE_HANDLER = logging.StreamHandler()
-    _LOG_CONSOLE_HANDLER.setLevel(logging.DEBUG)
+    _LOG_CONSOLE_HANDLER.setLevel(level)
     root_logger = logging.getLogger('cb')
     root_logger.addHandler(_LOG_CONSOLE_HANDLER)
     log_set_console_format()

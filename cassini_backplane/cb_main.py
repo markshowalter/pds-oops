@@ -10,13 +10,13 @@ import logging
 import argparse
 from datetime import datetime
 import os
-import os.path
 import subprocess
 import sys
 import time
 import traceback
 
 import oops.inst.cassini.iss as iss
+import oops
 
 from cb_bootstrap import *
 from cb_config import *
@@ -25,15 +25,15 @@ from cb_util_file import *
 
 LOGGING_SUPERCRITICAL = 60
 
-PYTHON_EXE = '/home/rfrench/Enthought/Canopy_64bit/User/bin/python'
-CBMAIN_EXE = '/seti/src/pds-tools-dev/cassini_backplane/cb_main.py'
-
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
 #     command_line_str = '--first-image-num 1481738274 --offset-redo-error --no-bootstrap --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1483279205 --last-image-num 1496491595 --no-offset --image-log-console-level none'
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --no-offset --image-log-console-level none'
-    command_line_str = '--first-image-num 1483279205 --last-image-num 1496491595 --no-offset --image-log-console-level none'
+#     command_line_str = '--first-image-num 1481782075 --last-image-num 1481782075 --offset-force --image-log-console-level none --max-subprocesses 4'
+    command_line_str = '--first-image-num 1481738274 --last-image-num 1481830419 --offset-force --image-log-console-level none --max-subprocesses 0'
 
     command_list = command_line_str.split()
 
@@ -69,11 +69,11 @@ parser.add_argument(
             to $(RESULTS_ROOT)/logs/cb_main/<datetime>.log""")
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
-    '--main-logfile-level', metavar='LEVEL', default='debug', 
+    '--main-logfile-level', metavar='LEVEL', default='info', 
     choices=LOGGING_LEVEL_CHOICES,
     help="Choose the logging level to be output to the main loop logfile")
 parser.add_argument(
-    '--main-log-console-level', metavar='LEVEL', default='debug',
+    '--main-log-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help="Choose the logging level to be output to stdout for the main loop")
 parser.add_argument(
@@ -82,11 +82,11 @@ parser.add_argument(
             defaults to 
             $(RESULTS_ROOT)/logs/<image-path>/<image_filename>.log""")
 parser.add_argument(
-    '--image-logfile-level', metavar='LEVEL', default='debug',
+    '--image-logfile-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help="Choose the logging level to be output to stdout for each image")
 parser.add_argument(
-    '--image-log-console-level', metavar='LEVEL', default='debug',
+    '--image-log-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help="Choose the logging level to be output to stdout for each image")
 
@@ -189,26 +189,30 @@ main_logger = logging.getLogger('cb_main')
 main_logger.setLevel(min_log_level(main_logfile_level,
                                    main_log_console_level))
 
-if arguments.main_logfile is not None:
-    main_log_path = arguments.main_logfile
-else:
-    main_log_path = os.path.join(RESULTS_ROOT, 'logs')
-    if not os.path.exists(main_log_path):
-        os.mkdir(main_log_path)
-    main_log_path = os.path.join(main_log_path, 'cb_main')
-    if not os.path.exists(main_log_path):
-        os.mkdir(main_log_path)
-    main_log_datetime = datetime.now().isoformat()[:-7]
-    main_log_path = os.path.join(main_log_path, main_log_datetime+'.log')
+main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '+
+                                   '%(message)s',
+                                   datefmt='%m/%d/%Y %H:%M:%S')
 
-main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                              datefmt='%m/%d/%Y %H:%M:%S')
+if main_logfile_level is not LOGGING_SUPERCRITICAL:
+    # Only create the logfile is we're actually going to log to it
+    if arguments.main_logfile is not None:
+        main_log_path = arguments.main_logfile
+    else:
+        main_log_path = os.path.join(RESULTS_ROOT, 'logs')
+        if not os.path.exists(main_log_path):
+            os.mkdir(main_log_path)
+        main_log_path = os.path.join(main_log_path, 'cb_main')
+        if not os.path.exists(main_log_path):
+            os.mkdir(main_log_path)
+        main_log_datetime = datetime.now().isoformat()[:-7]
+        main_log_path = os.path.join(main_log_path, main_log_datetime+'.log')
+    
+    main_log_file_handler = logging.FileHandler(main_log_path)
+    main_log_file_handler.setLevel(main_logfile_level)
+    main_log_file_handler.setFormatter(main_formatter)
+    main_logger.addHandler(main_log_file_handler)
 
-main_log_file_handler = logging.FileHandler(main_log_path)
-main_log_file_handler.setLevel(main_logfile_level)
-main_log_file_handler.setFormatter(main_formatter)
-main_logger.addHandler(main_log_file_handler)
-
+# Always create a console logger so we don't get a "no handler" error
 main_log_console_handler = logging.StreamHandler()
 main_log_console_handler.setLevel(main_log_console_level)
 main_log_console_handler.setFormatter(main_formatter)
@@ -237,6 +241,72 @@ cb_logging.log_add_console_handler(image_log_console_level)
 #
 ###############################################################################
 
+def offset_result_str(image_path):
+    metadata = file_read_offset_metadata(image_path)
+    filename = file_clean_name(image_path)
+    
+    ret = filename + ' - '
+    if metadata is None:
+        ret += 'No offset file written'
+        return ret
+
+    if 'error' in metadata:
+        ret += 'ERROR: '
+        error = metadata['error']
+        if error.startswith('SPICE(NOFRAMECONNECT)'):
+            ret += 'SPICE KERNEL MISSING DATA AT ' + error[34:53]
+        else:
+            ret += error 
+        return ret
+    
+    offset = metadata['offset']
+    if offset is None:
+        offset_str = '  N/A  '
+    else:
+        offset_str = '%3d,%3d' % tuple(offset)
+    star_offset_str = '  N/A  '
+    if metadata['stars_metadata'] is not None:
+        star_offset = metadata['stars_metadata']['offset']
+        if star_offset is not None:
+            star_offset_str = '%3d,%3d' % tuple(star_offset)
+    model_offset = metadata['model_offset']
+    if model_offset is None:
+        model_offset_str = '  N/A  '
+    else:
+        model_offset_str = '%3d,%3d' % tuple(model_offset)
+    filter1 = metadata['filter1']
+    filter2 = metadata['filter2']
+    the_size = '%dx%d' % tuple(metadata['image_shape'])
+    the_size = '%9s' % the_size
+    the_time = cspice.et2utc(metadata['midtime'], 'C', 0)
+    single_body_str = None
+    if metadata['body_only']:
+        single_body_str = 'Filled with ' + metadata['body_only']
+    if metadata['rings_only']:
+        single_body_str = 'Filled with rings'
+    bootstrap_str = None
+    if metadata['bootstrap_candidate']:
+        bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
+        
+    ret += the_time + ' ' + filter1 + '+' + filter2 + ' ' + the_size
+    ret += ' Final ' + offset_str
+    if metadata['used_objects_type'] == 'stars':
+        ret += '  STAR ' + star_offset_str
+    else:
+        ret += '  Star ' + star_offset_str
+    if metadata['used_objects_type'] == 'model':
+        ret += '  MODEL ' + model_offset_str
+    else:
+        ret += '  Model ' + model_offset_str
+    if bootstrap_str:
+        ret += ' ' + bootstrap_str
+    if bootstrap_str and single_body_str:
+        ret += ' '
+    if single_body_str:
+        ret += ' ' + single_body_str
+        
+    return ret
+    
 def collect_cmd_line(image_path):
     ret = []
     ret += ['--is-subprocess']
@@ -254,23 +324,35 @@ def collect_cmd_line(image_path):
 
 SUBPROCESS_LIST = []
 
-def run_and_maybe_wait(args):
+def run_and_maybe_wait(args, image_path):
     said_waiting = False
     while len(SUBPROCESS_LIST) == arguments.max_subprocesses:
         if not said_waiting:
-            main_logger.debug('WAITING')
+            main_logger.debug('Waiting for a free subprocess')
             said_waiting = True
         for i in xrange(len(SUBPROCESS_LIST)):
-            if SUBPROCESS_LIST[i].poll() is not None:
+            if SUBPROCESS_LIST[i][0].poll() is not None:
+                results = offset_result_str(SUBPROCESS_LIST[i][1])
+                main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 break
         if len(SUBPROCESS_LIST) == arguments.max_subprocesses:
             time.sleep(1)
 
-    main_logger.debug('SPAWNING SUBPROCESS')
+    main_logger.debug('Spawning subprocess %s', str(args))
         
     pid = subprocess.Popen(args)
-    SUBPROCESS_LIST.append(pid)
+    SUBPROCESS_LIST.append((pid, image_path))
+
+def wait_for_all():
+    while len(SUBPROCESS_LIST) > 0:
+        for i in xrange(len(SUBPROCESS_LIST)):
+            if SUBPROCESS_LIST[i][0].poll() is not None:
+                results = offset_result_str(SUBPROCESS_LIST[i][1])
+                main_logger.info(results)
+                del SUBPROCESS_LIST[i]
+                break
+
 
 ###############################################################################
 #
@@ -288,28 +370,28 @@ def process_offset_one_image(image_path):
                     main_logger.debug(
                         'Skipping %s - offset file exists and metadata OK', 
                         image_path)
-                    return
-                main_logger.info(
+                    return False
+                main_logger.debug(
                     'Processing %s - offset file indicates error', image_path)
             else:
                 main_logger.debug('Skipping %s - offset file exists', 
                                   image_path)
-                return
-        main_logger.info(
+                return False
+        main_logger.debug(
           'Processing %s - offset file exists but redoing offsets', image_path)
     else:
-        main_logger.info('Processing %s - no offset file', image_path)
+        main_logger.debug('Processing %s - no offset file', image_path)
 
     if arguments.max_subprocesses:
-        run_and_maybe_wait([PYTHON_EXE, CBMAIN_EXE] + 
-                           collect_cmd_line(image_path)) 
-        return
+        run_and_maybe_wait([PYTHON_EXE, CBMAIN_PY] + 
+                           collect_cmd_line(image_path), image_path) 
+        return True
 
     if image_logfile_level != LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
         else:
-            image_log_path = file_img_to_log_path(image_path, bootstrap=True)
+            image_log_path = file_img_to_log_path(image_path, bootstrap=False)
         
         if os.path.exists(image_log_path):
             os.remove(image_log_path) # XXX Need option to not do this
@@ -328,10 +410,11 @@ def process_offset_one_image(image_path):
         image_logger.exception('File reading failed - %s', image_path)
         metadata = {}
         err = 'File reading failed:\n' + traceback.format_exc() 
-        metadata['error'] = err
+        metadata['error'] = str(sys.exc_value)
+        metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
-        return
+        return True
 
     try:
         metadata = master_find_offset(obs, create_overlay=True)
@@ -340,10 +423,11 @@ def process_offset_one_image(image_path):
         image_logger.exception('Offset finding failed - %s', image_path)
         metadata = {}
         err = 'Offset finding failed:\n' + traceback.format_exc() 
-        metadata['error'] = err
+        metadata['error'] = str(sys.exc_value)
+        metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
-        return
+        return True
     
     try:
         file_write_offset_metadata(image_path, metadata)
@@ -352,20 +436,30 @@ def process_offset_one_image(image_path):
         image_logger.exception('Offset file writing failed - %s', image_path)
         metadata = {}
         err = 'Offset file writing failed:\n' + traceback.format_exc() 
-        metadata['error'] = err
+        metadata['error'] = str(sys.exc_value)
+        metadata['error_traceback'] = err
         try:
             file_write_offset_metadata(image_path, metadata)
         except:
             main_logger.exception('Error offset file writing failed - %s', image_path)
         cb_logging.log_remove_file_handler(image_log_filehandler)
-        return
+        return True
+
+    results = offset_result_str(image_path)
+    main_logger.info(results)
 
     cb_logging.log_remove_file_handler(image_log_filehandler)
+
+    return True
 
 
 if not arguments.offset:
     main_logger.info('*** Skipping main offset pass')
 else:
+    start_time = time.time()
+    num_files_processed = 0
+    num_files_skipped = 0
+
     main_logger.info('')
     main_logger.info('**********************************')
     main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
@@ -380,6 +474,7 @@ else:
         main_logger.info('*** Image #s %010d - %010d / Camera %s',
                          first_image_number, last_image_number,
                          restrict_camera)
+        main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
         if restrict_image_list is not None:
             main_logger.info('*** Images restricted to list:')
             for filename in restrict_image_list:
@@ -387,8 +482,18 @@ else:
         for image_path in yield_image_filenames(
                 first_image_number, last_image_number,
                 camera=restrict_camera, restrict_list=restrict_image_list):
-            process_offset_one_image(image_path)
+            if process_offset_one_image(image_path):
+                num_files_processed += 1
+            else:
+                num_files_skipped += 1
 
+    wait_for_all()
+
+    end_time = time.time()
+    
+    main_logger.info('Total files processed %d', num_files_processed)
+    main_logger.info('Total files skipped %d', num_files_skipped)
+    main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
 
 ###############################################################################
 #
@@ -401,7 +506,7 @@ def process_bootstrap_one_image(image_path, image_logfile_level):
         bootstrap_add_file(None, None)
         return
     
-    _, image_filename = os.path.split(image_path)
+    image_filename = file_clean_name(image_path)
     
     offset_path = file_img_to_offset_path(image_path)
     if not os.path.exists(offset_path):
@@ -423,6 +528,8 @@ def process_bootstrap_one_image(image_path, image_logfile_level):
 if not arguments.bootstrap:
     main_logger.info('*** Skipping bootstrap pass')
 else:
+    start_time = time.time()
+    
     main_logger.info('')
     main_logger.info('********************************')
     main_logger.info('*** BEGINNING BOOTSTRAP PASS ***')
@@ -444,7 +551,9 @@ else:
         for image_path in yield_image_filenames(
                 first_image_number, last_image_number,
                 camera=restrict_camera, restrict_list=restrict_image_list):
-            process_bootstrap_one_image(image_path,
-                                        image_logfile_level=image_logfile_level)
+            process_bootstrap_one_image(image_path, image_logfile_level)
 
-    process_bootstrap_one_image(None)
+    process_bootstrap_one_image(None, image_logfile_level)
+
+    end_time = time.time()
+    main_logger.info('Total elapsed time %.2f sec', end_time-start_time)

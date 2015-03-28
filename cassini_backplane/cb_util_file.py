@@ -75,6 +75,12 @@ def yield_image_filenames(img_start_num, img_end_num, camera='NW',
         if done:
             break
 
+def file_clean_name(path):
+    _, filename = os.path.split(path)
+    filename = filename.replace('.IMG', '')
+    filename = filename.replace('_CALIB', '')
+    return filename
+
 def read_iss_file(path):
     obs = iss.from_file(path, fast_distortion=True)
     obs.full_path = path
@@ -175,11 +181,13 @@ def file_write_offset_metadata(img_path, metadata):
             new_metadata['stars_metadata'] = \
                     new_metadata['stars_metadata'].copy()
             del new_metadata['stars_metadata']['full_star_list']
-
+            
     offset_fp = open(offset_path, 'wb')
     offset_fp.write(msgpack.packb(new_metadata, 
                                   default=msgpack_numpy.encode))    
     offset_fp.close()
+    
+    return offset_path
 
 def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
     """Mosaic filename is of the form:
@@ -187,6 +195,8 @@ def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
     <ROOT>/mosaics/<bodyname>/<firstimg>_<lastimg>_<#img>.dat
     """
     assert os.path.exists(root)
+    if len(metadata['path_list']) == 0:
+        return None
     root = os.path.join(root, 'mosaics')
     if make_dirs and not os.path.exists(root):
         os.mkdir(root)
@@ -225,3 +235,5 @@ def file_write_mosaic_metadata(metadata):
     mosaic_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     mosaic_fp.close()
+
+    return mosaic_path
