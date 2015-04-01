@@ -28,12 +28,8 @@ LOGGING_SUPERCRITICAL = 60
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-#     command_line_str = '--first-image-num 1481738274 --offset-redo-error --no-bootstrap --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
-#     command_line_str = '--first-image-num 1483279205 --last-image-num 1496491595 --no-offset --image-log-console-level none'
-#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --no-offset --image-log-console-level none'
-#     command_line_str = '--first-image-num 1481782075 --last-image-num 1481782075 --offset-force --image-log-console-level none --max-subprocesses 4'
-    command_line_str = '--first-image-num 1481738274 --last-image-num 1481830419 --offset-force --image-log-console-level none --max-subprocesses 0'
+    command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
 
     command_list = command_line_str.split()
 
@@ -288,7 +284,8 @@ def offset_result_str(image_path):
     if metadata['bootstrap_candidate']:
         bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
         
-    ret += the_time + ' ' + filter1 + '+' + filter2 + ' ' + the_size
+    ret += the_time + ' ' + ('%4s'%filter1) + '+' + ('%4s'%filter2) + ' '
+    ret += the_size
     ret += ' Final ' + offset_str
     if metadata['used_objects_type'] == 'stars':
         ret += '  STAR ' + star_offset_str
@@ -503,7 +500,10 @@ else:
 
 def process_bootstrap_one_image(image_path, image_logfile_level):
     if image_path is None:
-        bootstrap_add_file(None, None)
+        bootstrap_add_file(None, None,
+                           image_logfile_level=image_logfile_level, 
+                           log_root='cb_main',
+                           redo_bootstrapped=True)
         return
     
     image_filename = file_clean_name(image_path)
