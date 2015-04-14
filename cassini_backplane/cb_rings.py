@@ -736,7 +736,7 @@ def rings_reproject(
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
     orig_fov = None
-    if offset is not None:
+    if offset is not None and offset != (0,0):
         orig_fov = obs.fov
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
     
