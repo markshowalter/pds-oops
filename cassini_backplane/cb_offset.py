@@ -10,6 +10,8 @@
 import cb_logging
 import logging
 
+import time
+
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.filters as filt
@@ -71,13 +73,12 @@ def master_find_offset(obs,
                    create_overlay=False,
                    
                    allow_stars=True,
-                       star_overlay_box_width=None,
-                       star_overlay_box_thickness=None,
-                       star_config=None,
+                       stars_overlay_box_width=None,
+                       stars_overlay_box_thickness=None,
+                       stars_config=None,
                         
                    allow_saturn=True,
                    allow_moons=True,
-                       bodies_use_lambert=True,
                        bodies_cartographic_data=None,
                        bodies_config=None,
                    
@@ -96,16 +97,15 @@ def master_find_offset(obs,
 
         allow_stars              True to allow finding the offset based on
                                  stars.
-        star_overlay_box_width   Parameters to pass to 
-        star_overlay_box_thickness  star_make_good_bad_overlay to make star
-                                 overlay symbols.
-        star_config              Config parameters for stars.
+        stars_overlay_box_width      Parameters to pass to 
+        stars_overlay_box_thickness  star_make_good_bad_overlay to make star
+                                     overlay symbols.
+        stars_config             Config parameters for stars.
 
         allow_saturn             True to allow finding the offset based on
                                  Saturn.
         allow_moons              True to allow finding the offset based on
                                  moons.
-        bodies_use_lambert       True to use Lambert shading for moons.
         bodies_cartographic_data The metadata to use for cartographic
                                  surfaces (see cb_bodies).
         bodies_config            Config parameters for bodies.
@@ -144,8 +144,7 @@ def master_find_offset(obs,
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
             'large_bodies'     A list of the large bodies present in the image
-                               sorted in descending order by the size in 
-                               pixels.
+                               sorted in descending order by range.
             'body_only'        False if the image doesn't consist entirely of
                                a single body and nothing else.
                                Otherwise the name of the body.
@@ -168,6 +167,8 @@ def master_find_offset(obs,
                                None if model matching failed.
             'secondary_corr_ok' True if secondary model correlation was
                                successful. None if it wasn't performed.
+            'start_time'       The start time (s) of the entire offset process.
+            'end_time'         The end time (s) of the entire offset process.
             
           Data for bootstrapping:
             
@@ -184,7 +185,7 @@ def master_find_offset(obs,
             'bootstrap_mosaic_filenames'
                                The list of filenames used to create the mosaic.
             'bootstrap_status' A string describing attempts at bootstrapping:
-                        None        Bootstrapping not attempted
+                                   None        Bootstrapping not attempted
                                
           Large data that might be too big to store in an offset file:
             
@@ -199,24 +200,32 @@ def master_find_offset(obs,
                 # INITIALIZATION #
                 ##################
     
+    start_time = time.time()
+    
     logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
     
-    logger.debug('Date %s X %d Y %d TEXP %.3f %s+%s %s SAMPLING %s GAIN %d',
+    logger.info('Processing %s', obs.full_path)
+    logger.info('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
+                 'SAMPLING %s / GAIN %d',
                  cspice.et2utc(obs.midtime, 'C', 0),
-                 obs.data.shape[1], obs.data.shape[0], obs.texp,
-                 obs.filter1, obs.filter2, obs.detector, obs.sampling,
+                 obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
+                 obs.filter1, obs.filter2, obs.sampling,
                  obs.gain_mode)
-    logger.debug('create_overlay %d, allow_stars %d, allow_saturn %d, '+
-                 'allow_moons %d, allow_rings %d',
-                 create_overlay, allow_stars, allow_saturn, allow_moons,
-                 allow_rings)
-    
+    logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
+                 'allow_rings %d',
+                 allow_stars, allow_saturn, allow_moons, allow_rings)
+    if bodies_cartographic_data is None:
+        logger.info('No cartographic data provided')
+    else:
+        logger.info('Cartographic data provided for: %s',
+                     str(sorted(bodies_cartographic_data.keys())))
+        
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
         
     masked_model = False # XXX
     
-    extend_fov = MAX_POINTING_ERROR[obs.detector]
+    extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
     search_size_max_u, search_size_max_v = extend_fov
     
     set_obs_ext_data(obs, extend_fov)
@@ -249,6 +258,8 @@ def master_find_offset(obs,
     dec = obs.center_bp.declination()
     metadata['ra_dec_center'] = (ra.vals,dec.vals)
     # Offset process
+    metadata['start_time'] = start_time
+    metadata['end_time'] = None
     metadata['offset'] = None
     metadata['body_only'] = False
     metadata['rings_only'] = False
@@ -296,7 +307,7 @@ def master_find_offset(obs,
 #    large_bodies_by_size.sort(key=lambda x: 
 #                  reverse=True)
     
-    logger.debug('Large body inventory %s', [x[0] for x in large_bodies_by_range])
+    logger.info('Large body inventory %s', [x[0] for x in large_bodies_by_range])
 
     metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
         
@@ -317,7 +328,7 @@ def master_find_offset(obs,
                 obs.ext_corner_bp.where_intercepted(front_body_name).
                     vals)
             if np.all(corner_body_mask):
-                logger.debug('Image appears to be covered by %s', front_body_name)
+                logger.info('Image appears to be covered by %s', front_body_name)
                 entirely_body = front_body_name
                 metadata['body_only'] = front_body_name
 
@@ -326,7 +337,7 @@ def master_find_offset(obs,
 
     metadata['bootstrap_body'] = front_body_name
     if front_body_name is not None:
-        logger.debug('Bootstrap body %s', metadata['bootstrap_body'])
+        logger.info('Bootstrap body %s', metadata['bootstrap_body'])
 
 
     # See if the main rings take up the entire image
@@ -337,7 +348,7 @@ def master_find_offset(obs,
         radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
                                     radii < RINGS_MAX_RADIUS)
         if np.all(radii_good):  
-            logger.debug('Image appears to be entirely rings')
+            logger.info('Image appears to be entirely rings')
             entirely_rings = True
             metadata['rings_only'] = True
     
@@ -358,25 +369,26 @@ def master_find_offset(obs,
         
     if (not entirely_rings and not entirely_body and
         allow_stars and not force_offset and not force_bootstrap_candidate):
-        stars_metadata = star_find_offset(obs,
-                                          extend_fov=extend_fov,
-                                          star_config=star_config)
+        stars_metadata = stars_find_offset(obs,
+                                           extend_fov=extend_fov,
+                                           stars_config=stars_config)
         metadata['stars_metadata'] = stars_metadata
         star_offset = stars_metadata['offset']
         if star_offset is None:
-            logger.debug('Final star offset N/A')
+            logger.info('Final star offset N/A')
         else:
-            logger.debug('Final star offset U,V %d %d good stars %d', 
-                         star_offset[0], star_offset[1],
-                         stars_metadata['num_good_stars'])
+            logger.info('Final star offset U,V %d %d good stars %d', 
+                        star_offset[0], star_offset[1],
+                        stars_metadata['num_good_stars'])
         if create_overlay:
             # Make the overlay with no offset because we shift the overlay
             # later
-            star_overlay = star_make_good_bad_overlay(obs,
+            star_overlay = stars_make_good_bad_overlay(obs,
                               stars_metadata['full_star_list'], (0,0),
                               extend_fov=extend_fov,
-                              overlay_box_width=star_overlay_box_width,
-                              overlay_box_thickness=star_overlay_box_thickness)
+                              overlay_box_width=stars_overlay_box_width,
+                              overlay_box_thickness=stars_overlay_box_thickness,
+                              stars_config=stars_config)
 
 
                     ###############################
@@ -395,7 +407,7 @@ def master_find_offset(obs,
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
-            if body_name in FUZZY_BODY_LIST and not create_overlay:
+            if body_name in FUZZY_BODY_LIST:
                 continue
             mask_only = (entirely_body == body_name and
                          (bodies_cartographic_data is None or
@@ -403,7 +415,6 @@ def master_find_offset(obs,
             body_model, body_metadata = bodies_create_model(
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
-                    lambert=bodies_use_lambert,
                     cartographic_data=bodies_cartographic_data,
                     bodies_config=bodies_config,
                     mask_only=mask_only)
@@ -417,8 +428,9 @@ def master_find_offset(obs,
              entirely_body not in bodies_cartographic_data)):
             # Nothing we can do here except bootstrap
             metadata['bootstrap_candidate'] = True
-            logger.debug('Single body without cartographic data - forcing '+
+            logger.info('Single body without cartographic data - '+
                          'bootstrap candidate and returning')
+            metadata['end_time'] = time.time()
             return metadata
 
     #
@@ -437,7 +449,8 @@ def master_find_offset(obs,
 
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
-        logger.debug('Forcing bootstrap candidate and returning')
+        logger.info('Forcing bootstrap candidate and returning')
+        metadata['end_time'] = time.time()
         return metadata
         
         
@@ -480,17 +493,17 @@ def master_find_offset(obs,
     metadata['model_contents'] = used_model_str_list
     if force_offset:
         model_offset = force_offset
-        logger.debug('FORCING OFFSET U,V %d,%d',
+        logger.info('FORCING OFFSET U,V %d,%d',
                      model_offset[0], model_offset[1])
     elif len(model_list) == 0:
-        logger.debug('Nothing to model - no offset found')
+        logger.info('Nothing to model - no offset found')
         if rings_curvature_ok and not rings_features_ok:
-            logger.debug('Ring curvature OK but not enough fiducial features '+
-                         '- candidate for bootstrapping')
+            logger.info('Ring curvature OK but not enough fiducial features '+
+                        '- candidate for bootstrapping')
             metadata['bootstrapping_candidate'] = True
             metadata['bootstrap_body'] = 'RINGS'
         if rings_features_ok and not rings_curvature_ok:
-            logger.debug('Candidate for ring radial scan') # XXX
+            logger.info('Candidate for ring radial scan') # XXX
     else:
         # We have at least one viable component of the model
         final_model = _combine_models(model_list, solid=True, 
@@ -500,8 +513,8 @@ def master_find_offset(obs,
             len(bodies_model_list) < offset_config['num_bodies_threshold'] and
             float(np.count_nonzero(final_model)) / final_model.size <
                 offset_config['bodies_cov_threshold']):
-            logger.debug('Too few moons, no rings, model has too little '+
-                         'coverage')
+            logger.info('Too few moons, no rings, model has too little '+
+                        'coverage')
             model_offset = None
             peak = None
         else:            
@@ -523,7 +536,7 @@ def master_find_offset(obs,
                 # model.
                 # No point in doing this if we allow_masked, since we've
                 # already used each model slice independently.
-                logger.debug(
+                logger.info(
                      'Running secondary correlation on offset U,V %d,%d',
                      model_offset[0], model_offset[1])
                 offset_model = final_model[extend_fov[1]-model_offset[1]:
@@ -545,13 +558,13 @@ def master_find_offset(obs,
                     (new_model_offset, new_peak) = model_offset_list[0]
                 if new_model_offset is None:
                     metadata['secondary_corr_ok'] = False
-                    logger.debug('Secondary model correlation FAILED - '+
+                    logger.info('Secondary model correlation FAILED - '+
                                  'Not trusting result')
                     model_offset = None
                     peak = None
                 else:
                     metadata['secondary_corr_ok'] = True
-                    logger.debug('Secondary model correlation dU,dV %d,%d '+
+                    logger.info('Secondary model correlation dU,dV %d,%d '+
                                  'CORR %f', new_model_offset[0],
                                  new_model_offset[1], new_peak)
                     sec_threshold = offset_config['secondary_corr_threshold']
@@ -559,8 +572,8 @@ def master_find_offset(obs,
                     if (abs(new_model_offset[0]) > sec_threshold or
                         abs(new_model_offset[1]) > sec_threshold or
                         new_peak < peak*sec_frac):
-                        logger.debug('Secondary model correlation offset bad'+
-                                     ' - Not trusting result')
+                        logger.info('Secondary model correlation offset does '+
+                                    'not meet criteria - Not trusting result')
                         model_offset = None
                         peak = None
                     else:
@@ -569,9 +582,9 @@ def master_find_offset(obs,
                         peak = new_peak
                         
         if model_offset is None:
-            logger.debug('Final model offset FAILED')
+            logger.info('Final model offset N/A')
         else:
-            logger.debug('Final model offset U,V %d %d', 
+            logger.info('Final model offset    U,V %d %d', 
                          model_offset[0], model_offset[1])
     
             shifted_model = shift_image(final_model, -model_offset[0], 
@@ -586,8 +599,8 @@ def master_find_offset(obs,
                  shifted_model.size < cov_threshold) or
                 not np.any(shifted_model[edge_pixels:-edge_pixels+1,
                                          edge_pixels:-edge_pixels+1])):
-                logger.debug('Final shifted model has too little coverage - '+
-                             'FAILED')
+                logger.info('Final shifted model has too little coverage - '+
+                            'Offset rejected')
                 model_offset = None
                 peak = None
 
@@ -613,29 +626,36 @@ def master_find_offset(obs,
         if (abs(star_offset[0]-model_offset[0]) >= disagree_threshold or
             abs(star_offset[1]-model_offset[1]) >= disagree_threshold):
             if (stars_metadata['num_good_stars'] >= stars_threshold):
-                logger.debug('Star and model offsets disagree by too '+
-                             'much - trusting star result')
+                logger.info('Star and model offsets disagree by too '+
+                            'much - trusting star result')
             else:
-                logger.debug('Star and model offsets disagree by too '+
-                             'much - ignoring star result')
+                logger.info('Star and model offsets disagree by too '+
+                            'much - ignoring star result')
                 star_list = stars_metadata['full_star_list']
                 for star in star_list:
                     star.photometry_confidence = 0. # We changed the offset
                     star.use_for_correlation = False
-                star_overlay = star_make_good_bad_overlay(obs,
+                star_overlay = stars_make_good_bad_overlay(obs,
                           star_list, (0,0),
                           extend_fov=extend_fov,
-                          overlay_box_width=star_overlay_box_width,
-                          overlay_box_thickness=star_overlay_box_thickness,
-                          star_config=star_config)
+                          overlay_box_width=stars_overlay_box_width,
+                          overlay_box_thickness=stars_overlay_box_thickness,
+                          stars_config=stars_config)
                 offset = model_offset
                 metadata['model_overrides_stars'] = True
                 metadata['used_objects_type'] = 'model'
 
-    if offset is None:
-        logger.debug('Final combined offset FAILED')
+    if star_offset is None:
+        logger.info('Final star offset N/A')
     else:
-        logger.debug('Final combined offset U,V %d %d', offset[0], offset[1])
+        logger.info('Final star offset     U,V %d %d good stars %d', 
+                    star_offset[0], star_offset[1],
+                    stars_metadata['num_good_stars'])
+
+    if offset is None:
+        logger.info('Final combined offset FAILED')
+    else:
+        logger.info('Final combined offset U,V %d %d', offset[0], offset[1])
 
     metadata['offset'] = offset
 
@@ -671,8 +691,9 @@ def master_find_offset(obs,
     # is "bad" - bad limb or curvature, no cartographic data
     if (offset is None and bad_body and not good_body and
         metadata['bootstrap_body'] is not None):
-        logger.debug('Marking as bootstrap candidate')
+        logger.info('Marking as bootstrap candidate')
         metadata['bootstrap_candidate'] = True
     
-    return metadata
+    metadata['end_time'] = time.time()
 
+    return metadata

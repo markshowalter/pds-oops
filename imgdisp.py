@@ -5,7 +5,7 @@
 # associated metadata.
 ###############################################################################
 
-from Tkinter import *
+import Tkinter as tk
 import ImageTk
 from PIL import Image
 import numpy as np
@@ -17,7 +17,7 @@ import scipy.ndimage.interpolation as interp
 # 
 #===============================================================================
 
-class ImageDisp(Frame):
+class ImageDisp(tk.Frame):
     """"A class that displays one or more greyscale images, with optional color
     overlays, and provides a variety of controls for image manipulation
     (e.g. white/blackpoint, gamma) allowing callbacks to be registered for
@@ -152,7 +152,7 @@ class ImageDisp(Frame):
         """
         
         ### Init the Tk Frame
-        Frame.__init__(self, parent)
+        tk.Frame.__init__(self, parent)
         if toplevel is None:
             toplevel = parent
         self.toplevel = toplevel
@@ -183,23 +183,23 @@ class ImageDisp(Frame):
         self.canvas_list = []
 
         # Frame for all of the canvases arranged horizontally
-        canvases_frame = Frame(self)
+        canvases_frame = tk.Frame(self)
         for i, imgdata in enumerate(imgdata_list):
-            canvas = Canvas(canvases_frame, width=imwidth, height=imheight,
-                            bg='yellow', cursor='crosshair')
-            canvas.grid(row=0, column=i*2, sticky=NW)
+            canvas = tk.Canvas(canvases_frame, width=imwidth, height=imheight,
+                               bg='yellow', cursor='crosshair')
+            canvas.grid(row=0, column=i*2, sticky='nw')
             self.canvas_list.append(canvas)
         
             if i == 0:
                 # Create scrollbars for the first image only
-                self.vert_sbar = Scrollbar(canvases_frame, orient=VERTICAL,
-                                           command=self._command_scroll_y)
+                self.vert_sbar = tk.Scrollbar(canvases_frame, orient=tk.VERTICAL,
+                                              command=self._command_scroll_y)
                 canvas.config(yscrollcommand=self.vert_sbar.set) 
-                self.vert_sbar.grid(row=0, column=i*2+1, sticky=N+S)                   
-                self.horiz_sbar = Scrollbar(canvases_frame, orient=HORIZONTAL,
-                                            command=self._command_scroll_x)
+                self.vert_sbar.grid(row=0, column=i*2+1, sticky='ns')                   
+                self.horiz_sbar = tk.Scrollbar(canvases_frame, orient=tk.HORIZONTAL,
+                                               command=self._command_scroll_x)
                 canvas.config(xscrollcommand=self.horiz_sbar.set) 
-                self.horiz_sbar.grid(row=1, column=i*2, sticky=E+W)
+                self.horiz_sbar.grid(row=1, column=i*2, sticky='ew')
 
             # Register the mouse motion callback
             canvas.bind("<Motion>",
@@ -207,19 +207,19 @@ class ImageDisp(Frame):
                         self._mousemove_callback_handler(event,
                                                          img_num, None))
 
-        canvases_frame.pack(side=TOP)
+        canvases_frame.pack(side=tk.TOP)
         
         ### Construct the control sliders and buttons
         
-        controls_parent_frame = Frame(self)
-        control_frame = Frame(controls_parent_frame)
-        self.var_auto_update = IntVar()
-        self.var_display_img_overlay = IntVar()
-        self.var_overlay_transparency = DoubleVar()
+        controls_parent_frame = tk.Frame(self)
+        control_frame = tk.Frame(controls_parent_frame)
+        self.var_auto_update = tk.IntVar()
+        self.var_display_img_overlay = tk.IntVar()
+        self.var_overlay_transparency = tk.DoubleVar()
         self.var_overlay_transparency.set(overlay_transparency)
-        self.var_blackpoint = DoubleVar()
-        self.var_whitepoint = DoubleVar()
-        self.var_gamma = DoubleVar()
+        self.var_blackpoint = tk.DoubleVar()
+        self.var_whitepoint = tk.DoubleVar()
+        self.var_gamma = tk.DoubleVar()
 
         self.last_display_img_overlay = None
         self.last_overlay_transparency = None
@@ -230,60 +230,60 @@ class ImageDisp(Frame):
 
         gridrow = 0
         
-        cbutton = Checkbutton(control_frame, text='Auto Update',
-                              variable=self.var_auto_update,
-                              command=self._command_auto_update_checkbox)
+        cbutton = tk.Checkbutton(control_frame, text='Auto Update',
+                                 variable=self.var_auto_update,
+                                 command=self._command_auto_update_checkbox)
         self.var_auto_update.set(auto_update)
-        cbutton.grid(row=gridrow, column=0, sticky=W)
-        self.button_update = Button(control_frame, text='Update Now',
-                                    command=self._command_update_now)
+        cbutton.grid(row=gridrow, column=0, sticky='w')
+        self.button_update = tk.Button(control_frame, text='Update Now',
+                                       command=self._command_update_now)
         self.button_update.grid(row=gridrow, column=1)
         gridrow += 1
 
-        cbutton = Checkbutton(control_frame, text='Overlay',
-                              variable=self.var_display_img_overlay,
-                              command=self._command_refresh_overlay_checkbox)
+        cbutton = tk.Checkbutton(control_frame, text='Overlay',
+                                 variable=self.var_display_img_overlay,
+                                 command=self._command_refresh_overlay_checkbox)
         self.var_display_img_overlay.set(1)
-        cbutton.grid(row=gridrow, column=0, sticky=W)
-        self.scale_overlay = Scale(control_frame,
-                                   orient=HORIZONTAL,
-                                   resolution=0.05,
-                                   from_=0., to_=1.,
-                                   variable=self.var_overlay_transparency,
-                                   command=self._command_refresh_transparency)
+        cbutton.grid(row=gridrow, column=0, sticky='w')
+        self.scale_overlay = tk.Scale(control_frame,
+                                      orient=tk.HORIZONTAL,
+                                      resolution=0.05,
+                                      from_=0., to_=1.,
+                                      variable=self.var_overlay_transparency,
+                                      command=self._command_refresh_transparency)
         self.scale_overlay.grid(row=gridrow, column=1)
         gridrow += 1
 
-        label = Label(control_frame, text='Blackpoint')
-        label.grid(row=gridrow, column=0, sticky=W)
-        self.scale_blackpoint = Scale(control_frame,
-                                      orient=HORIZONTAL,
-                                      resolution=0.001,
-                                      variable=self.var_blackpoint,
-                                      command=
-                                           self._command_refresh_image_scales)
+        label = tk.Label(control_frame, text='Blackpoint')
+        label.grid(row=gridrow, column=0, sticky='w')
+        self.scale_blackpoint = tk.Scale(control_frame,
+                                         orient=tk.HORIZONTAL,
+                                         resolution=0.001,
+                                         variable=self.var_blackpoint,
+                                         command=
+                                             self._command_refresh_image_scales)
         self.scale_blackpoint.grid(row=gridrow, column=1)
         gridrow += 1
         
-        label = Label(control_frame, text='Whitepoint')
-        label.grid(row=gridrow, column=0, sticky=W)
-        self.scale_whitepoint = Scale(control_frame,
-                                      orient=HORIZONTAL,
-                                      resolution=0.001,
-                                      variable=self.var_whitepoint,
-                                      command=
-                                           self._command_refresh_image_scales)
+        label = tk.Label(control_frame, text='Whitepoint')
+        label.grid(row=gridrow, column=0, sticky='w')
+        self.scale_whitepoint = tk.Scale(control_frame,
+                                         orient=tk.HORIZONTAL,
+                                         resolution=0.001,
+                                         variable=self.var_whitepoint,
+                                         command=
+                                             self._command_refresh_image_scales)
         self.scale_whitepoint.grid(row=gridrow, column=1)
         gridrow += 1
         
-        label = Label(control_frame, text='Gamma')
-        label.grid(row=gridrow, column=0, sticky=W)
-        self.scale_gamma = Scale(control_frame,
-                                 orient=HORIZONTAL,
-                                 resolution=0.01,
-                                 from_=self.gamma_min, to=self.gamma_max,
-                                 variable=self.var_gamma,
-                                 command=self._command_refresh_image_scales)
+        label = tk.Label(control_frame, text='Gamma')
+        label.grid(row=gridrow, column=0, sticky='w')
+        self.scale_gamma = tk.Scale(control_frame,
+                                    orient=tk.HORIZONTAL,
+                                    resolution=0.01,
+                                    from_=self.gamma_min, to=self.gamma_max,
+                                    variable=self.var_gamma,
+                                    command=self._command_refresh_image_scales)
         self.scale_gamma.grid(row=gridrow, column=1)
         gridrow += 1
         
@@ -293,67 +293,67 @@ class ImageDisp(Frame):
             min_zoom = 0
 
         if one_zoom:
-            self.var_zoom = IntVar()
+            self.var_zoom = tk.IntVar()
             self.last_zoom = None
 
-            label = Label(control_frame, text='Zoom')
-            label.grid(row=gridrow, column=0, sticky=W)
+            label = tk.Label(control_frame, text='Zoom')
+            label.grid(row=gridrow, column=0, sticky='w')
             xmax = max(np.ceil(float(imgdata_list[0].shape[1])/imwidth), 1)-1
             ymax = max(np.ceil(float(imgdata_list[0].shape[0])/imheight), 1)-1
             xymax = max(xmax, ymax)
-            self.scale_zoom = Scale(control_frame,
-                                    orient=HORIZONTAL,
-                                    from_=min_zoom, to=xymax,
-                                    variable=self.var_zoom,
-                                    command=self._command_refresh_zoom)
+            self.scale_zoom = tk.Scale(control_frame,
+                                       orient=tk.HORIZONTAL,
+                                       from_=min_zoom, to=xymax,
+                                       variable=self.var_zoom,
+                                       command=self._command_refresh_zoom)
             self.var_zoom.set(xymax)
             self.scale_zoom.grid(row=gridrow, column=1)
             gridrow += 1
         else:
-            self.var_xzoom = IntVar()
-            self.var_yzoom = IntVar()
+            self.var_xzoom = tk.IntVar()
+            self.var_yzoom = tk.IntVar()
             self.last_xzoom = None
             self.last_yzoom = None
 
-            label = Label(control_frame, text='X Zoom')
-            label.grid(row=gridrow, column=0, sticky=W)
+            label = tk.Label(control_frame, text='X Zoom')
+            label.grid(row=gridrow, column=0, sticky='w')
             xmax = max(np.ceil(float(imgdata_list[0].shape[1])/imwidth), 1)-1
-            self.scale_xzoom = Scale(control_frame,
-                                     orient=HORIZONTAL,
-                                     from_=min_zoom, to=xmax,
-                                     variable=self.var_xzoom,
-                                     command=self._command_refresh_zoom)
+            self.scale_xzoom = tk.Scale(control_frame,
+                                        orient=tk.HORIZONTAL,
+                                        from_=min_zoom, to=xmax,
+                                        variable=self.var_xzoom,
+                                        command=self._command_refresh_zoom)
             self.var_xzoom.set(xmax)
             self.scale_xzoom.grid(row=gridrow, column=1)
             gridrow += 1
             
-            label = Label(control_frame, text='Y Zoom')
-            label.grid(row=gridrow, column=0, sticky=W)
+            label = tk.Label(control_frame, text='Y Zoom')
+            label.grid(row=gridrow, column=0, sticky='w')
             ymax = max(np.ceil(float(imgdata_list[0].shape[0])/imheight), 1)-1
-            self.scale_yzoom = Scale(control_frame,
-                                     orient=HORIZONTAL,
-                                     from_=min_zoom, to=ymax,
-                                     variable=self.var_yzoom,
-                                     command=self._command_refresh_zoom)
+            self.scale_yzoom = tk.Scale(control_frame,
+                                        orient=tk.HORIZONTAL,
+                                        from_=min_zoom, to=ymax,
+                                        variable=self.var_yzoom,
+                                        command=self._command_refresh_zoom)
             self.var_yzoom.set(ymax)
             self.scale_yzoom.grid(row=gridrow, column=1)
             gridrow += 1
         
-        self.label_xy = Label(control_frame, text='Mouse coord:')
-        self.label_xy.grid(row=gridrow, column=0, columnspan=2, sticky=W)
+        self.label_xy = tk.Label(control_frame, text='Mouse coord:')
+        self.label_xy.grid(row=gridrow, column=0, columnspan=2, sticky='w')
         gridrow += 1
         
-        self.label_val = Label(control_frame, text='Mouse val:')
-        self.label_val.grid(row=gridrow, column=0, columnspan=2, sticky=W)
+        self.label_val = tk.Label(control_frame, text='Mouse val:')
+        self.label_val.grid(row=gridrow, column=0, columnspan=2, sticky='w')
         
-        control_frame.pack(side=LEFT)
+        control_frame.pack(side=tk.LEFT)
         
         ### Make another frame for other programs to add their own controls
         
-        self.addon_control_frame = Frame(controls_parent_frame)
-        self.addon_control_frame.pack(side=LEFT, fill=X, anchor=N)
+        self.addon_control_frame = tk.Frame(controls_parent_frame)
+        self.addon_control_frame.pack(side=tk.LEFT, fill='x', anchor='n')
         
-        controls_parent_frame.pack(anchor=W, fill=X, expand=True)
+        controls_parent_frame.pack(anchor='w', fill='x', expand=True)
         self.pack()
         self.update_image_data(imgdata_list, overlay_list, color_column_list)
 
@@ -1004,7 +1004,7 @@ class ImageDisp(Frame):
 #
 #===============================================================================
 
-class ValidatingEntry(Entry):
+class ValidatingEntry(tk.Entry):
     # base class for validating entry widgets
 
     def __init__(self, master, value="", **kw):
@@ -1077,7 +1077,7 @@ class FloatEntry(ValidatingEntry):
 #
 #===============================================================================
 
-class ScrolledList(Frame):
+class ScrolledList(tk.Frame):
     """A compound widget containing a listbox and up to two scrollbars.
 
       State/invariants:
@@ -1109,7 +1109,7 @@ class ScrolledList(Frame):
             self.vScrollbar = Scrollbar(self, orient=VERTICAL)
             self.vScrollbar.grid(row=0, column=1, sticky=N+S)
         if self.hscroll:
-            self.hScrollbar = Scrollbar(self, orient=HORIZONTAL)
+            self.hScrollbar = Scrollbar(self, orient=tk.HORIZONTAL)
             self.hScrollbar.grid(row=1, column=0, sticky=E+W)
 
         self.listbox  =  Listbox(self, relief=SUNKEN,
@@ -1442,7 +1442,7 @@ if __name__ == '__main__':
     
     # Simple display
     imdisp = ImageDisp(iss_nac_obs1.data, canvas_size=(1024,512), flip_y=False)
-    mainloop()
+    tk.mainloop()
 
     # Two images with overlay, auto_update, enlarge and separate zooms
     # Flipped y
@@ -1459,7 +1459,7 @@ if __name__ == '__main__':
                        canvas_size=(512,512), auto_update=True,
                        allow_enlarge=True, one_zoom=False,
                        flip_y=True)
-    mainloop()
+    tk.mainloop()
 
     # Two images with overlay and transparency, auto_update, enlarge and
     # separate zooms
@@ -1481,7 +1481,7 @@ if __name__ == '__main__':
                        [overlay1, overlay2],
                        canvas_size=(512,512), auto_update=True,
                        allow_enlarge=True, one_zoom=False)
-    mainloop()
+    tk.mainloop()
 
     # Two images with overzoomed overlay, auto_update, enlarge and
     # separate zooms
@@ -1499,7 +1499,7 @@ if __name__ == '__main__':
                        [overlay1, overlay2],
                        canvas_size=(512,512), auto_update=True,
                        allow_enlarge=True, one_zoom=False)
-    mainloop()
+    tk.mainloop()
     
     
 #    overlay = np.zeros((img1.shape[0], img1.shape[1], 3))
@@ -1509,4 +1509,4 @@ if __name__ == '__main__':
 #    imdisp.Bind_mousemove(0, callback_move_handler)
 #    imdisp.Bind_b1press(0, callback_press_handler)
 #    imdisp.SetOverlay(0, overlay)
-#    mainloop()
+#    tk.mainloop()
