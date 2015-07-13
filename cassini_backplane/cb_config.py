@@ -9,9 +9,13 @@ import os.path
 
 import oops
 
+
 #####################
 # ROOT DIRECTORIES ##
 #####################
+
+# Root of the cassini_backplane source directory.
+CB_ROOT = os.environ['CB_ROOT']
 
 # Cassini ISS calibrated 2XXX volume.
 COISS_2XXX_DERIVED_ROOT = os.environ['COISS_2XXX_DERIVED_ROOT']
@@ -41,13 +45,37 @@ CISSCAL_CALIB_ROOT = os.getenv('CISSCAL_CALIB_PATH')
 CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
 
 
+####################################
+# EXECUTABLES AND PYTHON PROGRAMS ##
+####################################
+
+PYTHON_EXE = os.environ['PYTHON_EXE']
+
+CBMAIN_PY = os.path.join(CB_ROOT, 'cb_main.py')
+DISPLAY_OFFSET_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
+                                          'display_offset_metadata.py')
+DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
+                                          'display_mosaic_metadata.py')
+
+
 ########################
 # INSTRUMENT CONSTANTS #
 ########################
 
 # The maximum pointing error we allow in the (V,U) directions.
-MAX_POINTING_ERROR = {'NAC': (85,75), 'WAC': (15,15)} # Pixels
-#MAX_POINTING_ERROR = {'NAC': (10,10), 'WAC': (15,15)} # Pixels
+MAX_POINTING_ERROR_NAC = (85,75)  # Pixels
+MAX_POINTING_ERROR_WAC = (15,15)
+MAX_POINTING_ERROR = {((1024,1024), 'NAC'): MAX_POINTING_ERROR_NAC,
+                      ((1024,1024), 'WAC'): MAX_POINTING_ERROR_WAC,
+                      (( 512, 512), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//2,
+                                             MAX_POINTING_ERROR_NAC[1]//2),
+                      (( 512, 512), 'WAC'): (MAX_POINTING_ERROR_WAC[0]//2,
+                                             MAX_POINTING_ERROR_WAC[1]//2),
+                      (( 256, 256), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//4,
+                                             MAX_POINTING_ERROR_NAC[1]//4),
+                      (( 256, 256), 'WAC'): (MAX_POINTING_ERROR_WAC[0]//4,
+                                             MAX_POINTING_ERROR_WAC[1]//4)
+                     }
 
 # The FOV size of the ISS cameras in radians.
 ISS_FOV_SIZE = {'NAC': 0.35*oops.RPD, 'WAC': 3.48*oops.RPD}
@@ -70,9 +98,6 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
 FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE', 'TITAN'] # XXX
 
-# These bodies can be used for bootstrapping.
-BOOTSTRAP_BODY_LIST = ['DIONE', 'ENCELADUS', 'IAPETUS', 'MIMAS', 'PHOEBE',
-                       'RHEA', 'TETHYS']
 
 ##################
 # CONFIGURATIONS #
@@ -148,6 +173,10 @@ BODIES_DEFAULT_CONFIG = {
     # terminator.
     'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
     
+    # Whether or not Lambert shading should be used, as opposed to just a
+    # solid unshaded shape or cartographic reprojection.
+    'use_lambert': True,
+    
     # The resolution in longitude and latitude (radians) for the metadata
     # latlon mask.
     'mask_lon_resolution': 1. * oops.RPD,
@@ -172,6 +201,22 @@ RINGS_DEFAULT_CONFIG = {
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
+    # These bodies can be used for bootstrapping.
+    # Includes the orbital period (seconds) and the maximum allowable
+    # resolution (km/pix).
+    'body_list': {'DIONE':     (  2.736915 * 86400, 15.),
+                  'ENCELADUS': (  1.370218 * 86400, 15.),
+                  'IAPETUS':   ( 79.3215   * 86400, 15.),
+                  'MIMAS':     (  0.942    * 86400, 15.),
+                  'PHOEBE':    (550.564636 * 86400, 15.),
+                  'RHEA':      (  4.518212 * 86400, 15.),
+                  'TETHYS':    (  1.887802 * 86400, 15.)
+                  },
+    
+    # The fraction of an orbit that a moon can move and still be OK for
+    # creating a mosaic.
+    'orbit_frac': 0.25,
+    
     # The resolution in longitude and latitude (radians) for the mosaic.
     'lon_resolution': 0.1 * oops.RPD,
     'lat_resolution': 0.1 * oops.RPD,

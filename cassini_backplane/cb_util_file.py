@@ -67,13 +67,19 @@ def yield_image_filenames(img_start_num, img_end_num, camera='NW',
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:11] not in restrict_list:
+                if restrict_list and img_name[:13] not in restrict_list:
                     continue
                 yield os.path.join(img_dir, img_name)
             if done:
                 break
         if done:
             break
+
+def file_clean_name(path):
+    _, filename = os.path.split(path)
+    filename = filename.replace('.IMG', '')
+    filename = filename.replace('_CALIB', '')
+    return filename
 
 def read_iss_file(path):
     obs = iss.from_file(path, fast_distortion=True)
@@ -85,17 +91,16 @@ def read_iss_file(path):
 ###############################################################################
 #
 #
-# READ AND WRITE BINARY DATA FILES IN THE RESULTS DIRECTORY
+# READ AND WRITE DATA FILES IN THE RESULTS DIRECTORY
 #
 #
 ###############################################################################
 
 
-def _results_root_for_file(img_path, root=RESULTS_ROOT,
-                           make_dirs=True):
-    """Results root is of the form:
+def _results_path(img_path, file_type, root=RESULTS_ROOT, make_dirs=False):
+    """Results path is of the form:
     
-    <ROOT>/COISS_2xxx/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
+    <ROOT>/<file_type>/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
     """
     rdir, filename = os.path.split(img_path)
     rdir, dir1 = os.path.split(rdir)
@@ -107,7 +112,7 @@ def _results_root_for_file(img_path, root=RESULTS_ROOT,
     filename = filename.replace('_CALIB', '')
 
     assert os.path.exists(root)
-    root = os.path.join(root, 'COISS_2xxx')
+    root = os.path.join(root, file_type)
     if make_dirs and not os.path.exists(root):
         os.mkdir(root)
     part_dir3 = os.path.join(root, dir3)
@@ -118,8 +123,15 @@ def _results_root_for_file(img_path, root=RESULTS_ROOT,
         os.mkdir(part_dir1)
     return os.path.join(part_dir1, filename)
 
-def file_img_to_offset_path(img_path, make_dirs=True):
-    fn = _results_root_for_file(img_path, RESULTS_ROOT, make_dirs)
+def file_img_to_log_path(img_path, bootstrap=False, make_dirs=True):
+    fn = _results_path(img_path, 'logs', make_dirs=make_dirs)
+    if bootstrap:
+        fn += '-bootstrap'
+    fn += '.log'
+    return fn
+
+def file_img_to_offset_path(img_path, make_dirs=False):
+    fn = _results_path(img_path, 'offsets', make_dirs=make_dirs)
     fn += '-OFFSET.dat'
     return fn
 
@@ -153,7 +165,7 @@ def file_write_offset_metadata(img_path, metadata):
     """Write offset file for img_filename."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
 
-    offset_path = file_img_to_offset_path(img_path)
+    offset_path = file_img_to_offset_path(img_path, make_dirs=True)
 
     logger.debug('Writing offset file %s', offset_path)
     
@@ -162,11 +174,20 @@ def file_write_offset_metadata(img_path, metadata):
         del new_metadata['ext_data']
     if 'ext_overlay' in new_metadata:
         del new_metadata['ext_overlay']
-
+    # XXX ONLY UNTIL OFFSET WRITING IS FIXED TO HANDLE STARS
+    if ('stars_metadata' in new_metadata and 
+        new_metadata['stars_metadata'] is not None):
+        if 'full_star_list' in new_metadata['stars_metadata']:
+            new_metadata['stars_metadata'] = \
+                    new_metadata['stars_metadata'].copy()
+            del new_metadata['stars_metadata']['full_star_list']
+            
     offset_fp = open(offset_path, 'wb')
     offset_fp.write(msgpack.packb(new_metadata, 
                                   default=msgpack_numpy.encode))    
     offset_fp.close()
+    
+    return offset_path
 
 def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
     """Mosaic filename is of the form:
@@ -174,15 +195,19 @@ def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
     <ROOT>/mosaics/<bodyname>/<firstimg>_<lastimg>_<#img>.dat
     """
     assert os.path.exists(root)
+    if len(metadata['path_list']) == 0:
+        return None
     root = os.path.join(root, 'mosaics')
     if make_dirs and not os.path.exists(root):
         os.mkdir(root)
     root = os.path.join(root, metadata['body_name'])
     if make_dirs and not os.path.exists(root):
         os.mkdir(root)
-    sorted_img_list = sorted(metadata['filename_list'])
-    filename = '%s_%s_%04d.dat' % (sorted_img_list[0][:13],
-                                   sorted_img_list[-1][:13],
+    sorted_img_list = sorted(metadata['path_list'])
+    _, first_filename = os.path.split(sorted_img_list[0])
+    _, last_filename = os.path.split(sorted_img_list[-1])
+    filename = '%s_%s_%04d.dat' % (first_filename[:13],
+                                   last_filename[:13],
                                    len(sorted_img_list))
     
     return os.path.join(root, filename)
@@ -200,7 +225,7 @@ def file_read_mosaic_metadata(path):
 
 def file_write_mosaic_metadata(metadata):
     """Write mosaic metadata."""
-    logger = logging.getLogger(_LOGGING_NAME+'.file_write_moasic_metadata')
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_mosaic_metadata')
 
     mosaic_path = file_mosaic_path(metadata)
 
@@ -210,3 +235,5 @@ def file_write_mosaic_metadata(metadata):
     mosaic_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     mosaic_fp.close()
+
+    return mosaic_path
