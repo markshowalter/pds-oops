@@ -27,6 +27,7 @@ import cb_logging
 import logging
 
 import os
+import time
 
 import numpy as np
 import numpy.ma as ma
@@ -367,8 +368,14 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             'fiducial_features'     The list of fiducial features in view.
             'fiducial_features_ok'  True if the number of fidcual features
                                     is greater than the threshold.
+            'start_time'            The time (s) when rings_create_model
+                                    was called.
+            'end_time'              The time (s) when rings_create_model
+                                    returned.
 
     """
+    start_time = time.time()
+    
     logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model')
 
     if rings_config is None:
@@ -381,14 +388,16 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['curvature_ok'] = False
     metadata['fiducial_features'] = []
     metadata['fiducial_features_ok'] = False
+    metadata['start_time'] = start_time
     
     set_obs_ext_bp(obs, extend_fov)
 
     if (not always_create_model and 
         not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
                                        rings_config=rings_config)):
-       logger.debug('Too little curvature - no ring model produced')
-       return None, metadata
+        logger.info('Too little curvature - no ring model produced')
+        metadata['end_time'] = time.time()
+        return None, metadata
    
     metadata['curvature_ok'] = True     
    
@@ -399,18 +408,20 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['fiducial_features_ok'] = fiducial_features_ok
     
     if (not always_create_model and not fiducial_features_ok):
-        logger.debug('Insufficient number of fiducial features - '+
-                     'no ring model produced')
+        logger.info('Insufficient number (%d) of fiducial features - '+
+                     'no ring model produced', len(fiducial_features))
+        metadata['end_time'] = time.time()
         return None, metadata
     
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
-    logger.debug('Radii %.2f to %.2f', min_radius, max_radius)
+    logger.info('Radii %.2f to %.2f', min_radius, max_radius)
     
     if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
-        logger.debug('No main rings in image - returning null model')
+        logger.info('No main rings in image - aborting')
+        metadata['end_time'] = time.time()
         return None, metadata
 
     radii[radii < RINGS_MIN_RADIUS] = 0
@@ -430,15 +441,24 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
 #    model = ma.masked_equal(model, 0.)
 #    model = ma.masked_equal(model, 10000.)
 #    model[model==0] = 0.001
+
+    if not np.any(model):
+        logger.info('Model is empty - aborting')
+        metadata['end_time'] = time.time()
+        return None, metadata
     
     shadow_body_list = []
     
     saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
                                                    'saturn').vals
     if np.any(saturn_shadow):
-        logger.debug('Rings shadowed by SATURN')
         shadow_body_list.append('SATURN')
         model[saturn_shadow] = 0
+        if not np.any(model):
+            logger.info('Rings completely shadowed by SATURN - aborting')
+            metadata['end_time'] = time.time()
+            return None, metadata
+        logger.info('Rings partially shadowed by SATURN')
 
     # XXX Equinox only
     # XXX There must be a way to make this more efficient in the case
@@ -447,16 +467,23 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
                                                 body_name).vals
         if np.any(shadow):
-            logger.debug('Rings shadowed by '+body_name)
             shadow_body_list.append(body_name)
             model[shadow] = 0
+            if not np.any(model):
+                logger.info('Rings completely shadowed by %s - aborting', 
+                            body_name)
+                metadata['end_time'] = time.time()
+                return None, metadata
+            logger.info('Rings partially shadowed by %s', body_name)
     
     metadata['shadow_bodies'] = shadow_body_list
     
     if not np.any(model):
-        logger.debug('Rings are entirely shadowed - returning null model')
+        logger.info('Rings are entirely shadowed - returning null model')
+        metadata['end_time'] = time.time()
         return None, metadata
     
+    metadata['end_time'] = time.time()
     return model, metadata
 
 
@@ -648,7 +675,7 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
 #==============================================================================
 
 def rings_reproject(
-            obs, offset=None,
+            obs, data=None, offset=None,
             longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
             radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
             radius_inner=None,
@@ -665,6 +692,8 @@ def rings_reproject(
     
     Inputs:
         obs                      The Observation.
+        data                     The image data to use for the reprojection. If
+                                 None, use obs.data.
         offset                   The offsets in (U,V) to apply to the image
                                  when computing the longitude and radius
                                  values.
@@ -721,6 +750,9 @@ def rings_reproject(
     logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
     assert corotating in (None, 'F')
+
+    if data is None:
+        data = obs.data
     
     if longitude_range is None:
         longitude_start = 0.
@@ -731,16 +763,16 @@ def rings_reproject(
     # We need to be careful not to use obs.bp from this point forward because
     # it will disagree with our current OffsetFOV
     orig_fov = None
-    if offset is not None:
+    if offset is not None and offset != (0,0):
         orig_fov = obs.fov
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
     
     # Get all the info for each pixel
     meshgrid = None
     start_u = 0
-    end_u = obs.data.shape[1]-1
+    end_u = data.shape[1]-1
     start_v = 0
-    end_v = obs.data.shape[0]-1
+    end_v = data.shape[0]-1
     if uv_range is not None:
         start_u, end_u, start_v, end_v = uv_range
         meshgrid = oops.Meshgrid.for_fov(obs.fov,
@@ -756,7 +788,7 @@ def rings_reproject(
     bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
     bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float') 
     saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
-    data = obs.data.copy()
+    data = data.copy()
     data[saturn_shadow] = 0
     
     # The number of pixels in the final reprojection
@@ -803,17 +835,17 @@ def rings_reproject(
     else:
         rad_bins_act = rad_bins * radius_resolution + radius_inner
 
-    logger.debug('Radius range %8.2f %8.2f', np.min(bp_radius), 
+    logger.info('Radius range %8.2f %8.2f', np.min(bp_radius), 
                  np.max(bp_radius))
     logger.debug('Radius bin range %8.2f %8.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))
-    logger.debug('Longitude range %6.2f %6.2f', 
+    logger.info('Longitude range %6.2f %6.2f', 
                  np.min(bp_longitude)*oops.DPR, 
                  np.max(bp_longitude)*oops.DPR)
     logger.debug('Longitude bin range %6.2f %6.2f', 
                  np.min(long_bins_act)*oops.DPR,
                  np.max(long_bins_act)*oops.DPR)
-    logger.debug('Resolution range %7.2f %7.2f', np.min(bp_resolution),
+    logger.info('Resolution range %7.2f %7.2f', np.min(bp_resolution),
                  np.max(bp_resolution))
     logger.debug('Data range %f %f', np.min(data), np.max(data))
 

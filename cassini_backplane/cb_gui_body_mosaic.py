@@ -10,9 +10,11 @@
 import cb_logging
 import logging
 
-import os
-import numpy as np
+import argparse
 import colorsys
+import numpy as np
+import os
+import subprocess
 
 from imgdisp import *
 import Tkinter as tk
@@ -105,13 +107,32 @@ def _callback_mousemove(x, y, metadata):
                            ('%7.3f'%(metadata['emission'][y,x] * oops.DPR)))
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
-        metadata['label_image'].config(text=
-               metadata['filename_list'][metadata['image_number'][y,x]][:13])
+        path = metadata['path_list'][metadata['image_number'][y,x]]
+        _, filename = os.path.split(path)
+        metadata['label_image'].config(text=filename[:13])
         metadata['label_image_num'].config(text=
                            ('%d'%metadata['image_number'][y,x]))
         metadata['label_date'].config(text=
                            cspice.et2utc(float(metadata['time'][y,x]), 'C', 0))
 
+
+def _callback_b1press_mosaic(x, y, metadata):
+    x = int(x)
+    y = int(y)
+
+    if (x < 0 or x >= metadata['img'].shape[1] or
+        y < 0 or y >= metadata['img'].shape[0]):
+        return
+
+    full_mask = metadata['full_mask']
+    if not full_mask[y,x]:  # Invalid pixel
+        return
+
+    path = metadata['path_list'][metadata['image_number'][y,x]]
+    
+    subprocess.Popen([PYTHON_EXE, DISPLAY_OFFSET_METADATA_PY,
+                      path])
+    
 def display_body_mosaic(metadata, title=None):
     metadata = metadata.copy() # Don't mutate the one given to us
 
@@ -120,7 +141,7 @@ def display_body_mosaic(metadata, title=None):
     metadata['longitude'] = bodies_generate_longitudes(longitude_resolution=
                                     metadata['lon_resolution'])
 
-    toplevel = Toplevel()
+    toplevel = tk.Toplevel()
     if title is None:
         title = metadata['body_name']
     toplevel.title(title)
@@ -131,7 +152,11 @@ def display_body_mosaic(metadata, title=None):
                         flip_y=True, one_zoom=False, auto_update=True)
 
     metadata['imgdisp'] = imgdisp
-    
+
+    callback_mosaic_b1press_command = (lambda x, y, metadata=metadata: 
+                                       _callback_b1press_mosaic(x, y, metadata))
+    imgdisp.bind_b1press(0, callback_mosaic_b1press_command)
+
     gridrow = 0
     gridcolumn = 0
 
@@ -141,146 +166,156 @@ def display_body_mosaic(metadata, title=None):
     
     addon_control_frame = imgdisp.addon_control_frame
 
-    label = Label(addon_control_frame, text='Image #:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_image_num = Label(addon_control_frame, text='',
-                            anchor='e', width=val_width)
-    label_image_num.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, text='Image #:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_image_num = tk.Label(addon_control_frame, text='',
+                               anchor='e', width=val_width)
+    label_image_num.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_image_num'] = label_image_num
 
-    label = Label(addon_control_frame, text='', 
-                  anchor='w', width=3)
-    label.grid(row=gridrow, column=gridcolumn+2, sticky=W)
+    label = tk.Label(addon_control_frame, text='', 
+                     anchor='w', width=3)
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
-    label = Label(addon_control_frame, text='Image Name:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
-    label_image = Label(addon_control_frame, text='',
-                        anchor='e', width=val2_width)
-    label_image.grid(row=gridrow, column=gridcolumn+4, sticky=W)
+    label = tk.Label(addon_control_frame, text='Image Name:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+    label_image = tk.Label(addon_control_frame, text='',
+                           anchor='e', width=val2_width)
+    label_image.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     metadata['label_image'] = label_image
     
-    label = Label(addon_control_frame, text='', 
-                  anchor='w', width=3)
-    label.grid(row=gridrow, column=gridcolumn+5, sticky=W)
+    label = tk.Label(addon_control_frame, text='', 
+                     anchor='w', width=3)
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
     gridrow += 1
     
-    label = Label(addon_control_frame, 
-                  text='Latitude '+metadata['latlon_type'][0].upper()+':',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_latitude = Label(addon_control_frame, text='', 
-                           anchor='e', width=val_width)
-    label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, 
+                     text='Latitude '+metadata['latlon_type'][0].upper()+':',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_latitude = tk.Label(addon_control_frame, text='', 
+                              anchor='e', width=val_width)
+    label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_latitude'] = label_latitude
 
-    label = Label(addon_control_frame, text='Date:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky=W)
-    label_date = Label(addon_control_frame, text='',
-                       anchor='e', width=val2_width)
-    label_date.grid(row=gridrow, column=gridcolumn+4, sticky=W)
+    label = tk.Label(addon_control_frame, text='Date:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+    label_date = tk.Label(addon_control_frame, text='',
+                          anchor='e', width=val2_width)
+    label_date.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     metadata['label_date'] = label_date
     gridrow += 1
     
-    label = Label(addon_control_frame, 
-                  text='Longitude '+metadata['latlon_type'][0].upper()+'/'+
-                       metadata['lon_direction'][0].upper()+':',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_longitude = Label(addon_control_frame, text='', 
-                            anchor='e', width=val_width)
-    label_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, 
+                     text='Longitude '+metadata['latlon_type'][0].upper()+'/'+
+                          metadata['lon_direction'][0].upper()+':',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_longitude = tk.Label(addon_control_frame, text='', 
+                               anchor='e', width=val_width)
+    label_longitude.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_longitude'] = label_longitude
     gridrow += 1
 
-    label = Label(addon_control_frame, text='Phase:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_phase = Label(addon_control_frame, text='',
-                        anchor='e', width=val_width)
-    label_phase.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, text='Phase:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_phase = tk.Label(addon_control_frame, text='',
+                           anchor='e', width=val_width)
+    label_phase.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_phase'] = label_phase
     gridrow += 1
     
-    label = Label(addon_control_frame, text='Incidence:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_incidence = Label(addon_control_frame, text='',
-                            anchor='e', width=val_width)
-    label_incidence.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, text='Incidence:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_incidence = tk.Label(addon_control_frame, text='',
+                               anchor='e', width=val_width)
+    label_incidence.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_incidence'] = label_incidence
     gridrow += 1
 
-    label = Label(addon_control_frame, text='Emission:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_emission = Label(addon_control_frame, text='',
-                           anchor='e', width=val_width)
-    label_emission.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, text='Emission:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_emission = tk.Label(addon_control_frame, text='',
+                              anchor='e', width=val_width)
+    label_emission.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_emission'] = label_emission
     gridrow += 1
 
-    label = Label(addon_control_frame, text='Resolution:',
-                  anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    label_resolution = Label(addon_control_frame, text='',
-                             anchor='e', width=val_width)
-    label_resolution.grid(row=gridrow, column=gridcolumn+1, sticky=W)
+    label = tk.Label(addon_control_frame, text='Resolution:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_resolution = tk.Label(addon_control_frame, text='',
+                                anchor='e', width=val_width)
+    label_resolution.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     metadata['label_resolution'] = label_resolution
     gridrow += 1
     
     gridrow = 0
     gridcolumn = 6
 
-    var_color_by = StringVar()
+    var_color_by = tk.StringVar()
     metadata['var_color_by'] = var_color_by
     refresh_color_func = lambda: _command_refresh_color(metadata)
     
-    label = Label(addon_control_frame, text='Color by:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
+    label = tk.Label(addon_control_frame, text='Color by:')
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='None', 
-                variable=var_color_by,
-                value='none', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='None', 
+                   variable=var_color_by,
+                   value='none', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Image Number', 
-                variable=var_color_by,
-                value='imagenum', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Image Number', 
+                   variable=var_color_by,
+                   value='imagenum', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Rel Time', 
-                variable=var_color_by,
-                value='reltime', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Rel Time', 
+                   variable=var_color_by,
+                   value='reltime', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Rel Resolution', 
-                variable=var_color_by,
-                value='relresolution', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Rel Resolution', 
+                   variable=var_color_by,
+                   value='relresolution', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Abs Phase', 
-                variable=var_color_by,
-                value='absphase', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Abs Phase', 
+                   variable=var_color_by,
+                   value='absphase', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Rel Phase', 
-                variable=var_color_by,
-                value='relphase', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Rel Phase', 
+                   variable=var_color_by,
+                   value='relphase', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Abs Emission', 
-                variable=var_color_by,
-                value='absemission', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Abs Emission', 
+                   variable=var_color_by,
+                   value='absemission', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Rel Emission', 
-                variable=var_color_by,
-                value='relemission', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Rel Emission', 
+                   variable=var_color_by,
+                   value='relemission', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Abs Incidence', 
-                variable=var_color_by,
-                value='absincidence', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Abs Incidence', 
+                   variable=var_color_by,
+                   value='absincidence', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
-    Radiobutton(addon_control_frame, text='Rel Incidence', 
-                variable=var_color_by,
-                value='relincidence', command=refresh_color_func).grid(row=gridrow, column=gridcolumn, sticky=W)
+    tk.Radiobutton(addon_control_frame, text='Rel Incidence', 
+                   variable=var_color_by,
+                   value='relincidence', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
     
     var_color_by.set('none')
 
@@ -288,7 +323,7 @@ def display_body_mosaic(metadata, title=None):
                                _callback_mousemove(x, y, metadata))
     imgdisp.bind_mousemove(0, callback_mousemove_func)
 
-    imgdisp.pack(side=LEFT)
+    imgdisp.pack(side=tk.LEFT)
     
     tk.mainloop()
     
