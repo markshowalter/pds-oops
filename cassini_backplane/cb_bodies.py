@@ -128,13 +128,14 @@ def bodies_create_model(obs, body_name, inventory,
     Inputs:
         obs                The Observation.
         body_name          The name of the moon.
-        inventory          The dictionary returned from the inventory()
-                           method of an Observation. Used to find the
+        inventory          The entry returned from the inventory() method of
+                           an Observation for this body. Used to find the
                            clipping rectangle.
         extend_fov         The amount beyond the image in the (U,V) dimension
                            to generate the model.
         cartographic_data  A dictionary of body names containing cartographic
-                           data in lat/lon format.
+                           data in lat/lon format. Each entry contains metadata
+                           in the format returned by bodies_mosaic_init.
         bodies_config      Configuration parameters.
         mask_only          Only compute the latlon mask and don't spent time
                            actually trying to make a model.
@@ -167,17 +168,25 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['limb_ok'] = False
     metadata['start_time'] = start_time 
 
+    logger.info('Processing %s', body_name)
+
     # Analyze the curvature
             
     u_min = inventory['u_min_unclipped']
     u_max = inventory['u_max_unclipped']
     v_min = inventory['v_min_unclipped']
     v_max = inventory['v_max_unclipped']
-    
+
+    logger.debug('Original bounding box U %d to %d V %d to %d',
+                 u_min, u_max, v_min, v_max)
+        
     entirely_visible = False
-    if (u_min >= extend_fov[0] and u_max <= obs.data.shape[1]-1-extend_fov[0] and
-        v_min >= extend_fov[1] and v_max <= obs.data.shape[0]-1-extend_fov[1]):
-        # Body is entirely visible - no part is off the edge
+    if (u_min >= extend_fov[0] and 
+        u_max <= obs.data.shape[1]-1-extend_fov[0] and
+        v_min >= extend_fov[1] and 
+        v_max <= obs.data.shape[0]-1-extend_fov[1]):
+        # Body is entirely visible - no part is off the edge even when shifting
+        # the extended FOV
         entirely_visible = True
         
     curvature_threshold_frac = bodies_config['curvature_threshold_frac']
@@ -217,7 +226,6 @@ def bodies_create_model(obs, body_name, inventory,
     if v_min == v_max and v_min == -extend_fov[1]:
         v_max += 1
         
-    logger.info('Processing %s', body_name)
     logger.debug('Image size %d %d subrect U %d to %d V %d to %d',
                  obs.data.shape[1], obs.data.shape[0],
                  u_min, u_max, v_min, v_max)

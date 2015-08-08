@@ -569,8 +569,8 @@ def master_find_offset(obs,
                                  new_model_offset[1], new_peak)
                     sec_threshold = offset_config['secondary_corr_threshold']
                     sec_frac = offset_config['secondary_corr_peak_threshold']
-                    if (abs(new_model_offset[0]) > sec_threshold or
-                        abs(new_model_offset[1]) > sec_threshold or
+                    if (abs(new_model_offset[0]) >= sec_threshold or
+                        abs(new_model_offset[1]) >= sec_threshold or
                         new_peak < peak*sec_frac):
                         logger.info('Secondary model correlation offset does '+
                                     'not meet criteria - Not trusting result')

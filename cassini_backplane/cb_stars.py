@@ -637,11 +637,11 @@ def _stars_optimize_offset_list(offset_list, tolerance=1):
                     continue
                 if u1 == u2: # Vertical line
                     if abs(u3-u1) <= tolerance:
-                        logger.debug('Points %d (%d,%d) %d (%d,%d) %d (%d,%d) '+
-                                     'in a line',
-                                     idx1+1, u1, v1, 
-                                     idx2+1, u2, v2,
-                                     idx3+1, u3, v3)
+#                         logger.debug('Points %d (%d,%d) %d (%d,%d) %d (%d,%d) '+
+#                                      'in a line',
+#                                      idx1+1, u1, v1, 
+#                                      idx2+1, u2, v2,
+#                                      idx3+1, u3, v3)
                         mark_for_deletion[idx2] = True
                         mark_for_deletion[idx3] = True                        
                 else:
@@ -653,11 +653,11 @@ def _stars_optimize_offset_list(offset_list, tolerance=1):
                         u_intercept = 1/slope * (v3-v1) + u1
                         diff = abs(u3-u_intercept)
                     if diff <= tolerance:
-                        logger.debug('Points %d (%d,%d) %d (%d,%d) %d (%d,%d) '+
-                                     'in a line',
-                                     idx1+1, u1, v1,
-                                     idx2+1, u2, v2,
-                                     idx3+1, u3, v3)
+#                         logger.debug('Points %d (%d,%d) %d (%d,%d) %d (%d,%d) '+
+#                                      'in a line',
+#                                      idx1+1, u1, v1,
+#                                      idx2+1, u2, v2,
+#                                      idx3+1, u3, v3)
                         mark_for_deletion[idx2] = True
                         mark_for_deletion[idx3] = True
     new_offset_list = []
@@ -892,6 +892,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                            offset result:
             'offset'            The (U,V) offset.
             'full_star_list'    The list of Stars in the FOV.
+            'num_stars',        The number of Stars in the FOV.
             'num_good_stars'    The number of Stars that photometrically match.
             'start_time'        The time (s) when stars_find_offset was called.
             'end_time'          The time (s) when stars_find_offset returned.
@@ -924,6 +925,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         star.is_dim_enough = True
 
     metadata['full_star_list'] = star_list
+    metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
     metadata['offset'] = None
 
@@ -1149,6 +1151,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                     offset[0], offset[1], good_stars)
             
     metadata['full_star_list'] = star_list
+    metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = good_stars
     metadata['offset'] = offset
     

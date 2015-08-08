@@ -115,7 +115,8 @@ _RINGS_FIDUCIAL_FEATURES_1993 = [
 
 _RINGS_FIDUCIAL_FEATURES_PATH = os.path.join(
      SUPPORT_FILES_ROOT, '20140419toRAJ', 'ringfit_v1.8.Sa025S-RF-V4927.out')
-_RINGS_FIDUCIAL_FEATURES = []
+# _RINGS_FIDUCIAL_FEATURES = []
+_RINGS_FIDUCIAL_FEATURES = _RINGS_FIDUCIAL_FEATURES_1993
 
 #==============================================================================
 # 
@@ -229,7 +230,8 @@ def _rings_read_fiducial_features():
             if line[9] != '*': # Circular feature?
                 continue
             a = float(line[10:21])
-            _RINGS_FIDUCIAL_FEATURES.append((a,0.))            
+            _RINGS_FIDUCIAL_FEATURES.append((a,0.))
+            print 'FEATURE', a         
     
     _RINGS_FIDUCIAL_FEATURES.sort(key=lambda x:x[0], reverse=True)
     
@@ -622,7 +624,7 @@ FRING_DW = 2.70025 * oops.RPD # deg/day
 
 def _compute_fring_longitude_shift(et):
     global FRING_ROTATING_ET
-    if FRING_ROTATING_ET is none:
+    if FRING_ROTATING_ET is None:
         FRING_ROTATING_ET = cspice.utc2et("2007-1-1")
  
     return - (FRING_MEAN_MOTION * 

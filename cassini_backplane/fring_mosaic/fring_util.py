@@ -49,6 +49,8 @@ class OffRepData(object):
         self.repro_incidence_angles = None
         self.repro_emission_angles = None
         self.repro_resolutions = None
+        
+        self.image_log_filehandler = None
 
         
 class MosaicData(object):
@@ -95,7 +97,7 @@ def enumerate_files(options, args):
     for obsid in sorted(obsid_db.keys()):
         min_num, max_num, filename_list = obsid_db[obsid]
         for full_path in yield_image_filenames(min_num, max_num, 
-                                               filename_list):
+                                               restrict_list=filename_list):
             _, filename = os.path.split(full_path)
             yield obsid, filename[:13], full_path
 
@@ -103,7 +105,7 @@ def repro_path(options, image_path, image_name):
     repro_res_data = ('_%04d_%04d_%06.3f_%05.3f' % (options.radius_inner, options.radius_outer,
                                                          options.radius_resolution,
                                                          options.longitude_resolution))
-    offset_path = file_offset_path(image_path)
+    offset_path = file_img_to_offset_path(image_path)
     return os.path.join(os.path.dirname(offset_path), image_name + repro_res_data + '_FREPRO')
 
 def repro_path_spec(radius_inner, radius_outer, radius_resolution, longitude_resolution,
