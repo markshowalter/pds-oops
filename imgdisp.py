@@ -153,8 +153,8 @@ class ImageDisp(tk.Frame):
         
         ### Init the Tk Frame
         tk.Frame.__init__(self, parent)
-        if toplevel is None:
-            toplevel = parent
+#         if toplevel is None:
+#             toplevel = parent
         self.toplevel = toplevel
         if toplevel is not None:
             toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
@@ -1008,9 +1008,9 @@ class ValidatingEntry(tk.Entry):
     # base class for validating entry widgets
 
     def __init__(self, master, value="", **kw):
-        apply(Entry.__init__, (self, master), kw)
+        apply(tk.Entry.__init__, (self, master), kw)
         self.__value = value
-        self.__variable = StringVar()
+        self.__variable = tk.StringVar()
         self.__variable.set(value)
         self.__variable.trace("w", self.__callback)
         self.config(textvariable=self.__variable)
@@ -1099,20 +1099,20 @@ class ScrolledList(tk.Frame):
                  vscroll=True, hscroll=False, **kwargs):
         """Constructor for ScrolledList.
         """
-        Frame.__init__ (self, master)
+        tk.Frame.__init__ (self, master)
         self.width     = width
         self.height    = height
         self.vscroll   = vscroll
         self.hscroll   = hscroll
 
         if self.vscroll:
-            self.vScrollbar = Scrollbar(self, orient=VERTICAL)
-            self.vScrollbar.grid(row=0, column=1, sticky=N+S)
+            self.vScrollbar = tk.Scrollbar(self, orient=tk.VERTICAL)
+            self.vScrollbar.grid(row=0, column=1, sticky=tk.N+tk.S)
         if self.hscroll:
-            self.hScrollbar = Scrollbar(self, orient=tk.HORIZONTAL)
-            self.hScrollbar.grid(row=1, column=0, sticky=E+W)
+            self.hScrollbar = tk.Scrollbar(self, orient=tk.HORIZONTAL)
+            self.hScrollbar.grid(row=1, column=0, sticky=tk.E+tk.W)
 
-        self.listbox  =  Listbox(self, relief=SUNKEN,
+        self.listbox  =  tk.Listbox(self, relief=tk.SUNKEN,
                                  width=self.width, height=self.height,
                                  borderwidth=2, **kwargs)
         self.listbox.grid(row=0, column=0)
@@ -1149,7 +1149,7 @@ class ScrolledList(tk.Frame):
         if 0 <= linex < self.count():
             where = linex
         else:
-            where = END
+            where = tk.END
 
         self.listbox.insert(where, text)
 
@@ -1162,7 +1162,7 @@ class ScrolledList(tk.Frame):
     def clear(self):
         """Remove all lines.
         """
-        self.listbox.delete(0, END)
+        self.listbox.delete(0, tk.END)
 
 #===============================================================================
 # 

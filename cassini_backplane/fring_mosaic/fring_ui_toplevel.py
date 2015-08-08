@@ -82,19 +82,16 @@ def get_file_status(guidata):
     max_repro_mtime = 0
     
     for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
-#        print obsid, image_name
         offrepstatus = OffRepStatus()
         offrepstatus.obsid = obsid
         offrepstatus.image_name = image_name
         offrepstatus.image_path = image_path
         
-        offrepstatus.offset_path = file_offset_path(image_path)
+        offrepstatus.offset_path = file_img_to_offset_path(image_path)
         offrepstatus.repro_path = fring_util.repro_path(options, image_path, image_name)
         
         offrepstatus.offset_status = ''
-        overlay_path_write, overlay_path_read = file_overlay_path(image_path)
-        if (os.path.exists(offrepstatus.offset_path) and
-            os.path.exists(overlay_path_read)):
+        if os.path.exists(offrepstatus.offset_path):
             offrepstatus.offset_mtime = os.stat(offrepstatus.offset_path).st_mtime
         else:
             offrepstatus.offset_status = '--'
@@ -102,14 +99,12 @@ def get_file_status(guidata):
 
         if os.path.exists(offrepstatus.repro_path):
             offrepstatus.repro_mtime = os.stat(offrepstatus.repro_path).st_mtime
-            if (not os.path.exists(offrepstatus.offset_path) or
-                not os.path.exists(overlay_path_read)):
+            if not os.path.exists(offrepstatus.offset_path):
                 offrepstatus.repro_status = 'r'
             elif offrepstatus.offset_mtime > offrepstatus.repro_mtime:
                 offrepstatus.repro_status = 'D'
             else:
                 offrepstatus.repro_status = 'R'
-#            print obsid, offrepstatus.repro_mtime
         else:
             offrepstatus.repro_status = 'X'
             offrepstatus.repro_mtime = 1e37
@@ -146,15 +141,24 @@ def read_one_offset_status(offrepstatus):
         return
     
     offrepstatus.offset_metadata = file_read_offset_metadata(offrepstatus.image_path)
+    if 'error' in offrepstatus.offset_metadata:
+        offrepstatus.offset_status = 'EE'
+        return
     offrepstatus.auto_offset = offrepstatus.offset_metadata['offset']
-    offrepstatus.manual_offset = offrepstatus.offset_metadata['manual_offset']
+    if 'manual_offset' in offrepstatus.offset_metadata:
+        offrepstatus.manual_offset = offrepstatus.offset_metadata['manual_offset']
+    else:
+        offrepstatus.manual_offset = None
      
     auto_status = ' '
     man_status = ' '
     if offrepstatus.auto_offset is not None:
         try:
             if offrepstatus.offset_metadata['used_objects_type'] == 'model':
-                auto_status = 'L'
+                if offrepstatus.offset_metadata['model_overrides_stars']:
+                    auto_status = 'O'
+                else:
+                    auto_status = 'L'
             elif offrepstatus.offset_metadata['used_objects_type'] == 'stars':
                 auto_status = 'S'
             else:
@@ -331,7 +335,7 @@ def offrep_img_list_buttonrelease_handler(event, guidata):
         return
     guidata.img_selection = guidata.obsid_db[guidata.obsid_selection][2][int(img_selections[0])]
     subprocess.Popen([fring_util.PYTHON_EXE, python_reproject_program, '--display-offset-reproject', 
-                      '--no-auto-offset', '--no-reproject',
+                      '--no-auto-offset', '--no-reproject', '--image-log-console-level', 'debug',
                       guidata.obsid_selection + '/' + guidata.img_selection.image_name] +
                       cmdline_arguments(guidata))
 

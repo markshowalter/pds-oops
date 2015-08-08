@@ -247,23 +247,26 @@ OFFSET_DEFAULT_CONFIG = {
     
     # AND
     
-    # If the total model has any contents within this distance of an edge, 
-    # then we might trust it.
+    # If the total model has any contents further than this distance from an 
+    # edge, then we might trust it.
     'model_edge_pixels': 5,
     
     # The number of pixels to search in U,V during secondary correlation.
     'secondary_corr_search_size': 15,  
     
     # If the stars-based and bodies/rings-based correlations differ by at
-    # least this amount, then we don't trust the bodies/rings-based model.
-    'stars_model_diff_threshold': 5,
+    # least this number of pixels, then we need to choose between the stars
+    # and the bodies.
+    'stars_model_diff_threshold': 2,
     
     # If there are at least this many good stars, then the stars can override
-    # the bodies/rings model when they differ by too many pixels.
+    # the bodies/rings model when they differ by the above number of pixels.
+    # Otherwise, the bodies/rings model overrides the stars.
     'stars_override_threshold': 6,
 
-    # If secondary correlation is off by more than this amount, it fails.
-    'secondary_corr_threshold': 2,
+    # If secondary correlation is off by at least this number of pixels, it 
+    # fails.
+    'secondary_corr_threshold': 3,
     
     # If the secondary correlation peak isn't at least this fraction of the
     # primary correlation peak, correlation fails.

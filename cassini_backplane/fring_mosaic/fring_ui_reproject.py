@@ -16,12 +16,14 @@ import cspice
 from imgdisp import ImageDisp, FloatEntry, draw_line
 from Tkinter import *
 from PIL import Image
-import oops.inst.cassini.iss as iss
 import fring_util
+from cb_logging import *
 from cb_util_file import *
+from cb_util_image import *
 from cb_offset import *
 from cb_rings import *
 import cProfile, pstats, StringIO
+import traceback
 
 #oops.LOGGING.all(True)
 
@@ -35,9 +37,16 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = [
-#                '-a',
-#                '--max-subprocesses', '3',
-                'ISS_030RF_FMOVIE001_VIMS',
+                '--recompute-auto-offset',
+#                 '--image-logfile-level', 'debug',
+                '--image-log-console-level', 'warning',
+#                 '-a',
+#                 '--max-subprocesses', '3',
+#                 '--start-obsid', 'ISS_007RI_AZSCNLOPH001_PRIME',
+                '--start-obsid', 'ISS_115RF_FMOVIEEQX001_PRIME',
+#                 'ISS_000RI_SATSRCHAP001_PRIME',
+#                 'ISS_007RI_LPHRLFMOV001_PRIME/N1493646036_2',
+#                 'ISS_030RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_036RF_FMOVIE001_VIMS',
 #                '--start-obsid', 'ISS_085RF_FMOVIE003_PRIME_1',
 #                '--start-obsid', 'ISS_106RF_FMOVIE002_PRIME',
@@ -61,7 +70,7 @@ if len(cmd_line) == 0:
 #'ISS_109RI_TDIFS20HP001_CIRS',
 #'ISS_112RF_FMOVIE002_PRIME',
 #'ISS_132RI_FMOVIE001_VIMS',
-'ISS_115RF_FMOVIEEQX001_PRIME',
+#'ISS_115RF_FMOVIEEQX001_PRIME',
 #'ISS_080RF_FMOVIE005_PRIME/N1597390953_1',
 
 #'ISS_051RI_LPMRDFMOV001_PRIME',
@@ -98,7 +107,7 @@ if len(cmd_line) == 0:
 #                 '--recompute-auto-offset',
 #                 '--recompute-reproject',
 #                 '--no-reproject',
-                '--display-offset-reproject',
+#                 '--display-offset-reproject',
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
@@ -130,7 +139,12 @@ parser.add_option('--start-obsid', dest='start_obsid',
 parser.add_option('--max-subprocesses', dest='max_subprocesses',
                   type='int', default=0,
                   help="Fork a subprocess for each file")
-
+parser.add_option('--image-logfile-level', dest='image_logfile_level',
+                  default='info',
+                  help='Logging level for the individual logfiles')
+parser.add_option('--image-log-console-level', dest='image_log_console_level',
+                  default='info',
+                  help='Logging level for the console')
 
 ##
 ## Options for finding the pointing offset
@@ -228,6 +242,8 @@ def collect_cmd_line():
         ret += ['--no-update-reproject']
     if options.recompute_reproject:
         ret += ['--recompute-reproject']
+    ret += ['--image-logfile-level', options.image_logfile_level]
+    ret += ['--image-log-console-level', options.image_log_console_level]
         
     return ret
 
@@ -250,6 +266,28 @@ def run_and_maybe_wait(args):
     pid = subprocess.Popen(args)
     subprocess_list.append(pid)
                     
+
+#####################################################################################
+#
+# LOGGING
+#
+#####################################################################################
+
+def setup_image_logging(offrepdata):
+    if offrepdata.image_log_filehandler is not None: # Already set up
+        return
+    
+    if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
+        image_log_path = file_img_to_log_path(offrepdata.image_path, bootstrap=False)
+        
+        if os.path.exists(image_log_path):
+            os.remove(image_log_path) # XXX Need option to not do this
+            
+        offrepdata.image_log_filehandler = cb_logging.log_add_file_handler(
+                                        image_log_path, image_logfile_level)
+    else:
+        offrepdata.image_log_filehandler = None
+
 
 #####################################################################################
 #
@@ -298,25 +336,35 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
             print 'QUEUEING SUBPROCESS'
         offrepdata.subprocess_run = True
         return
+
+    setup_image_logging(offrepdata)
     
     # Recompute the automatic offset
-    obs = iss.from_file(offrepdata.image_path)
+    obs = read_iss_file(offrepdata.image_path)
     offrepdata.obs = obs
+    
+    rings_config = RINGS_DEFAULT_CONFIG.copy()
+    rings_config['fiducial_feature_threshold'] = 1 # XXX
+    
     try:
         offrepdata.off_metadata = master_find_offset(obs,
                          allow_stars=not options.no_allow_stars,
                          allow_moons=not options.no_allow_moons,
                          create_overlay=True,
-                         star_overlay_box_width=5,
-                         star_overlay_box_thickness=2)
+                         stars_overlay_box_width=5,
+                         stars_overlay_box_thickness=2,
+                         rings_config=rings_config)
     except:
         if options.verbose:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
         print 'EXCEPTION:'
         print sys.exc_info()
+        err = 'Offset finding failed:\n' + traceback.format_exc() 
+        offrepdata.off_metadata = {}
+        offrepdata.off_metadata['error'] = str(sys.exc_value)
+        offrepdata.off_metadata['error_traceback'] = err
         if options.allow_exception:
             raise
-        offrepdata.off_metadata = {}
     if ('offset' in offrepdata.off_metadata and 
         offrepdata.off_metadata['offset'] is not None):
         offrepdata.the_offset = offrepdata.off_metadata['offset']
@@ -394,10 +442,11 @@ def _reproject_one_image(offrepdata):
         return
     
     try:
-        ret = rings_reproject(obs, offset,
-                              options.longitude_resolution*oops.RPD,
-                              options.radius_resolution,
-                              options.radius_inner, options.radius_outer,
+        ret = rings_reproject(obs, offset=offset,
+                              longitude_resolution=options.longitude_resolution*oops.RPD,
+                              radius_resolution=options.radius_resolution,
+                              radius_inner=options.radius_inner,
+                              radius_outer=options.radius_outer,
                               corotating='F')
     except:
         if options.verbose:
@@ -468,6 +517,8 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
             print 'QUEUEING SUBPROCESS'
         offrepdata.subprocess_run = True
         return
+
+    setup_image_logging(offrepdata)
     
     _reproject_one_image(offrepdata)
     
@@ -493,27 +544,6 @@ def draw_repro_overlay(offrepdata, offrepdispdata):
         repro_overlay[y, :, 0] = 1
     
     offrepdispdata.imdisp_repro.set_overlay(0, repro_overlay)
-
-def shift_image(image, offset_u, offset_v):
-    """Shift an image by an offset."""
-    if offset_u == 0 and offset_v == 0:
-        return image
-    
-    image = np.roll(image, -offset_u, 1)
-    image = np.roll(image, -offset_v, 0)
-
-    if offset_u != 0:    
-        if offset_u < 0:
-            image[:,:-offset_u] = 0
-        else:
-            image[:,-offset_u:] = 0
-    if offset_v != 0:
-        if offset_v < 0:
-            image[:-offset_v,:] = 0
-        else:
-            image[-offset_v:,:] = 0
-    
-    return image
 
 # Draw the offset curves
 def draw_offset_overlay(offrepdata, offrepdispdata):
@@ -674,7 +704,7 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     frame_toplevel = Frame(offrepdispdata.toplevel)
     
     # The original image and overlaid ring curves
-    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], parent=frame_toplevel, canvas_size=(512,512),
+    offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], canvas_size=(512,512),
                                              allow_enlarge=True, auto_update=True)
 #    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
     
@@ -948,6 +978,20 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
 #
 #####################################################################################
 
+# Set up per-image logging
+_LOGGING_NAME = 'cb.' + __name__
+image_logger = logging.getLogger(_LOGGING_NAME)
+
+image_logfile_level = log_decode_level(options.image_logfile_level)
+image_log_console_level = log_decode_level(options.image_log_console_level)
+
+cb_logging.log_set_default_level(log_min_level(image_logfile_level,
+                                               image_log_console_level))
+cb_logging.log_set_util_flux_level(logging.CRITICAL)
+
+cb_logging.log_remove_console_handler()
+cb_logging.log_add_console_handler(image_log_console_level)
+
 subprocess_list = []
 
 offrepdispdata = OffRepDispData()
@@ -971,7 +1015,7 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
     offrepdata.image_name = image_name
     offrepdata.image_path = image_path
     
-    offrepdata.offset_path = file_offset_path(image_path)
+    offrepdata.offset_path = file_img_to_offset_path(image_path)
     offrepdata.repro_path = fring_util.repro_path(options, image_path, image_name)
 
     offrepdata.subprocess_run = False
@@ -980,6 +1024,8 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
         pr = cProfile.Profile()
         pr.enable()
 
+    offrepdata.image_log_filehander = None
+    
     # Pointing offset
     offset_one_image(offrepdata, options.no_auto_offset, options.no_update_auto_offset,
                      options.recompute_auto_offset)
@@ -987,6 +1033,8 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
     # Reprojection
     reproject_one_image(offrepdata, options.no_reproject, options.no_update_reproject,
                         options.recompute_reproject)
+
+    cb_logging.log_remove_file_handler(offrepdata.image_log_filehandler)
 
     if options.max_subprocesses and offrepdata.subprocess_run:
         run_and_maybe_wait([fring_util.PYTHON_EXE, python_reproject_program] + 
@@ -1011,3 +1059,10 @@ for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
         print s.getvalue()
         assert False
         
+while len(subprocess_list):
+    for i in xrange(len(subprocess_list)):
+        if subprocess_list[i].poll() is not None:
+            del subprocess_list[i]
+            break
+    if len(subprocess_list):
+        time.sleep(1)

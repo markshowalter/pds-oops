@@ -28,12 +28,14 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                'ISS_030RF_FMOVIE001_VIMS',
+                '-a',
+#                 'ISS_030RF_FMOVIE001_VIMS',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
 #                'ISS_029RF_FMOVIE002_VIMS',
-                '--display-mosaic']
+#                 '--display-mosaic'
+]
 
 parser = OptionParser()
 
@@ -96,7 +98,7 @@ def _update_mosaicdata(mosaicdata, metadata):
     mosaicdata.emission_angles = metadata['mean_emission']
     mosaicdata.incidence_angle = metadata['mean_incidence']
     mosaicdata.phase_angles = metadata['mean_phase']
-    full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution)
+    full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution*oops.RPD)
     full_longitudes[np.logical_not(mosaicdata.long_mask)] = -10
     mosaicdata.longitudes = full_longitudes
 
@@ -148,7 +150,7 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     print 'Making mosaic for', mosaicdata.obsid
     
-    mosaic_metadata = rings_mosaic_init(options.longitude_resolution,
+    mosaic_metadata = rings_mosaic_init(options.longitude_resolution * oops.RPD,
                                         options.radius_resolution,
                                         options.radius_inner, options.radius_outer)
 

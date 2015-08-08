@@ -23,8 +23,6 @@ from cb_config import *
 from cb_offset import *
 from cb_util_file import *
 
-LOGGING_SUPERCRITICAL = 60
-
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
@@ -164,32 +162,20 @@ redo_offset_error = arguments.offset_redo_error
 #
 ###############################################################################
 
-def decode_log_level(s):
-    if s.upper() == 'NONE':
-        return LOGGING_SUPERCRITICAL
-    return getattr(logging, s.upper())
-
-def min_log_level(level1, level2):
-    for level in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR,
-                  logging.CRITICAL, LOGGING_SUPERCRITICAL]:
-        if level1 == level or level2 == level:
-            return level
-    return LOGGING_SUPERCRITICAL
-
 # Set up main loop logging
-main_logfile_level = decode_log_level(arguments.main_logfile_level)
-main_log_console_level = decode_log_level(arguments.main_log_console_level)
+main_logfile_level = log_decode_level(arguments.main_logfile_level)
+main_log_console_level = log_decode_level(arguments.main_log_console_level)
 
 # Note the main loop logger is not part of the cb.* name hierarchy.
 main_logger = logging.getLogger('cb_main')
-main_logger.setLevel(min_log_level(main_logfile_level,
+main_logger.setLevel(log_min_level(main_logfile_level,
                                    main_log_console_level))
 
 main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '+
                                    '%(message)s',
                                    datefmt='%m/%d/%Y %H:%M:%S')
 
-if main_logfile_level is not LOGGING_SUPERCRITICAL:
+if main_logfile_level is not cb_logging.LOGGING_SUPERCRITICAL:
     # Only create the logfile is we're actually going to log to it
     if arguments.main_logfile is not None:
         main_log_path = arguments.main_logfile
@@ -218,10 +204,10 @@ main_logger.addHandler(main_log_console_handler)
 _LOGGING_NAME = 'cb.' + __name__
 image_logger = logging.getLogger(_LOGGING_NAME)
 
-image_logfile_level = decode_log_level(arguments.image_logfile_level)
-image_log_console_level = decode_log_level(arguments.image_log_console_level)
+image_logfile_level = log_decode_level(arguments.image_logfile_level)
+image_log_console_level = log_decode_level(arguments.image_log_console_level)
 
-cb_logging.log_set_default_level(min_log_level(image_logfile_level,
+cb_logging.log_set_default_level(log_min_level(image_logfile_level,
                                                image_log_console_level))
 cb_logging.log_set_util_flux_level(logging.CRITICAL)
 
@@ -384,7 +370,7 @@ def process_offset_one_image(image_path):
                            collect_cmd_line(image_path), image_path) 
         return True
 
-    if image_logfile_level != LOGGING_SUPERCRITICAL:
+    if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
         else:

@@ -18,6 +18,8 @@ _LOG_OVERRIDE_UTIL_FLUX  = logging.ERROR
 _LOG_OVERRIDE_UTIL_IMAGE = None #logging.ERROR
 _LOG_OVERRIDE_UTIL_OOPS  = None #logging.ERROR
 
+LOGGING_SUPERCRITICAL = 60
+
 # Functions to set the main level and per-module overrides
 
 def log_set_default_level(level=_LOG_DEFAULT_LEVEL):
@@ -142,3 +144,18 @@ log_set_util_file_level()
 log_set_util_flux_level()
 log_set_util_image_level()
 log_set_util_oops_level()
+
+
+# General utility routines
+
+def log_decode_level(s):
+    if s.upper() == 'NONE':
+        return LOGGING_SUPERCRITICAL
+    return getattr(logging, s.upper())
+
+def log_min_level(level1, level2):
+    for level in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR,
+                  logging.CRITICAL, LOGGING_SUPERCRITICAL]:
+        if level1 == level or level2 == level:
+            return level
+    return LOGGING_SUPERCRITICAL
