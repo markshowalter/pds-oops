@@ -604,7 +604,7 @@ def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
     _, obs_event = ring_surface.photon_to_event_by_coords(obs_event,
                                                           (radius,longitude))
 
-    uv = obs.fov.uv_from_los(-obs_event.arr)
+    uv = obs.fov.uv_from_los(obs_event.neg_arr_ap)
     u, v = uv.to_scalars()
     
     return u.vals, v.vals

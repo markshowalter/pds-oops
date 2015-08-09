@@ -40,7 +40,7 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
     _, obs_event = moon_surface.photon_to_event_by_coords(
                                           obs_event, (longitude, latitude))
 
-    uv = obs.fov.uv_from_los(-obs_event.arr)
+    uv = obs.fov.uv_from_los(obs_event.neg_arr_ap)
     u, v = uv.to_scalars()
     
     return u.vals, v.vals
