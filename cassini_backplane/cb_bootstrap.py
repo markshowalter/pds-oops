@@ -35,6 +35,9 @@ _BOOTSTRAP_MOSAICS = {}
     
 
 def _bootstrap_mask_overlap(mask1, mask2):
+    if mask2 is None:
+        return np.zeros(mask1.shape)
+    
     # Scale the masks along each dimension to be the size of the maximum
     scale1 = float(mask1.shape[0]) / mask2.shape[0]
     scale2 = float(mask1.shape[1]) / mask2.shape[1]

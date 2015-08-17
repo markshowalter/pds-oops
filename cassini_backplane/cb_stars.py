@@ -52,20 +52,14 @@ STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
 
 def _aberrate_star(obs, star):
     """Update the RA,DEC position of a star with stellar aberration."""
-    # XXX There must be a better way to do this.
-    x = 1e30 * np.cos(star.ra) * np.cos(star.dec)
-    y = 1e30 * np.sin(star.ra) * np.cos(star.dec) 
-    z = 1e30 * np.sin(star.dec)
-    pos = polymath.Vector3((x,y,z))
-
-    path = oops.path.LinearPath((pos, polymath.Vector3.ZERO), obs.midtime,
-                                'SSB')  
-                      
     event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
                                      polymath.Vector3.ZERO),
                        obs.path, obs.frame)
-    _, event = path.photon_to_event(event)
-    abb_ra, abb_dec = event.ra_and_dec(apparent=True)
+
+    event.neg_arr_j2000 = polymath.Vector3.from_ra_dec_length(
+                              star.ra, star.dec, 1., recursive=False)
+    (abb_ra, abb_dec, _) = event.neg_arr_ap_j2000.to_ra_dec_length(
+                                                     recursive=False)
 
     star.ra = abb_ra.vals
     star.dec = abb_dec.vals
@@ -146,7 +140,7 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     ra_list = [x[0] for x in ra_dec_list]
     dec_list = [x[1] for x in ra_dec_list]
     
-    uv = obs.uv_from_ra_and_dec(ra_list, dec_list)
+    uv = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
     u_list, v_list = uv.to_scalars()
     u_list = u_list.vals
     v_list = v_list.vals
@@ -868,7 +862,7 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
         dn_list.append(star.dn)
         
     if len(delta_u_list) == 0:
-        return offset_u, offset_v
+        return offset[0], offset[1]
     
     du_mean = np.mean(delta_u_list)
     dv_mean = np.mean(delta_v_list)

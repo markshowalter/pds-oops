@@ -159,9 +159,11 @@ def compute_ra_dec_limits(obs, extend_fov=(0,0)):
     
     set_obs_ext_corner_bp(obs, extend_fov)
 
-    ra = obs.ext_corner_bp.right_ascension()
-    dec = obs.ext_corner_bp.declination()
+    ra = obs.ext_corner_bp.right_ascension(apparent=True)
+    dec = obs.ext_corner_bp.declination(apparent=True)
     
+    uv = obs.uv_from_ra_and_dec(ra[0,0], dec[0,0], apparent=True)
+
     ra_min = ra.min()
     ra_max = ra.max()    
     if ra_max-ra_min > oops.PI:

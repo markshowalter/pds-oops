@@ -141,7 +141,9 @@ def bodies_create_model(obs, body_name, inventory,
                            actually trying to make a model.
                                  
     Returns:
-        A dictionary containing
+        model, metadata
+        
+        metadata is a dictionary containing
 
         'body_name'        The name of the body.
         'curvature_ok'     True if sufficient curvature is visible to permit
@@ -170,6 +172,15 @@ def bodies_create_model(obs, body_name, inventory,
 
     logger.info('Processing %s', body_name)
 
+    bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
+    if bb_area < bodies_config['min_bounding_box_area']:
+        logger.info(
+            'Bounding box (area %.3f pixels) is too small to bother with',
+            bb_area)
+        metadata['latlon_mask'] = None
+        metadata['end_time'] = time.time()
+        return None, metadata
+        
     # Analyze the curvature
             
     u_min = inventory['u_min_unclipped']

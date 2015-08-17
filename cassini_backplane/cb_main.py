@@ -4,7 +4,7 @@
 # The main top-level driver for all of CB.
 ###############################################################################
 
-import cb_logging
+from cb_logging import *
 import logging
 
 import argparse
@@ -20,6 +20,7 @@ import oops
 
 from cb_bootstrap import *
 from cb_config import *
+from cb_gui_offset_data import *
 from cb_offset import *
 from cb_util_file import *
 
@@ -27,7 +28,9 @@ command_list = sys.argv[1:]
 
 if len(command_list) == 0:
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
-    command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
+    command_line_str = '--offset-force N1484573247_1 --main-log-console-level debug --display-offset-results'
+#     command_line_str = '--offset-force N1493446065_1 --image-log-console-level debug --display-offset-results'
 
     command_list = command_line_str.split()
 
@@ -127,6 +130,9 @@ parser.add_argument(
     '--offset-redo-error', action='store_true', default=False,
     help="""Force offset computation if the offset file exists and 
             indicates a fatal error""")
+parser.add_argument(
+    '--display-offset-results', action='store_true', default=False,
+    help="Graphically display the results of the offset process")
 
 # Arguments about the bootstrap process
 parser.add_argument(
@@ -427,6 +433,9 @@ def process_offset_one_image(image_path):
             main_logger.exception('Error offset file writing failed - %s', image_path)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         return True
+
+    if arguments.display_offset_results:
+        display_offset_data(obs, metadata)
 
     results = offset_result_str(image_path)
     main_logger.info(results)

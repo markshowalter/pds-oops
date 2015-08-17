@@ -40,9 +40,9 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                '-a',
+#                 '-a',
 #'ISS_115RF_FMOVIEEQX001_PRIME',
-#                'ISS_029RF_FMOVIE002_VIMS',
+                'ISS_029RF_FMOVIE001_VIMS',
 #                 'ISS_044RF_FMOVIE001_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
@@ -90,7 +90,7 @@ verbose = True
 def plot_obsid(obsid, image_path_list):
     offset_u_list = []
     offset_v_list = []
-#     num_stars_list = []
+    num_stars_list = []
     num_good_stars_list = []
     used_objects_type_list = []
 
@@ -121,13 +121,14 @@ def plot_obsid(obsid, image_path_list):
             num_no_offset += 1
             offset_u_list.append(None)
             offset_v_list.append(None)
-#             num_stars_list.append(-1)
+            num_stars_list.append(-1)
             num_good_stars_list.append(-1)
             used_objects_type_list.append('stars')
         else:
             offset_u_list.append(auto_offset[0])
             offset_v_list.append(auto_offset[1])
-#             num_stars_list.append(len(stars_metadata['full_star_list']))
+            print image_path, stars_metadata.keys()
+            num_stars_list.append(stars_metadata['num_stars'])
             num_good_stars_list.append(stars_metadata['num_good_stars'])
             object_type = metadata['used_objects_type']
             if metadata['model_overrides_stars']:
@@ -184,10 +185,11 @@ def plot_obsid(obsid, image_path_list):
     good_color = '#336600'
     
     ax = fig.add_subplot(212)
-#     plt.plot(num_stars_list, '-o', color=stars_color, mec=stars_color, mfc=stars_color, ms=markersize*.5)
+    plt.plot(num_stars_list, '-o', color=stars_color, mec=stars_color, mfc=stars_color, ms=markersize*.5)
     plt.plot(num_good_stars_list, '-o', color=good_color, mec=good_color, mfc=good_color, ms=markersize*.55)
     plt.xlim(x_min, x_max)
-    plt.ylim(-0.5, np.max(num_good_stars_list)+0.5)
+    plt.ylim(-0.5, max(np.max(num_good_stars_list),
+                       np.max(num_stars_list))+0.5)
     plt.ylabel('# of Good Stars')
     plt.xlabel('Image Number')
     if POSTER:
@@ -211,13 +213,12 @@ def plot_obsid(obsid, image_path_list):
     
     plt.close()
     
-    print '%-40s %4d %4d %4d %4d %4d %4d %4d' % (obsid, num_images, num_no_attempt, num_no_offset,
+    print '%-40s %4d %4d %4d %4d %4d %4d' % (obsid, num_images, num_no_attempt, num_no_offset,
                                              num_used_stars, num_used_model, num_model_overrides)
     
     g_num_images += num_images
     g_num_no_attempt += num_no_attempt
     g_num_no_offset += num_no_offset
-    g_num_old_format += num_old_format
     g_num_used_stars += num_used_stars
     g_num_used_model += num_used_model
     g_num_model_overrides += num_model_overrides
@@ -250,5 +251,5 @@ if len(image_path_list) != 0:
     plot_obsid(cur_obsid, image_path_list)
 
 print
-print '%-40s %4d %4d %4d %4d %4d %4d %4d' % ('TOTAL', g_num_images, g_num_no_attempt, g_num_no_offset,
+print '%-40s %4d %4d %4d %4d %4d %4d' % ('TOTAL', g_num_images, g_num_no_attempt, g_num_no_offset,
                          g_num_used_stars, g_num_used_model, g_num_model_overrides)

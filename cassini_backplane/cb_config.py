@@ -157,6 +157,10 @@ STARS_DEFAULT_CONFIG = {
 }
 
 BODIES_DEFAULT_CONFIG = {
+    # The minimum number of pixels in the bounding box surrounding the body
+    # in order to bother with it.
+    'min_bounding_box_area': 4,
+    
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
     # correlation.
