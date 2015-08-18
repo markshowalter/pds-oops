@@ -192,7 +192,7 @@ if main_logfile_level is not cb_logging.LOGGING_SUPERCRITICAL:
         main_log_path = os.path.join(main_log_path, 'cb_main')
         if not os.path.exists(main_log_path):
             os.mkdir(main_log_path)
-        main_log_datetime = datetime.now().isoformat()[:-7]
+        main_log_datetime = datetime.now().isoformat()[:-7].replace(':',';')
         main_log_path = os.path.join(main_log_path, main_log_datetime+'.log')
     
     main_log_file_handler = logging.FileHandler(main_log_path)
