@@ -141,14 +141,11 @@ def display_body_mosaic(metadata, title=None):
     metadata['longitude'] = bodies_generate_longitudes(longitude_resolution=
                                     metadata['lon_resolution'])
 
-    toplevel = tk.Toplevel()
     if title is None:
         title = metadata['body_name']
-    toplevel.title(title)
 
     imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,400),
-                        parent=toplevel,
-                        allow_enlarge=True,
+                        title=title, allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)
 
     metadata['imgdisp'] = imgdisp

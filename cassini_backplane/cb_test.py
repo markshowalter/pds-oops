@@ -19,6 +19,10 @@ _LOGGING_NAME = 'cb.' + __name__
 
 test_data = (
 
+#    N1493446065 Mimas - Stars vs. model
+#    N1484573247 Mimas - Stars vs. model
+#    N1484580522 Mimas - Stars vs. model
+# 9 NAC/CLEAR images of Rhea from N1490874611 to N1490875063 for bootstrapping
 
 #     (1662351509, ('RHEA'),
 #      "Model and stars agree",

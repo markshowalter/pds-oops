@@ -104,6 +104,10 @@ FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE', 'TITAN'] # XXX
 ##################
 
 STARS_DEFAULT_CONFIG = {
+    # Allow non-integer offsets; these use astrometry to refine the mean
+    # star offset.
+    'allow_fractional_offsets': True,
+    
     # Minimum number of stars that must photometrically match for an offset
     # to be considered good.
     'min_stars': 3,
@@ -194,6 +198,11 @@ BODIES_DEFAULT_CONFIG = {
 RINGS_DEFAULT_CONFIG = {
     # The source for profile data - 'voyager' or 'uvis'.
     'model_source': 'uvis',
+    
+    # Fiducial feature list to use.
+    # french93 - French et al. 1993
+    # french1404 - Features from Dick French 2014
+    'fiducial_feature_list': 'french1404',
     
     # There must be at least this many fiducial features for rings to be used
     # for correlation.

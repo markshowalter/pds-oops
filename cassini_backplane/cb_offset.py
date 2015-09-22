@@ -377,7 +377,7 @@ def master_find_offset(obs,
         if star_offset is None:
             logger.info('Final star offset N/A')
         else:
-            logger.info('Final star offset U,V %d %d good stars %d', 
+            logger.info('Final star offset U,V %.2f %.2f good stars %d', 
                         star_offset[0], star_offset[1],
                         stars_metadata['num_good_stars'])
         if create_overlay:
@@ -493,7 +493,7 @@ def master_find_offset(obs,
     metadata['model_contents'] = used_model_str_list
     if force_offset:
         model_offset = force_offset
-        logger.info('FORCING OFFSET U,V %d,%d',
+        logger.info('FORCING OFFSET U,V %.2f,%.2f',
                      model_offset[0], model_offset[1])
     elif len(model_list) == 0:
         logger.info('Nothing to model - no offset found')
@@ -648,14 +648,14 @@ def master_find_offset(obs,
     if star_offset is None:
         logger.info('Final star offset N/A')
     else:
-        logger.info('Final star offset     U,V %d %d good stars %d', 
+        logger.info('Final star offset     U,V %.2f %.2f good stars %d', 
                     star_offset[0], star_offset[1],
                     stars_metadata['num_good_stars'])
 
     if offset is None:
         logger.info('Final combined offset FAILED')
     else:
-        logger.info('Final combined offset U,V %d %d', offset[0], offset[1])
+        logger.info('Final combined offset U,V %.2f %.2f', offset[0], offset[1])
 
     metadata['offset'] = offset
 
@@ -678,7 +678,7 @@ def master_find_offset(obs,
             overlay = np.clip(overlay+star_overlay, 0, 255)
 
         if offset is not None:
-            overlay = shift_image(overlay, -offset[0], -offset[1])
+            overlay = shift_image(overlay, -int(np.round(offset[0])), -int(np.round(offset[1])))
     
     metadata['ext_overlay'] = overlay
     metadata['overlay'] = unpad_image(overlay, extend_fov)

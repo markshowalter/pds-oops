@@ -29,8 +29,9 @@ command_list = sys.argv[1:]
 if len(command_list) == 0:
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
-    command_line_str = '--offset-force N1484573247_1 --main-log-console-level debug --display-offset-results'
+    command_line_str = '--offset-force N1484580522_1 --image-log-console-level info --display-offset-results'
 #     command_line_str = '--offset-force N1493446065_1 --image-log-console-level debug --display-offset-results'
+#    command_line_str = '--first-image-num 1490874611 --last-image-num 1490875063 --image-log-console-level none'
 
     command_list = command_line_str.split()
 
@@ -444,6 +445,9 @@ def process_offset_one_image(image_path):
 
     return True
 
+if arguments.display_offset_results:
+    root = tk.Tk()
+    root.withdraw()
 
 if not arguments.offset:
     main_logger.info('*** Skipping main offset pass')

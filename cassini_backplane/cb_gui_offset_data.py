@@ -252,7 +252,6 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             else:
                 mask = ~orig_model_mask | mask 
 
-    toplevel = tk.Toplevel()
     path1, fn1 = os.path.split(obs.full_path)
     path2, fn2 = os.path.split(path1)
     path3, fn3 = os.path.split(path2)
@@ -261,10 +260,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         title = fn4 + '/' + fn2 + '/' + fn1
     else:
         title = fn4 + '/' + fn3 + '/' + fn2 + '/' + fn1
-    toplevel.title(title)
 
     imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,512), 
-                        parent=toplevel,
+                        title=title,
                         allow_enlarge=True,
                         auto_update=True, origin=(ext_u,ext_v))
 
@@ -336,7 +334,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     if metadata['offset'] is None:
         offset = 'None'
     else:
-        offset = str(metadata['offset'][0])+', '+str(metadata['offset'][1])
+        offset = '%.2f, %.2f' % tuple(metadata['offset'])
     label = tk.Label(addon_control_frame, text=offset, 
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
@@ -348,8 +346,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         if stars_metadata['offset'] is None:
             offset = 'None'
         else:
-            offset = (str(stars_metadata['offset'][0])+', '+
-                      str(stars_metadata['offset'][1]))
+            offset = '%.2f, %.2f' % tuple(stars_metadata['offset'])
     else:
         offset = 'N/A'
     label = tk.Label(addon_control_frame, text=offset,
@@ -554,8 +551,6 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                                _callback_mousemove(x, y, metadata))
     imgdisp.bind_mousemove(0, callback_mousemove_func)
 
-    imgdisp.pack()
-    
     tk.mainloop()
 
     obs.fov = orig_fov

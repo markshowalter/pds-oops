@@ -113,10 +113,9 @@ _RINGS_FIDUCIAL_FEATURES_1993 = [
     ( 74490.0, 0.),         # C Ring IER    
 ]
 
-_RINGS_FIDUCIAL_FEATURES_PATH = os.path.join(
+_RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH = os.path.join(
      SUPPORT_FILES_ROOT, '20140419toRAJ', 'ringfit_v1.8.Sa025S-RF-V4927.out')
-# _RINGS_FIDUCIAL_FEATURES = []
-_RINGS_FIDUCIAL_FEATURES = _RINGS_FIDUCIAL_FEATURES_1993
+_RINGS_FIDUCIAL_FEATURES = []
 
 #==============================================================================
 # 
@@ -215,30 +214,47 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     logger.debug('Distance %.2f is far enough for curvature', dist)
     return True
 
-def _rings_read_fiducial_features():
-    if len(_RINGS_FIDUCIAL_FEATURES) > 0:
+def _rings_read_fiducial_features(rings_config):
+    global _RINGS_FIDUCIAL_FEATURES, _RINGS_FIDUCIAL_FEATURES_NAME
+    
+    if (len(_RINGS_FIDUCIAL_FEATURES) > 0 and
+        _RINGS_FIDUCIAL_FEATURES_NAME == 
+            rings_config['fiducial_feature_list']):
         return
-    with open(_RINGS_FIDUCIAL_FEATURES_PATH, 'r') as fp:
-        for line in fp:
-            if line.startswith('Ring         A'):
-                break
-        else:
-            assert False
-        for line in fp:
-            if line.startswith('Index'):
-                break
-            if line[9] != '*': # Circular feature?
-                continue
-            a = float(line[10:21])
-            _RINGS_FIDUCIAL_FEATURES.append((a,0.))
-            print 'FEATURE', a         
     
-    _RINGS_FIDUCIAL_FEATURES.sort(key=lambda x:x[0], reverse=True)
+    _RINGS_FIDUCIAL_FEATURES_NAME = rings_config['fiducial_feature_list']
     
-def rings_fiducial_features(obs, extend_fov=(0,0)):
+    if _RINGS_FIDUCIAL_FEATURES_NAME == 'french93':
+        _RINGS_FIDUCIAL_FEATURES = _RINGS_FIDUCIAL_FEATURES_1993
+        return
+    elif _RINGS_FIDUCIAL_FEATURES_NAME == 'french1404':
+        with open(_RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH, 'r') as fp:
+            for line in fp:
+                if line.startswith('Ring         A'):
+                    break
+            else:
+                assert False
+            for line in fp:
+                if line.startswith('Index'):
+                    break
+                if line[9] != '*': # Circular feature?
+                    continue
+                a = float(line[10:21])
+                _RINGS_FIDUCIAL_FEATURES.append((a,0.))
+        
+        _RINGS_FIDUCIAL_FEATURES.sort(key=lambda x:x[0], reverse=True)
+        
+        return
+
+    assert False    
+    
+def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
 
-    _rings_read_fiducial_features()
+    if rings_config is None:
+        rings_config = RINGS_DEFAULT_CONFIG
+
+    _rings_read_fiducial_features(rings_config)
     
     set_obs_ext_bp(obs, extend_fov)
 
@@ -403,7 +419,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
    
     metadata['curvature_ok'] = True     
    
-    fiducial_features = rings_fiducial_features(obs, extend_fov)
+    fiducial_features = rings_fiducial_features(obs, extend_fov, rings_config)
     metadata['fiducial_features'] = fiducial_features
     fiducial_features_ok = (len(fiducial_features) >=
                             rings_config['fiducial_feature_threshold'])

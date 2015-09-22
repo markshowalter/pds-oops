@@ -17,10 +17,7 @@ root = tk.Tk()
 root.withdraw()
 
 while True:
-    toplevel = tk.Toplevel()
-    toplevel.withdraw()
-    path = tkFileDialog.askopenfilename(parent=toplevel,
-                                        initialdir=mosaic_dir, 
+    path = tkFileDialog.askopenfilename(initialdir=mosaic_dir, 
                                         title='Choose a mosaic metadata file')
     if path == '' or path == ():
         break

@@ -26,7 +26,7 @@ class ImageDisp(tk.Frame):
     def __init__(self, 
                  imgdata_list, 
                  overlay_list=None, color_column_list=None,
-                 parent=None, toplevel=None, 
+                 title=None, 
                  canvas_size=None, 
                  flip_y=False, origin=(0,0),
                  allow_enlarge=False, enlarge_limit=5, one_zoom=True, 
@@ -81,10 +81,7 @@ class ImageDisp(tk.Frame):
                        Note, however, that the overlay transparency slider
                        has no effect and there is no alpha channel.
         
-        parent         The parent (enclosing) Tkinter widget, if any.
-        
-        toplevel       The Toplevel Tkinter widget, it any. If not provided,
-                       this defaults to parent.
+        title          The title of the window.
         
         canvas_size    The size (width, height) of the Canvas widget to display
                        the image. The Canvas will always be this size, 
@@ -151,13 +148,14 @@ class ImageDisp(tk.Frame):
         gamma_max      The maximum value for the gamma slider.
         """
         
+        self.toplevel = tk.Toplevel()
+
+        if title is not None:
+            self.toplevel.title(title)
+            
         ### Init the Tk Frame
-        tk.Frame.__init__(self, parent)
-#         if toplevel is None:
-#             toplevel = parent
-        self.toplevel = toplevel
-        if toplevel is not None:
-            toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
+        tk.Frame.__init__(self, self.toplevel)
+        self.toplevel.protocol('WM_DELETE_WINDOW', self._command_wm_delete)
 
         if type(imgdata_list) != type([]) and type(imgdata_list) != type(()):
             imgdata_list = [imgdata_list]
@@ -1393,6 +1391,9 @@ if __name__ == '__main__':
     import oops.inst.cassini.iss as iss
     import matplotlib.pyplot as plt
 
+    root = tk.Tk()
+    root.withdraw()
+    
     # Test drawing algorithms
     
 #     img = np.zeros((500,500))

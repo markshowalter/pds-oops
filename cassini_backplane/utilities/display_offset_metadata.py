@@ -30,9 +30,6 @@ root = tk.Tk()
 root.withdraw()
 
 if arguments.image_path is not None:
-    toplevel = tk.Toplevel()
-    toplevel.withdraw()
-
     img_path = arguments.image_path
     metadata = file_read_offset_metadata(img_path)
     obs = read_iss_file(img_path)
@@ -41,10 +38,8 @@ else:
     file_initialdir = results_dir
     
     while True:
-        toplevel = tk.Toplevel()
-        toplevel.withdraw()
         offset_path = tkFileDialog.askopenfilename(
-                   parent=toplevel, initialdir=file_initialdir,
+                   initialdir=file_initialdir,
                    title='Choose an offset metadata file')
         if offset_path == '' or offset_path == ():
             break

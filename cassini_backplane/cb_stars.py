@@ -834,6 +834,14 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
     """Perform astrometry to refine the final offset."""
     logger = logging.getLogger(_LOGGING_NAME+'._stars_refine_offset')
 
+    psf_size = stars_config['psf_size']
+    
+    if psf_size < 7:
+        logger.error('Unable to refine star fit because PSF SIZE of %d is '+
+                     'too small',
+                     psf_size)
+        return offset
+    
     gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector])
     
     delta_u_list = []
@@ -846,7 +854,7 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
             continue
         u = star.u + offset[0]
         v = star.v + offset[1]
-        ret = gausspsf.find_position(calib_data, (5,5),
+        ret = gausspsf.find_position(calib_data, (psf_size,psf_size),
                       (v,u), search_limit=(1.5, 1.5),
                       bkgnd_degree=2, bkgnd_ignore_center=(2,2),
                       bkgnd_num_sigma=5,
@@ -868,6 +876,9 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
     dv_mean = np.mean(delta_v_list)
     
     logger.info('Mean dU,dV %7.2f %7.2f', du_mean, dv_mean)
+    
+    if stars_config['allow_fractional_offsets']:
+        return (offset[0]+du_mean, offset[1]+dv_mean)
     
     return (int(np.round(offset[0]+du_mean)),
             int(np.round(offset[1]+dv_mean)))
@@ -1141,7 +1152,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         offset = _stars_refine_offset(obs, obs.data, star_list,
                                       offset, stars_config)
         
-        logger.info('Returning final offset U,V %d,%d / Good stars %d',
+        logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d',
                     offset[0], offset[1], good_stars)
             
     metadata['full_star_list'] = star_list
