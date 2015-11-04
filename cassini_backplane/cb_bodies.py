@@ -121,6 +121,7 @@ def _bodies_create_cartographic(bp, body_data):
 def bodies_create_model(obs, body_name, inventory,
                         extend_fov=(0,0),
                         cartographic_data={},
+                        always_create_model=False,
                         bodies_config=None,
                         mask_only=False):
     """Create a model for a body.
@@ -136,6 +137,9 @@ def bodies_create_model(obs, body_name, inventory,
         cartographic_data  A dictionary of body names containing cartographic
                            data in lat/lon format. Each entry contains metadata
                            in the format returned by bodies_mosaic_init.
+        always_create_model    True to always return a model even if the 
+                           body is too small or the curvature or limb is bad.
+                           This is overriden by mask_only.
         bodies_config      Configuration parameters.
         mask_only          Only compute the latlon mask and don't spent time
                            actually trying to make a model.
@@ -146,6 +150,7 @@ def bodies_create_model(obs, body_name, inventory,
         metadata is a dictionary containing
 
         'body_name'        The name of the body.
+        'size_ok'          True if the body is large enough to bother with.
         'curvature_ok'     True if sufficient curvature is visible to permit
                            correlation.
         'limb_ok'          True if the limb is sufficiently sharp to permit
@@ -166,6 +171,7 @@ def bodies_create_model(obs, body_name, inventory,
 
     metadata = {}
     metadata['body_name'] = body_name
+    metadata['size_ok'] = False
     metadata['curvature_ok'] = False
     metadata['limb_ok'] = False
     metadata['start_time'] = start_time 
@@ -173,13 +179,16 @@ def bodies_create_model(obs, body_name, inventory,
     logger.info('Processing %s', body_name)
 
     bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
-    if bb_area < bodies_config['min_bounding_box_area']:
+    if bb_area >= bodies_config['min_bounding_box_area']:
+        metadata['size_ok'] = True
+    else:
         logger.info(
             'Bounding box (area %.3f pixels) is too small to bother with',
             bb_area)
-        metadata['latlon_mask'] = None
-        metadata['end_time'] = time.time()
-        return None, metadata
+        if not always_create_model and not mask_only:
+            metadata['latlon_mask'] = None
+            metadata['end_time'] = time.time()
+            return None, metadata
         
     # Analyze the curvature
             
@@ -283,7 +292,6 @@ def bodies_create_model(obs, body_name, inventory,
     
     incidence = restr_bp.incidence_angle(body_name)
     restr_body_mask_inv = ma.getmaskarray(incidence.mvals)
-#    restr_body_mask = restr_bp.where_intercepted(body_name).vals
     restr_body_mask = np.logical_not(restr_body_mask_inv)
 
     # If the inv mask is true, but any of its neighbors are false, then
@@ -313,10 +321,17 @@ def bodies_create_model(obs, body_name, inventory,
     # to be OK.
     if ((entirely_visible and limb_incidence_min < limb_threshold) or
         (not entirely_visible and limb_incidence_max < limb_threshold)):
-        logger.info('Limb meet criteria')
+        logger.info('Limb meets criteria')
         metadata['limb_ok'] = True
     else:
-        logger.info('Limb fails criteria') 
+        logger.info('Limb fails criteria')
+        if not always_create_model:
+            metadata['end_time'] = time.time()
+            return None, metadata 
+
+    if not metadata['curvature_ok'] and not always_create_model:
+        metadata['end_time'] = time.time()
+        return None, metadata 
     
     # Make the actual model
     

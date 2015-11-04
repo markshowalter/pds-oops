@@ -416,6 +416,7 @@ def master_find_offset(obs,
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
                     cartographic_data=bodies_cartographic_data,
+                    always_create_model=create_overlay,
                     bodies_config=bodies_config,
                     mask_only=mask_only)
             bodies_metadata[body_name] = body_metadata
@@ -439,6 +440,7 @@ def master_find_offset(obs,
     if allow_rings:
         rings_model, rings_metadata = rings_create_model(
                                          obs, extend_fov=extend_fov,
+                                         always_create_model=create_overlay,
                                          rings_config=rings_config)
         metadata['rings_metadata'] = rings_metadata
 
@@ -497,7 +499,8 @@ def master_find_offset(obs,
                      model_offset[0], model_offset[1])
     elif len(model_list) == 0:
         logger.info('Nothing to model - no offset found')
-        if rings_curvature_ok and not rings_features_ok:
+        if (rings_curvature_ok and not rings_features_ok and
+            not metadata['bootstrap_body']): # XXX
             logger.info('Ring curvature OK but not enough fiducial features '+
                         '- candidate for bootstrapping')
             metadata['bootstrapping_candidate'] = True
@@ -666,7 +669,7 @@ def master_find_offset(obs,
 
     if create_overlay:
         # We recreate the model lists because there are models we might
-        # include on the overlay that we didn't use for correlation.        
+        # include on the overlay that we didn't use for correlation.
         o_bodies_model_list = [x[0] for x in bodies_model_list]
         if len(o_bodies_model_list) > 0:
             bodies_combined = _combine_models(o_bodies_model_list, solid=True,
@@ -687,7 +690,7 @@ def master_find_offset(obs,
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #
                 #########################################
     
-    # For moons, we mark a bootstrap candidate if the closest useable body
+    # For moons, we mark a bootstrap candidate if the closest usable body
     # is "bad" - bad limb or curvature, no cartographic data
     if (offset is None and bad_body and not good_body and
         metadata['bootstrap_body'] is not None):

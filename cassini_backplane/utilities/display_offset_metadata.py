@@ -26,8 +26,8 @@ parser.add_argument(
 
 arguments = parser.parse_args(command_list)
 
-root = tk.Tk()
-root.withdraw()
+#root = tk.Tk()
+#root.withdraw()
 
 if arguments.image_path is not None:
     img_path = arguments.image_path
@@ -49,4 +49,4 @@ else:
         
         metadata = file_read_offset_metadata(img_path)
         obs = read_iss_file(img_path)
-        display_offset_data(obs, metadata)
+        display_offset_data(obs, metadata, show_bodies=False)

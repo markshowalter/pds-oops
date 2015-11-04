@@ -858,8 +858,9 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
                       (v,u), search_limit=(1.5, 1.5),
                       bkgnd_degree=2, bkgnd_ignore_center=(2,2),
                       bkgnd_num_sigma=5,
-                      tolerance=1e-5, num_sigma=5,
-                      max_bad_frac=0.2)
+                      tolerance=1e-5, num_sigma=10,
+                      max_bad_frac=0.2,
+                      allow_nonzero_base=True)
         if ret is None:
             continue
         pos_v, pos_u, metadata = ret

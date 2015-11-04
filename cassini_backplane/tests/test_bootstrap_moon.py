@@ -63,38 +63,40 @@ cb_logging.log_set_bootstrap_level(logging.DEBUG)
 # ENCELADUS, MIMAS, RHEA 1484506476 to 1484614776
 
 MOSAICS = [
-#     ('DIONE', 1496876347, 1496883920),
-#     ('DIONE', 1507733604, 1507748838),
-#     ('DIONE', 1534428692, 1534507401),
-#     ('DIONE', 1481738274, 1481767211),
-#     ('DIONE', 1556123061, 1556135770),
-#     ('DIONE', 1569802679, 1569815593),
-#     ('DIONE', 1569826692, 1569839110),
-#     ('DIONE', 1643286490, 1643300999),
-#     ('DIONE', 1649313601, 1649331848),
-#     ('DIONE', 1660410970, 1660414856),
-#     ('DIONE', 1662192021, 1662202839),
-#     ('DIONE', 1665971522, 1665979017),
-#     ('DIONE', 1702369043, 1702393485),
-#     ('DIONE', 1711604521, 1711614785),
-#     ('DIONE', 1714678134, 1714693817),
-# 
-#     ('ENCELADUS', 1487299402, 1487302209),
-#      ('ENCELADUS', 1500041648, 1500069258),
-#      ('ENCELADUS', 1516151439, 1516171418),
-#      ('ENCELADUS', 1597175743, 1597239766),
-#      ('ENCELADUS', 1602263870, 1602294337),
-#      ('ENCELADUS', 1604136974, 1604188433),
-#      ('ENCELADUS', 1604151794, 1604218747),
-#      ('ENCELADUS', 1637450504, 1637482321),
-#      ('ENCELADUS', 1652858990, 1652867484),
-#      ('ENCELADUS', 1660419699, 1660446193),
-#      ('ENCELADUS', 1669795989, 1669856551),
-#      ('ENCELADUS', 1671569397, 1671602206),
-#      ('ENCELADUS', 1694646860, 1694652019),
-#      ('ENCELADUS', 1694646860, 1694652019),
-#      ('ENCELADUS', 1697700931, 1697717648),
-#      ('ENCELADUS', 1702359393, 1702361420),
+    # Only last 9 need bootstrapping, and two of those have star offsets
+    ('DIONE', 1496876347, 1496883920),
+    
+    ('DIONE', 1507733604, 1507748838),
+    ('DIONE', 1534428692, 1534507401),
+    ('DIONE', 1481738274, 1481767211),
+    ('DIONE', 1556123061, 1556135770),
+    ('DIONE', 1569802679, 1569815593),
+    ('DIONE', 1569826692, 1569839110),
+    ('DIONE', 1643286490, 1643300999),
+    ('DIONE', 1649313601, 1649331848),
+    ('DIONE', 1660410970, 1660414856),
+    ('DIONE', 1662192021, 1662202839),
+    ('DIONE', 1665971522, 1665979017),
+    ('DIONE', 1702369043, 1702393485),
+    ('DIONE', 1711604521, 1711614785),
+    ('DIONE', 1714678134, 1714693817),
+ 
+    ('ENCELADUS', 1487299402, 1487302209),
+    ('ENCELADUS', 1500041648, 1500069258),
+    ('ENCELADUS', 1516151439, 1516171418),
+    ('ENCELADUS', 1597175743, 1597239766),
+    ('ENCELADUS', 1602263870, 1602294337),
+    ('ENCELADUS', 1604136974, 1604188433),
+    ('ENCELADUS', 1604151794, 1604218747),
+    ('ENCELADUS', 1637450504, 1637482321),
+    ('ENCELADUS', 1652858990, 1652867484),
+    ('ENCELADUS', 1660419699, 1660446193),
+    ('ENCELADUS', 1669795989, 1669856551),
+    ('ENCELADUS', 1671569397, 1671602206),
+    ('ENCELADUS', 1694646860, 1694652019),
+    ('ENCELADUS', 1694646860, 1694652019),
+    ('ENCELADUS', 1697700931, 1697717648),
+    ('ENCELADUS', 1702359393, 1702361420),
 
     ('IAPETUS', 1483151477, 1483281115),
     ('IAPETUS', 1568091469, 1568160072),
@@ -139,7 +141,7 @@ MOSAICS = [
     ('TETHYS', 1719609520, 1719615428),
 ]
 
-FORCE_RECOMPUTE = False
+FORCE_RECOMPUTE = True
 DISPLAY_SINGLE_OFFSETS = False
 
 def test_one(body_name, img_start_num, img_end_num,
@@ -158,30 +160,28 @@ def test_one(body_name, img_start_num, img_end_num,
     
         metadata = master_find_offset(
               obs, create_overlay=True,
-              allow_stars=False, allow_rings=False)
+              allow_stars=True, allow_rings=True)
         if DISPLAY_SINGLE_OFFSETS and not metadata['body_only']:
             display_offset_data(obs, metadata, show_rings=False)
         file_write_offset_metadata(image_path, metadata)
 
+    # Find bootstrapping candidates
+     
+    for image_path in yield_image_filenames(img_start_num, img_end_num):
+        _, image_filename = os.path.split(image_path)
+        offset_path = file_img_to_offset_path(image_path)
+        if not os.path.exists(offset_path):
+            logger.info('No offset file for %s', image_filename)
+            continue
+     
+        metadata = file_read_offset_metadata(image_path) # XXX
+         
+        bootstrap_add_file(image_path, metadata, redo_bootstrapped=True)
+     
+    bootstrap_add_file(None, None)
+
 for body_name, img_start_num, img_end_num in MOSAICS:
+    logger.info('Body %s image_start %d, image_end %d',
+                body_name, img_start_num, img_end_num)
     test_one(body_name, img_start_num, img_end_num,
              force_recompute=FORCE_RECOMPUTE)
-
-assert False
-
-# Find bootstrapping candidates
- 
-for image_path in yield_image_filenames(img_start_num, img_end_num):
-#                                        restrict_list=['N1496876400', 'N1496876347', 'N1496883920']):
-#                restrict_list=['N1496876347', 'W1496877602', 'N1496883920']):
-    _, image_filename = os.path.split(image_path)
-    offset_path = file_img_to_offset_path(image_path)
-    if not os.path.exists(offset_path):
-        logger.info('No offset file for %s', image_filename)
-        continue
- 
-    metadata = file_read_offset_metadata(image_path) # XXX
-     
-    bootstrap_add_file(image_path, metadata, redo_bootstrapped=True)
- 
-bootstrap_add_file(None, None)

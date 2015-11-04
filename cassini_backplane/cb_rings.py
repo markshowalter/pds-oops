@@ -358,7 +358,7 @@ def _compute_ring_radial_data(source, resolution):
 
 
 def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
-                       rings_config=None):
+                       include_body_shadows=False, rings_config=None):
     """Create a model for the rings.
 
     The rings model is created by interpolating from the Voyager I/F
@@ -375,6 +375,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         always_create_model    True to always return a model even if the 
                                curvature is insufficient or there aren't
                                enough fiducial features.
+        include_body_shadows   True to include the shadows of bodies near 
+                               equinox. Saturn's shadow is always incldued.
         star_config            Configuration parameters. None uses the default.
 
     Returns:
@@ -410,14 +412,14 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     
     set_obs_ext_bp(obs, extend_fov)
 
-    if (not always_create_model and 
-        not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
-                                       rings_config=rings_config)):
-        logger.info('Too little curvature - no ring model produced')
-        metadata['end_time'] = time.time()
-        return None, metadata
-   
-    metadata['curvature_ok'] = True     
+    if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
+                                      rings_config=rings_config):
+        logger.info('Too little curvature')
+        if not always_create_model:
+            metadata['end_time'] = time.time()
+            return None, metadata
+    else:
+        metadata['curvature_ok'] = True     
    
     fiducial_features = rings_fiducial_features(obs, extend_fov, rings_config)
     metadata['fiducial_features'] = fiducial_features
@@ -425,11 +427,12 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                             rings_config['fiducial_feature_threshold'])
     metadata['fiducial_features_ok'] = fiducial_features_ok
     
-    if (not always_create_model and not fiducial_features_ok):
-        logger.info('Insufficient number (%d) of fiducial features - '+
-                     'no ring model produced', len(fiducial_features))
-        metadata['end_time'] = time.time()
-        return None, metadata
+    if not fiducial_features_ok:
+        logger.info('Insufficient number (%d) of fiducial features', 
+                    len(fiducial_features))
+        if not always_create_model:
+            metadata['end_time'] = time.time()
+            return None, metadata
     
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
@@ -481,18 +484,19 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     # XXX Equinox only
     # XXX There must be a way to make this more efficient in the case
     # when a moon isn't in a position to cast a shadow
-    for body_name in _RINGS_SHADOW_BODY_LIST:
-        shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
-                                                body_name).vals
-        if np.any(shadow):
-            shadow_body_list.append(body_name)
-            model[shadow] = 0
-            if not np.any(model):
-                logger.info('Rings completely shadowed by %s - aborting', 
-                            body_name)
-                metadata['end_time'] = time.time()
-                return None, metadata
-            logger.info('Rings partially shadowed by %s', body_name)
+    if include_body_shadows:
+        for body_name in _RINGS_SHADOW_BODY_LIST:
+            shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
+                                                    body_name).vals
+            if np.any(shadow):
+                shadow_body_list.append(body_name)
+                model[shadow] = 0
+                if not np.any(model):
+                    logger.info('Rings completely shadowed by %s - aborting', 
+                                body_name)
+                    metadata['end_time'] = time.time()
+                    return None, metadata
+                logger.info('Rings partially shadowed by %s', body_name)
     
     metadata['shadow_bodies'] = shadow_body_list
     

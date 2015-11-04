@@ -8,6 +8,7 @@ from cb_logging import *
 import logging
 
 import argparse
+import cProfile, pstats, StringIO
 from datetime import datetime
 import os
 import subprocess
@@ -29,9 +30,18 @@ command_list = sys.argv[1:]
 if len(command_list) == 0:
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
-    command_line_str = '--offset-force N1484580522_1 --image-log-console-level info --display-offset-results'
-#     command_line_str = '--offset-force N1493446065_1 --image-log-console-level debug --display-offset-results'
-#    command_line_str = '--first-image-num 1490874611 --last-image-num 1490875063 --image-log-console-level none'
+#N1736967486_1
+#N1736967706_1
+#    command_line_str = '''--offset-force --image-log-console-level debug --display-offset-results
+#N1760870348_1'''
+#    command_line_str = '--offset-force N1496877261_8 --image-log-console-level debug --profile'
+#    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-log-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
+    command_line_str = (
+#                        'N1617112673_1 N1617918238_1 N1622233144_1 N1622396730_1 N1623166278_1 '+
+#    'N1623175932_1 N1627295298_1 N1627295382_1 N1627295466_1 N1627295729_1 N1627295812_1 N1627295896_1 '+
+#    'N1627295980_1 N1627296064_1 N1627296148_1 '+
+    'W1617112673_1 '+
+    '--offset-force --image-log-console-level debug --max-subprocesses 4 --profile')
 
     command_list = command_line_str.split()
 
@@ -39,9 +49,9 @@ if len(command_list) == 0:
 
 parser = argparse.ArgumentParser(
     description='Cassini Backplane Main Interface',
-    epilog="""Default behavior is to perform an offset pass on all images
+    epilog='''Default behavior is to perform an offset pass on all images
               without associated offset files followed by a bootstrap pass
-              on all images""")
+              on all images''')
 
 def validate_image_name(name):
     valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
@@ -54,7 +64,7 @@ def validate_image_name(name):
     if not valid:
         raise argparse.ArgumentTypeError(
              name+
-             " is not a valid image name - format must be [NW]dddddddddd_d")
+             ' is not a valid image name - format must be [NW]dddddddddd_d')
     return name
 
 ###XXXX####
@@ -63,85 +73,88 @@ def validate_image_name(name):
 # Arguments about logging
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
-    help="""The full path of the logfile to write for the main loop; defaults 
-            to $(RESULTS_ROOT)/logs/cb_main/<datetime>.log""")
+    help='''The full path of the logfile to write for the main loop; defaults 
+            to $(RESULTS_ROOT)/logs/cb_main/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 
     choices=LOGGING_LEVEL_CHOICES,
-    help="Choose the logging level to be output to the main loop logfile")
+    help='Choose the logging level to be output to the main loop logfile')
 parser.add_argument(
     '--main-log-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
-    help="Choose the logging level to be output to stdout for the main loop")
+    help='Choose the logging level to be output to stdout for the main loop')
 parser.add_argument(
     '--image-logfile', metavar='FILENAME',
-    help="""The full path of the logfile to write for each image file; 
+    help='''The full path of the logfile to write for each image file; 
             defaults to 
-            $(RESULTS_ROOT)/logs/<image-path>/<image_filename>.log""")
+            $(RESULTS_ROOT)/logs/<image-path>/<image_filename>.log''')
 parser.add_argument(
     '--image-logfile-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
-    help="Choose the logging level to be output to stdout for each image")
+    help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
     '--image-log-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
-    help="Choose the logging level to be output to stdout for each image")
+    help='Choose the logging level to be output to stdout for each image')
+parser.add_argument(
+    '--profile', action='store_true', 
+    help='Do performance profiling')
 
 # Arguments about subprocesses
 parser.add_argument(
     '--is-subprocess', action='store_true',
-    help="Internal flag used to indicate this process was spawned by a parent")
+    help='Internal flag used to indicate this process was spawned by a parent')
 parser.add_argument(
     '--max-subprocesses', type=int, default=0, metavar='NUM',
-    help="The maximum number jobs to perform in parallel")
+    help='The maximum number jobs to perform in parallel')
 
 # Arguments about selecting the images to process
 parser.add_argument(
     '--first-image-num', type=int, default='1', metavar='IMAGE_NUM',
-    help="The starting image number")
+    help='The starting image number')
 parser.add_argument(
     '--last-image-num', type=int, default='9999999999', metavar='IMAGE_NUM',
-    help="The ending image number")
+    help='The ending image number')
 nacwac_group = parser.add_mutually_exclusive_group()
 nacwac_group.add_argument(
     '--nac-only', action='store_true', default=False,
-    help="Only process NAC images")
+    help='Only process NAC images')
 nacwac_group.add_argument(
     '--wac-only', action='store_true', default=False,
-    help="Only process WAC images")
+    help='Only process WAC images')
 parser.add_argument(
     'image_name', action='append', nargs='*', type=validate_image_name,
-    help="Specific image names to process")
+    help='Specific image names to process')
 parser.add_argument(
     '--image-full-path', action='append',
-    help="The full path for an image")
+    help='The full path for an image')
 
 # Arguments about the offset process
 parser.add_argument(
     '--offset', dest='offset', action='store_true', default=True,
-    help="Perform an offset computation pass (default)")
+    help='Perform an offset computation pass (default)')
 parser.add_argument(
     '--no-offset', dest='offset', action='store_false',
-    help="Don't perform an offset computation pass")
+    help='Don\'t perform an offset computation pass')
 parser.add_argument(
     '--offset-force', action='store_true', default=False,
-    help="Force offset computation even if the offset file exists")
+    help='Force offset computation even if the offset file exists')
 parser.add_argument(
     '--offset-redo-error', action='store_true', default=False,
-    help="""Force offset computation if the offset file exists and 
-            indicates a fatal error""")
+    help='''Force offset computation if the offset file exists and 
+            indicates a fatal error''')
 parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
-    help="Graphically display the results of the offset process")
+    help='Graphically display the results of the offset process')
 
 # Arguments about the bootstrap process
 parser.add_argument(
     '--bootstrap', dest='bootstrap', action='store_true', default=True,
-    help="Perform a bootstrap pass (default)")
+    help='Perform a bootstrap pass (default)')
 parser.add_argument(
     '--no-bootstrap', dest='bootstrap', action='store_false',
-    help="Don't perform a bootstrap pass")
+    help='Don\'t perform a bootstrap pass')
 
 
 arguments = parser.parse_args(command_list)
@@ -193,7 +206,7 @@ if main_logfile_level is not cb_logging.LOGGING_SUPERCRITICAL:
         main_log_path = os.path.join(main_log_path, 'cb_main')
         if not os.path.exists(main_log_path):
             os.mkdir(main_log_path)
-        main_log_datetime = datetime.now().isoformat()[:-7].replace(':',';')
+        main_log_datetime = datetime.now().isoformat()[:-7].replace(':','-')
         main_log_path = os.path.join(main_log_path, main_log_datetime+'.log')
     
     main_log_file_handler = logging.FileHandler(main_log_path)
@@ -201,7 +214,7 @@ if main_logfile_level is not cb_logging.LOGGING_SUPERCRITICAL:
     main_log_file_handler.setFormatter(main_formatter)
     main_logger.addHandler(main_log_file_handler)
 
-# Always create a console logger so we don't get a "no handler" error
+# Always create a console logger so we don't get a 'no handler' error
 main_log_console_handler = logging.StreamHandler()
 main_log_console_handler.setLevel(main_log_console_level)
 main_log_console_handler.setFormatter(main_formatter)
@@ -308,6 +321,8 @@ def collect_cmd_line(image_path):
     ret += ['--image-log-console-level', 'none']
     ret += ['--offset-force']
     ret += ['--no-bootstrap']
+    if arguments.profile:
+        ret += ['--profile']
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -406,6 +421,11 @@ def process_offset_one_image(image_path):
         cb_logging.log_remove_file_handler(image_log_filehandler)
         return True
 
+    if arguments.profile and arguments.is_subprocess:
+        # Per-image profiling
+        image_pr = cProfile.Profile()
+        image_pr.enable()
+
     try:
         metadata = master_find_offset(obs, create_overlay=True)
     except:
@@ -417,6 +437,14 @@ def process_offset_one_image(image_path):
         metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.profile and argument.is_subprocess:
+            image_pr.disable()
+            s = StringIO.StringIO()
+            sortby = 'cumulative'
+            ps = pstats.Stats(image_pr, stream=s).sort_stats(sortby)
+            ps.print_stats()
+            ps.print_callers()
+            image_logger.info('Profile results:\n%s', s.getvalue())
         return True
     
     try:
@@ -433,6 +461,14 @@ def process_offset_one_image(image_path):
         except:
             main_logger.exception('Error offset file writing failed - %s', image_path)
         cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.profile and argument.is_subprocess:
+            image_pr.disable()
+            s = StringIO.StringIO()
+            sortby = 'cumulative'
+            ps = pstats.Stats(image_pr, stream=s).sort_stats(sortby)
+            ps.print_stats()
+            ps.print_callers()
+            image_logger.info('Profile results:\n%s', s.getvalue())
         return True
 
     if arguments.display_offset_results:
@@ -441,9 +477,24 @@ def process_offset_one_image(image_path):
     results = offset_result_str(image_path)
     main_logger.info(results)
 
+    if arguments.profile and arguments.is_subprocess:
+        image_pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(image_pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        ps.print_callers()
+        image_logger.info('Profile results:\n%s', s.getvalue())
+
     cb_logging.log_remove_file_handler(image_log_filehandler)
 
     return True
+
+if arguments.profile and arguments.max_subprocesses == 0:
+    # Only do image profiling if we're going to do the actual work in this
+    # process
+    pr = cProfile.Profile()
+    pr.enable()
 
 if arguments.display_offset_results:
     root = tk.Tk()
@@ -491,6 +542,15 @@ else:
     main_logger.info('Total files skipped %d', num_files_skipped)
     main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
 
+if arguments.profile and arguments.max_subprocesses == 0:
+    pr.disable()
+    s = StringIO.StringIO()
+    sortby = 'cumulative'
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    ps.print_callers()
+    main_logger.info('Profile results:\n%s', s.getvalue())
+
 ###############################################################################
 #
 # SECOND PASS - PERFORM BOOTSTAPPING
@@ -528,6 +588,11 @@ if not arguments.bootstrap:
     main_logger.info('*** Skipping bootstrap pass')
 else:
     start_time = time.time()
+
+    if arguments.profile:
+        # Always do boostrap profiling
+        pr = cProfile.Profile()
+        pr.enable()
     
     main_logger.info('')
     main_logger.info('********************************')
@@ -556,3 +621,12 @@ else:
 
     end_time = time.time()
     main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
+
+    if arguments.profile:
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        ps.print_callers()
+        main_logger.info('Profile results:\n%s', s.getvalue())
