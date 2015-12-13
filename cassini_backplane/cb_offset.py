@@ -275,7 +275,10 @@ def master_find_offset(obs,
     # Large
     metadata['ext_data'] = obs.ext_data
     metadata['ext_overlay'] = overlay
-    metadata['overlay'] = unpad_image(overlay, extend_fov)
+    if create_overlay:
+        metadata['overlay'] = unpad_image(overlay, extend_fov)
+    else:
+        metadata['overlay'] = None
     # Bootstrapping
     metadata['bootstrap_candidate'] = False
     metadata['bootstrap_body'] = None
@@ -684,7 +687,8 @@ def master_find_offset(obs,
             overlay = shift_image(overlay, -int(np.round(offset[0])), -int(np.round(offset[1])))
     
     metadata['ext_overlay'] = overlay
-    metadata['overlay'] = unpad_image(overlay, extend_fov)
+    if overlay is not None:
+        metadata['overlay'] = unpad_image(overlay, extend_fov)
 
                 #########################################
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #

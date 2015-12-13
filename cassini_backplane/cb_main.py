@@ -9,6 +9,7 @@ import logging
 
 import argparse
 import cProfile, pstats, StringIO
+import csv
 from datetime import datetime
 import os
 import subprocess
@@ -28,21 +29,17 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --offset-force --image-log-console-level none --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --force-offset --image-log-console-level none --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
 #N1736967486_1
 #N1736967706_1
-#    command_line_str = '''--offset-force --image-log-console-level debug --display-offset-results
+#    command_line_str = '''--force-offset --image-log-console-level debug --display-offset-results
 #N1760870348_1'''
-#    command_line_str = '--offset-force N1496877261_8 --image-log-console-level debug --profile'
+#    command_line_str = '--force-offset N1496877261_8 --image-log-console-level debug --profile'
 #    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-log-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
-    command_line_str = (
-#                        'N1617112673_1 N1617918238_1 N1622233144_1 N1622396730_1 N1623166278_1 '+
-#    'N1623175932_1 N1627295298_1 N1627295382_1 N1627295466_1 N1627295729_1 N1627295812_1 N1627295896_1 '+
-#    'N1627295980_1 N1627296064_1 N1627296148_1 '+
-    'W1617112673_1 '+
-    '--offset-force --image-log-console-level debug --max-subprocesses 4 --profile')
-
+#    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
+    command_line_str = 'W1477471897_6 --offset-xy 0,0 --force-offset --image-log-console-level debug --display-offset-results'
+    
     command_list = command_line_str.split()
 
 ## XXX Check restrict image list is included in first->last range 
@@ -129,6 +126,10 @@ parser.add_argument(
 parser.add_argument(
     '--image-full-path', action='append',
     help='The full path for an image')
+parser.add_argument(
+    '--image-pds-csv', action='append',
+    help=''''A CSV file downloaded from PDS that contains filespecs of images
+to process''')
 
 # Arguments about the offset process
 parser.add_argument(
@@ -138,7 +139,7 @@ parser.add_argument(
     '--no-offset', dest='offset', action='store_false',
     help='Don\'t perform an offset computation pass')
 parser.add_argument(
-    '--offset-force', action='store_true', default=False,
+    '--force-offset', action='store_true', default=False,
     help='Force offset computation even if the offset file exists')
 parser.add_argument(
     '--offset-redo-error', action='store_true', default=False,
@@ -147,6 +148,45 @@ parser.add_argument(
 parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
     help='Graphically display the results of the offset process')
+parser.add_argument(
+    '--offset-xy', type=str,
+    help='Force the offset to be x,y')
+parser.add_argument(
+    '--stars-only', action='store_true', default=False,
+    help='Navigate only using stars')
+parser.add_argument(
+    '--allow-stars', dest='allow_stars', action='store_true', default=True,
+    help='Include stars in navigation')
+parser.add_argument(
+    '--no-allow-stars', dest='allow_stars', action='store_false',
+    help='Do not include stars in navigation')
+parser.add_argument(
+    '--rings-only', action='store_true', default=False,
+    help='Navigate only using rings')
+parser.add_argument(
+    '--allow-rings', dest='allow_rings', action='store_true', default=True,
+    help='Include rings in navigation')
+parser.add_argument(
+    '--no-allow-rings', dest='allow_rings', action='store_false',
+    help='Do not include rings in navigation')
+parser.add_argument(
+    '--moons-only', action='store_true', default=False,
+    help='Navigate only using moons')
+parser.add_argument(
+    '--allow-moons', dest='allow_moons', action='store_true', default=True,
+    help='Include moons in navigation')
+parser.add_argument(
+    '--no-allow-moons', dest='allow_moons', action='store_false',
+    help='Do not include moons in navigation')
+parser.add_argument(
+    '--saturn-only', action='store_true', default=False,
+    help='Navigate only using Saturn')
+parser.add_argument(
+    '--allow-saturn', dest='allow_saturn', action='store_true', default=True,
+    help='Include saturn in navigation')
+parser.add_argument(
+    '--no-allow-saturn', dest='allow_saturn', action='store_false',
+    help='Do not include saturn in navigation')
 
 # Arguments about the bootstrap process
 parser.add_argument(
@@ -158,22 +198,6 @@ parser.add_argument(
 
 
 arguments = parser.parse_args(command_list)
-
-restrict_camera = 'NW'
-if arguments.nac_only:
-    restrict_camera = 'N'
-if arguments.wac_only:
-    restrict_camera = 'W'
-
-restrict_image_list = None
-if arguments.image_name is not None and arguments.image_name != [[]]:
-    restrict_image_list = arguments.image_name[0]
-
-first_image_number = arguments.first_image_num
-last_image_number = arguments.last_image_num
-
-force_offset = arguments.offset_force
-redo_offset_error = arguments.offset_redo_error
 
 
 ###############################################################################
@@ -319,10 +343,18 @@ def collect_cmd_line(image_path):
     ret += ['--main-log-console-level', 'none']
     ret += ['--image-logfile-level', arguments.image_logfile_level]
     ret += ['--image-log-console-level', 'none']
-    ret += ['--offset-force']
+    ret += ['--force-offset']
     ret += ['--no-bootstrap']
     if arguments.profile:
         ret += ['--profile']
+    if not arguments.allow_stars:
+        ret += ['--no-allow-stars']
+    if not arguments.allow_rings:
+        ret += ['--no-allow-rings']
+    if not arguments.allow_moons:
+        ret += ['--no-allow-moons']
+    if not arguments.allow_saturn:
+        ret += ['--no-allow-saturn']
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -365,7 +397,9 @@ def wait_for_all():
 #
 ###############################################################################
 
-def process_offset_one_image(image_path):
+def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
+                             allow_moons=True, allow_saturn=True,
+                             offset_xy=None):
     offset_path = file_img_to_offset_path(image_path)
     if os.path.exists(offset_path):
         if not force_offset:
@@ -427,7 +461,12 @@ def process_offset_one_image(image_path):
         image_pr.enable()
 
     try:
-        metadata = master_find_offset(obs, create_overlay=True)
+        metadata = master_find_offset(obs, create_overlay=True,
+                                      allow_stars=allow_stars,
+                                      allow_rings=allow_rings,
+                                      allow_moons=allow_moons,
+                                      allow_saturn=allow_saturn,
+                                      force_offset=offset_xy)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
@@ -490,6 +529,10 @@ def process_offset_one_image(image_path):
 
     return True
 
+#===============================================================================
+# 
+#===============================================================================
+
 if arguments.profile and arguments.max_subprocesses == 0:
     # Only do image profiling if we're going to do the actual work in this
     # process
@@ -500,6 +543,66 @@ if arguments.display_offset_results:
     root = tk.Tk()
     root.withdraw()
 
+force_offset = arguments.force_offset
+redo_offset_error = arguments.offset_redo_error
+
+offset_xy = None
+
+if arguments.offset_xy:
+    x, y = arguments.offset_xy.split(',')
+    offset_xy = (float(x), float(y))
+    
+if arguments.stars_only:
+    arguments.allow_rings = False
+    arguments.allow_moons = False
+    arguments.allow_saturn = False
+if arguments.rings_only:
+    arguments.allow_stars = False
+    arguments.allow_moons = False
+    arguments.allow_saturn = False
+if arguments.moons_only:
+    arguments.allow_stars = False
+    arguments.allow_rings = False
+    arguments.allow_saturn = False
+if arguments.saturn_only:
+    arguments.allow_stars = False
+    arguments.allow_rings = False
+    arguments.allow_moons = False
+    
+if arguments.image_pds_csv:
+    for filename in arguments.image_pds_csv:
+        with open(filename, 'r') as csvfile:
+            csvreader = csv.reader(csvfile)
+            header = csvreader.next()
+            for colnum in xrange(len(header)):
+                if header[colnum] == 'primaryfilespec':
+                    break
+            else:
+                main_logger.error('Badly formatted CSV file %s', filename)
+                sys.exit(-1)
+            if arguments.image_name is None:
+                arguments.image_name = []
+                arguments.image_name.append([])
+            for row in csvreader:
+                filespec = row[colnum]
+                filespec = filespec.replace('.IMG', '').replace('_CALIB', '')
+                _, filespec = os.path.split(filespec)
+                arguments.image_name[0].append(filespec)
+
+restrict_camera = 'NW'
+if arguments.nac_only:
+    restrict_camera = 'N'
+if arguments.wac_only:
+    restrict_camera = 'W'
+
+restrict_image_list = None
+if arguments.image_name is not None and arguments.image_name != [[]]:
+    restrict_image_list = arguments.image_name[0]
+
+first_image_number = arguments.first_image_num
+last_image_number = arguments.last_image_num
+
+    
 if not arguments.offset:
     main_logger.info('*** Skipping main offset pass')
 else:
@@ -512,10 +615,22 @@ else:
     main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
     main_logger.info('**********************************')
     main_logger.info('')
+    main_logger.info('Allow stars:  %s', str(arguments.allow_stars))
+    main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
+    main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
+    main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
+    main_logger.info('Offset XY:    %s', str(offset_xy))
+    main_logger.info('')
     
     if arguments.image_full_path:
         for image_path in arguments.image_full_path:
-            process_offset_one_image(image_path)
+            process_offset_one_image(
+                         image_path, 
+                         allow_stars=arguments.allow_stars, 
+                         allow_rings=arguments.allow_rings, 
+                         allow_moons=arguments.allow_moons, 
+                         allow_saturn=arguments.allow_saturn,
+                         offset_xy=offset_xy)
         
     if first_image_number <= last_image_number:
         main_logger.info('*** Image #s %010d - %010d / Camera %s',
@@ -529,7 +644,13 @@ else:
         for image_path in yield_image_filenames(
                 first_image_number, last_image_number,
                 camera=restrict_camera, restrict_list=restrict_image_list):
-            if process_offset_one_image(image_path):
+            if process_offset_one_image(
+                            image_path,
+                            allow_stars=arguments.allow_stars, 
+                            allow_rings=arguments.allow_rings, 
+                            allow_moons=arguments.allow_moons, 
+                            allow_saturn=arguments.allow_saturn,
+                            offset_xy=offset_xy):
                 num_files_processed += 1
             else:
                 num_files_skipped += 1
