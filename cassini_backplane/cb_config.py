@@ -96,7 +96,7 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 
 # These are bodies that shouldn't be used for navigation because they
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
-FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE', 'TITAN'] # XXX
+FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE']#, 'TITAN'] # XXX
 
 
 ##################
@@ -119,9 +119,16 @@ STARS_DEFAULT_CONFIG = {
     # Maximum number of stars to use.
     'max_stars': 30,
     
-    # PSF size for modeling a star (must be odd). The PSF is square.
-    'psf_size': 9,
-        
+    # Minimum PSF size for modeling a star (must be odd). The PSF is square.
+    # This will be added to the smearing in each dimension to create a final
+    # possibly-rectangular PSF.
+    'min_psf_size': 9,
+    
+    # The maximum number of steps to use when smearing a PSF. This is really 
+    # only a suggestion, as the number will be clipped at either extreme to
+    # guarantee a good smear.
+    'max_movement_steps': 50,
+    
     # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',
     

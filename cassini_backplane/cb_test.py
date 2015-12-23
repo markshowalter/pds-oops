@@ -295,7 +295,12 @@ test_data = (
 #1506187742 - CALYPSO, GRN
 #1506184376 - CALYPSO, IR3
 #1603214971 - CALYPSO, high noise
+
+#1496893570_N - star streaks for ring navigation
+#N1595336241_1 - Star streaks
+#N1751425716_1 - Star streaks
 )
+
 
 logger = logging.getLogger(_LOGGING_NAME+'.main')
 

@@ -38,7 +38,9 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset N1496877261_8 --image-log-console-level debug --profile'
 #    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-log-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
-    command_line_str = 'W1477471897_6 --offset-xy 0,0 --force-offset --image-log-console-level debug --display-offset-results'
+#    command_line_str = 'N1595336241_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
+    command_line_str = 'N1751425716_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
+#    command_line_str = 'N1484580522_1 --force-offset --image-log-console-level debug --display-offset-results'
     
     command_list = command_line_str.split()
 

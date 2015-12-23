@@ -23,6 +23,7 @@ import polymath
 import scipy.ndimage.filters as filt
 
 import oops
+from polymath import *
 from psfmodel.gaussian import GaussianPSF
 from imgdisp import *
 from starcat import (UCAC4StarCatalog,
@@ -40,6 +41,7 @@ from cb_util_oops import *
 _LOGGING_NAME = 'cb.' + __name__
 
 DEBUG_STARS_FILTER_IMGDISP = False
+DEBUG_STARS_MODEL_IMGDISP = False
 
 STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
 
@@ -145,17 +147,54 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     u_list = u_list.vals
     v_list = v_list.vals
 
+    orig_time = obs.time
+    orig_midtime = obs.midtime
+    orig_scalar_time = obs.scalar_time
+    orig_scalar_midtime = obs.scalar_midtime
+    
+    obs.time = (orig_time[0], orig_time[0])
+    obs.midtime = orig_time[0]
+    obs.scalar_time = (Scalar(orig_time[0]), Scalar(orig_time[0]))
+    obs.scalar_midtime = Scalar(orig_time[0])
+    uv1 = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
+    u1_list, v1_list = uv1.to_scalars()
+    u1_list = u1_list.vals
+    v1_list = v1_list.vals
+
+    obs.time = (orig_time[1], orig_time[1])
+    obs.midtime = orig_time[1]
+    obs.orig_scalar_time = (Scalar(orig_time[1]), Scalar(orig_time[1]))
+    obs.scalar_midtime = Scalar(orig_time[1])
+    uv2 = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
+    u2_list, v2_list = uv2.to_scalars()
+    u2_list = u2_list.vals
+    v2_list = v2_list.vals
+
+    obs.time = orig_time
+    obs.midtime = orig_midtime
+    obs.orig_scalar_time = orig_scalar_time
+    obs.scalar_midtime = orig_scalar_midtime
+
     new_star_list = []
 
     discard_uv = 0        
-    for star, u, v in zip(star_list, u_list, v_list):
+    for star, u, v, u1, v1, u2, v2 in zip(
+                          star_list, 
+                          u_list, v_list,
+                          u1_list, v1_list,
+                          u2_list, v2_list):
         if (u < -extend_fov[0] or u > obs.data.shape[1]+extend_fov[0]-1 or
             v < -extend_fov[1] or v > obs.data.shape[0]+extend_fov[1]-1):
             discard_uv += 1
             continue
         
         star.u = u
-        star.v = v
+        star.v = v                
+        star.move_u = u2-u1
+        star.move_v = v2-v1
+
+#        star.move_u = 0 # XXX
+#        star.move_v = 0
 
         new_star_list.append(star)
 
@@ -195,9 +234,6 @@ def stars_list_for_obs(obs, extend_fov=(0,0), stars_config=None,
         stars_config = STARS_DEFAULT_CONFIG
         
     max_stars = stars_config['max_stars']
-    psf_size = stars_config['psf_size']
-    
-    margin = psf_size//2
     
     ra_min, ra_max, dec_min, dec_max = compute_ra_dec_limits(obs,
                                              extend_fov=extend_fov)
@@ -235,9 +271,12 @@ def stars_list_for_obs(obs, extend_fov=(0,0), stars_config=None,
 
     logger.info('Star list:')
     for star in full_star_list:
-        logger.info('Star %9d U %8.3f V %8.3f DN %7.2f MAG %6.3f BMAG %6.3f '+
+        logger.info('Star %9d U %8.3f+%7.3f V %8.3f+%7.3f DN %7.2f MAG %6.3f BMAG %6.3f '+
                     'VMAG %6.3f SCLASS %3s TEMP %6d',
-                    star.unique_number, star.u, star.v, star.dn, star.vmag,
+                    star.unique_number, 
+                    star.u, abs(star.move_u), 
+                    star.v, abs(star.move_v),
+                    star.dn, star.vmag,
                     0 if star.johnson_mag_b is None else star.johnson_mag_b,
                     0 if star.johnson_mag_v is None else star.johnson_mag_v,
                     'XX' if star.spectral_class is None else
@@ -282,36 +321,48 @@ def stars_create_model(obs, star_list, offset=None,
     if offset is not None:
         offset_u, offset_v = offset
         
-    psf_size = stars_config['psf_size']
+    psf_size = stars_config['min_psf_size']
+    max_move_steps = stars_config['max_movement_steps']
     
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
-    
-    gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector])
-    
-    vmag_list = [x.vmag for x in star_list]
-    star_mag_min = min(vmag_list)
-    star_mag_max = max(vmag_list)
-    
-    margin = psf_size//2
     
     for star in star_list:
         u_idx = star.u+offset_u+extend_fov[0]
         v_idx = star.v+offset_v+extend_fov[1]
         u_int = int(u_idx)
         v_int = int(v_idx)
-
-        if (u_int < margin or u_int >= model.shape[1]-margin or
-            v_int < margin or v_int >= model.shape[0]-margin):
-            continue
-
         u_frac = u_idx-u_int
         v_frac = v_idx-v_int
-        psf = gausspsf.eval_rect((psf_size,psf_size),
+        
+        psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
+        psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+
+        move_gran = max(abs(star.move_u)/max_move_steps,
+                        abs(star.move_v)/max_move_steps)
+        move_gran = np.clip(move_gran, 0.1, 1.0)
+        
+        gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+                               movement=(star.move_v,star.move_u),
+                               movement_granularity=move_gran)
+        
+        if (u_int < psf_size_half_u or u_int >= model.shape[1]-psf_size_half_u or
+            v_int < psf_size_half_v or v_int >= model.shape[0]-psf_size_half_v):
+            continue
+
+        psf = gausspsf.eval_rect((psf_size_half_v*2+1,psf_size_half_u*2+1),
                                  offset=(v_frac,u_frac),
                                  scale=star.dn)
-        model[v_int-margin:v_int+margin+1, u_int-margin:u_int+margin+1] += psf
+        model[v_int-psf_size_half_v:v_int+psf_size_half_v+1, 
+              u_int-psf_size_half_u:u_int+psf_size_half_u+1] += psf
+
+    if DEBUG_STARS_MODEL_IMGDISP:
+        imdisp = ImageDisp([model],
+                           canvas_size=(1024,1024),
+                           allow_enlarge=True, enlarge_limit=10,
+                           auto_update=True)
+        Tkinter.mainloop()
         
     return model
 
@@ -319,28 +370,32 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                                 extend_fov=(0,0),
                                 overlay_box_width=None,
                                 overlay_box_thickness=None,
+                                show_streaks=True,
                                 stars_config=None):
     """Create an overlay with high and low confidence stars marked.
     
     Inputs:
-        obs                The observation.
-        star_list          The list of Star objects.
-        offset             The amount to offset a star's position in the (U,V)
-                           directions.
-        extend_fov         The amount to extend the overlay beyond the limits
-                           of the obs FOV. The returned model will be the shape
-                           of the obs FOV plus two times the extend value in
-                           each dimension.
-        overlay_box_width  If None, draw a circle of radius 3.
-                           If 0, draw a box of the size of the photometry
+        obs                    The observation.
+        star_list              The list of Star objects.
+        offset                 The amount to offset a star's position in the 
+                               (U,V) directions.
+        extend_fov             The amount to extend the overlay beyond the 
+                               limits of the obs FOV. The returned model will 
+                               be the shape of the obs FOV plus two times the 
+                               extend value in each dimension.
+        overlay_box_width      If None, draw a circle of radius 3.
+                               If 0, draw a box of the size of the photometry
                                  measurement.
-                           Otherwise, draw a box of the given size.
+                               Otherwise, draw a box of the given size.
         overlay_box_thickness  If a box is drawn, this is the thickness of the
                                box sides.
-        stars_config        Configuration parameters.
+        show_streaks           If False, draw a box or circle as specified 
+                               above. 
+                               If True, draw the streak from the star's PSF.
+        stars_config           Configuration parameters.
                            
     Returns:
-        overlay            The overlay.
+        overlay                The overlay.
         
         Star excluded by brightness or conflict: red
         Star bad photometry: blue
@@ -358,29 +413,73 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                         obs.data.shape[1]+extend_fov[0]*2, 3),
                        dtype=np.uint8)
     
-    for star in star_list:
-        # Should NOT be rounded for plotting, since all of coord
-        # X to X+0.9999 is the same pixel
-        u_idx = int(star.u+offset_u+extend_fov[0])
-        v_idx = int(star.v+offset_v+extend_fov[1])
+    if show_streaks:
+        psf_size = stars_config['min_psf_size']
+        max_move_steps = stars_config['max_movement_steps']
         
-        if (not star.is_bright_enough or not star.is_dim_enough or
-            star.conflicts):
-            color = (255,0,0)
-        else:
-            if star.photometry_confidence > stars_config['min_confidence']:
-                color = (0,255,0)
+        for star in star_list:
+            u_idx = star.u+offset_u+extend_fov[0]
+            v_idx = star.v+offset_v+extend_fov[1]
+            u_int = int(u_idx)
+            v_int = int(v_idx)
+            u_frac = u_idx-u_int
+            v_frac = v_idx-v_int
+                
+            psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
+            psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+    
+            move_gran = max(abs(star.move_u)/max_move_steps,
+                            abs(star.move_v)/max_move_steps)
+            move_gran = np.clip(move_gran, 0.1, 1.0)
+            
+            gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+                                   movement=(star.move_v,star.move_u),
+                                   movement_granularity=move_gran)
+            
+            if (u_int < psf_size_half_u or u_int >= overlay.shape[1]-psf_size_half_u or
+                v_int < psf_size_half_v or v_int >= overlay.shape[0]-psf_size_half_v):
+                continue
+    
+            psf = gausspsf.eval_rect((psf_size_half_v*2+1,psf_size_half_u*2+1),
+                                     offset=(v_frac,u_frac),
+                                     scale=1.)
+            psf = psf / np.max(psf) * 255
+            
+            if (not star.is_bright_enough or not star.is_dim_enough or
+                star.conflicts):
+                plane = 0
             else:
-                color = (0,0,255)
-        if overlay_box_width is not None:
-            width = overlay_box_width
-            if width == 0:
-                width = star.photometry_box_size // 2
-            draw_rect(overlay, u_idx, v_idx, 
-                      width, width,
-                      color, overlay_box_thickness)
-        else:
-            draw_circle(overlay, u_idx, v_idx, 1, color, 3)
+                if star.photometry_confidence > stars_config['min_confidence']:
+                    plane = 1
+                else:
+                    plane = 2
+            overlay[v_int-psf_size_half_v:v_int+psf_size_half_v+1, 
+                    u_int-psf_size_half_u:u_int+psf_size_half_u+1,
+                    plane] += psf
+    else:
+        for star in star_list:
+            # Should NOT be rounded for plotting, since all of coord
+            # X to X+0.9999 is the same pixel
+            u_idx = int(star.u+offset_u+extend_fov[0])
+            v_idx = int(star.v+offset_v+extend_fov[1])
+            
+            if (not star.is_bright_enough or not star.is_dim_enough or
+                star.conflicts):
+                color = (255,0,0)
+            else:
+                if star.photometry_confidence > stars_config['min_confidence']:
+                    color = (0,255,0)
+                else:
+                    color = (0,0,255)
+            if overlay_box_width is not None:
+                width = overlay_box_width
+                if width == 0:
+                    width = star.photometry_box_size // 2
+                draw_rect(overlay, u_idx, v_idx, 
+                          width, width,
+                          color, overlay_box_thickness)
+            else:
+                draw_circle(overlay, u_idx, v_idx, 1, color, 3)
 
     return overlay
 
@@ -393,6 +492,49 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
 def _trust_star_dn(obs):
     return obs.filter1 == 'CL1' and obs.filter2 == 'CL2'
 
+#def _stars_perform_photometry(obs, calib_data, star, offset,
+#                              extend_fov, stars_config):
+#    """Perform photometry on a single star.
+#    
+#    See star_perform_photometry for full details.
+#    """        
+#    # calib_data is calibrated in DN and extended
+#    u = int(np.round(star.u)) + offset[0] + extend_fov[0]
+#    v = int(np.round(star.v)) + offset[1] + extend_fov[1]
+#    
+#    if star.dn > stars_config['photometry_boxsize_1'][0]:
+#        boxsize = stars_config['photometry_boxsize_1'][1]
+#    elif star.dn > stars_config['photometry_boxsize_2'][0]:
+#        boxsize = stars_config['photometry_boxsize_2'][1]
+#    else:
+#        boxsize = stars_config['photometry_boxsize_default']
+#    
+#    star.photometry_box_width = boxsize
+#    
+#    box_halfsize = boxsize // 2
+#
+#    # Don't process stars that are off the edge of the real (not extended)
+#    # data.
+#    if (u-extend_fov[0] < box_halfsize or
+#        u-extend_fov[0] > calib_data.shape[1]-2*extend_fov[0]-box_halfsize-1 or
+#        v-extend_fov[1] < box_halfsize or
+#        v-extend_fov[1] > calib_data.shape[0]-2*extend_fov[1]-box_halfsize-1):
+#        return None
+#        
+#    subimage = calib_data[v-box_halfsize:v+box_halfsize+1,
+#                          u-box_halfsize:u+box_halfsize+1]
+#    subimage = subimage.view(ma.MaskedArray)
+#    subimage[1:-1, 1:-1] = ma.masked # Mask out the center
+#    
+#    bkgnd = ma.mean(subimage)
+#    bkgnd_std = ma.std(subimage)
+#    
+#    subimage.mask = ~subimage.mask # Mask out the edge
+#    integrated_dn = np.sum(subimage-bkgnd)
+#    integrated_std = np.std(subimage-bkgnd)
+#
+#    return integrated_dn, bkgnd, integrated_std, bkgnd_std
+
 def _stars_perform_photometry(obs, calib_data, star, offset,
                               extend_fov, stars_config):
     """Perform photometry on a single star.
@@ -402,40 +544,80 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
     # calib_data is calibrated in DN and extended
     u = int(np.round(star.u)) + offset[0] + extend_fov[0]
     v = int(np.round(star.v)) + offset[1] + extend_fov[1]
-    
+
     if star.dn > stars_config['photometry_boxsize_1'][0]:
         boxsize = stars_config['photometry_boxsize_1'][1]
     elif star.dn > stars_config['photometry_boxsize_2'][0]:
         boxsize = stars_config['photometry_boxsize_2'][1]
     else:
         boxsize = stars_config['photometry_boxsize_default']
-    
+
     star.photometry_box_width = boxsize
-    
-    box_halfsize = boxsize // 2
+
+    psf_size_half_u = (boxsize + np.round(abs(star.move_u))) // 2
+    psf_size_half_v = (boxsize + np.round(abs(star.move_v))) // 2
 
     # Don't process stars that are off the edge of the real (not extended)
     # data.
-    if (u-extend_fov[0] < box_halfsize or
-        u-extend_fov[0] > calib_data.shape[1]-2*extend_fov[0]-box_halfsize-1 or
-        v-extend_fov[1] < box_halfsize or
-        v-extend_fov[1] > calib_data.shape[0]-2*extend_fov[1]-box_halfsize-1):
+    if (u-extend_fov[0] < psf_size_half_u or
+        u-extend_fov[0] > calib_data.shape[1]-2*extend_fov[0]-psf_size_half_u-1 or
+        v-extend_fov[1] < psf_size_half_v or
+        v-extend_fov[1] > calib_data.shape[0]-2*extend_fov[1]-psf_size_half_v-1):
         return None
+
+    max_move_steps = stars_config['max_movement_steps']
+    move_gran = max(abs(star.move_u)/max_move_steps,
+                    abs(star.move_v)/max_move_steps)
+    move_gran = np.clip(move_gran, 0.1, 1.0)
+    
+    gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+                           movement=(star.move_v,star.move_u),
+                           movement_granularity=move_gran)
         
-    subimage = calib_data[v-box_halfsize:v+box_halfsize+1,
-                          u-box_halfsize:u+box_halfsize+1]
-    subimage = subimage.view(ma.MaskedArray)
-    subimage[1:-1, 1:-1] = ma.masked # Mask out the center
+    psf = gausspsf.eval_rect((psf_size_half_v*2+1,psf_size_half_u*2+1),
+                             offset=(0.5,0.5))
+
+    center_u = psf.shape[1] // 2
+    center_v = psf.shape[0] // 2
+
+    subpsf = psf[center_v-boxsize//2+1:center_v+boxsize//2,
+                 center_u-boxsize//2+1:center_u+boxsize//2]
+
+    min_allowed_val = np.min(subpsf)
+#    print 'MAV', min_allowed_val
+
+    subpsf = psf[center_v-boxsize//2:center_v+boxsize//2+1,
+                 center_u-boxsize//2:center_u+boxsize//2+1]
+
+    min_bkgnd_val = np.min(subpsf)
+#    print 'MBV', min_bkgnd_val
     
-    bkgnd = ma.mean(subimage)
-    bkgnd_std = ma.std(subimage)
+    subimage = calib_data[v-psf_size_half_v:v+psf_size_half_v+1,
+                          u-psf_size_half_u:u+psf_size_half_u+1]
+
+    streak_bool = psf >= min_allowed_val
+    streak_data = subimage[streak_bool]
     
-    subimage.mask = ~subimage.mask # Mask out the edge
-    integrated_dn = np.sum(subimage-bkgnd)
-    integrated_std = np.std(subimage-bkgnd)
+    bkgnd_bool = np.logical_and(filt.maximum_filter(streak_bool, 3),
+                                np.logical_not(streak_bool))
+    bkgnd_data = subimage[bkgnd_bool]
+    
+#    new_data = subimage.copy()
+#    new_data[np.where(psf < min_allowed_val)] = 0
+#    plt.imshow(new_data)
+#    plt.show()
+    
+    bkgnd = ma.mean(bkgnd_data)
+    bkgnd_std = ma.std(bkgnd_data)
+    print 'MIN', ma.min(bkgnd_data), 'MAX', ma.max(bkgnd_data)
+    
+#    print 'SUM', np.sum(streak_data), 'BKGND', bkgnd
+    
+    integrated_dn = np.sum(streak_data-bkgnd)
+    integrated_std = np.std(streak_data-bkgnd)
 
     return integrated_dn, bkgnd, integrated_std, bkgnd_std
-    
+
 def stars_perform_photometry(obs, calib_data, star_list, offset=None,
                              extend_fov=(0,0), stars_config=None):
     """Perform photometry on a list of stars.
@@ -500,7 +682,8 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
                 # something at all, because we can't trust the photometry
                 confidence = ((integrated_dn >= min_dn)*0.5 +
                               (integrated_std >= bkgnd_std*2)*0.5)
-            else:  
+            else:
+                print integrated_std, bkgnd_std
                 confidence = ((star.dn/3 < integrated_dn < star.dn*3)*0.5 +
                               (integrated_std >= bkgnd_std*1.5)*0.5)
                 
@@ -525,7 +708,7 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
 #
 #===============================================================================
 
-def _stars_mark_conflicts(obs, star, offset, margin, stars_config):
+def _stars_mark_conflicts(obs, star, offset, stars_config):
     """Check if a star conflicts with known bodies or rings.
     
     Sets star.conflicts to a string describing why the Star conflicted.
@@ -535,8 +718,14 @@ def _stars_mark_conflicts(obs, star, offset, margin, stars_config):
     logger = logging.getLogger(_LOGGING_NAME+'._stars_mark_conflicts')
 
     # Check for off the edge
-    if (not (margin < star.u+offset[0] < obs.data.shape[1]-margin) or
-        not (margin < star.v+offset[1] < obs.data.shape[0]-margin)):
+    psf_size = stars_config['min_psf_size']
+    psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
+    psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+    
+    if (star.u+offset[0] < psf_size_half_u or 
+        star.u+offset[0] >= obs.data.shape[1]-psf_size_half_u or
+        star.v+offset[1] < psf_size_half_v or 
+        star.v+offset[1] >= obs.data.shape[0]-psf_size_half_v):
         logger.debug('Star %9d U %8.3f V %8.3f is off the edge',
                      star.unique_number, star.u, star.v)
         star.conflicts = 'EDGE'
@@ -661,10 +850,22 @@ def _stars_optimize_offset_list(offset_list, tolerance=1):
     
     return new_offset_list
 
-def _stars_find_offset(obs, filtered_data, star_list, margin, min_stars,
+def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                        search_multiplier, max_offsets, already_tried,
                        debug_level, stars_config):
-    """Internal helper for stars_find_offset so the loops don't get too deep."""
+    """Internal helper for stars_find_offset so the loops don't get too deep.
+    
+    Returns:
+        (offset, good_stars, corr, keep_searching, no_peaks)
+        
+        offset            The offset if found, otherwise None.
+        good_stars        If the offset is found, the number of good stars.
+        corr              The correlation value for this offset.
+        keep_searching    Even if an offset was found, we don't entirely
+                          trust it, so add it to the list and keep searching.
+        no_peaks          The correlation utterly failed and there are no
+                          peaks. There's no point in continuing to look.
+    """
     # 1) Find an offset
     # 2) Remove any stars that are on top of a moon, planet, or opaque part of
     #    the rings
@@ -729,7 +930,7 @@ def _stars_find_offset(obs, filtered_data, star_list, margin, min_stars,
     if len(new_offset_list) == 0:
         # No peaks found at all - tell the top-level loop there's no point
         # in trying more
-        return None, None, False, True
+        return None, None, None, False, True
             
     for peak_num in xrange(len(new_offset_list)):
         #
@@ -756,8 +957,7 @@ def _stars_find_offset(obs, filtered_data, star_list, margin, min_stars,
         
         something_conflicted = False
         for star in star_list:
-            res = _stars_mark_conflicts(obs, star, offset,
-                                        margin, stars_config)
+            res = _stars_mark_conflicts(obs, star, offset, stars_config)
             something_conflicted = something_conflicted or res
 
         good_stars = stars_perform_photometry(obs,
@@ -788,11 +988,11 @@ def _stars_find_offset(obs, filtered_data, star_list, margin, min_stars,
                             seen_bright_stars, bright_stars,
                             offset[0], offset[1])
                 # Return True so the top-level loop keeps searching
-                return offset, good_stars, True, False
+                return offset, good_stars, peak, True, False
             logger.info('***** Enough good stars - final offset U,V %d,%d',
                         offset[0], offset[1])
             # Return False so the top-level loop gives up
-            return offset, good_stars, False, False
+            return offset, good_stars, peak, False, False
 
         # OK that didn't work - get rid of the conflicting stars and
         # recurse until there are no conflicts
@@ -814,35 +1014,33 @@ def _stars_find_offset(obs, filtered_data, star_list, margin, min_stars,
 
         # And recurse using this limited star list
         ret = _stars_find_offset(obs, filtered_data, non_conf_star_list, 
-                                 margin, min_stars, search_multiplier, 
+                                 min_stars, search_multiplier, 
                                  max_offsets, already_tried, 
                                  debug_level+1, stars_config)
         if ret[0] is not None:
             return ret
         # We know that everything in non_conf_star_list is not 
         # conflicting at this level, but they were probably mutated by
-        # _star_find_offset, so reset them
+        # _stars_find_offset, so reset them
         for star in non_conf_star_list:
             star.conflicts = False
                 
     logger.debug('Exhausted all peaks - No offset found')
 
-    return None, None, False, False
+    return None, None, None, False, False
 
 def _stars_refine_offset(obs, calib_data, star_list, offset,
                          stars_config):
     """Perform astrometry to refine the final offset."""
     logger = logging.getLogger(_LOGGING_NAME+'._stars_refine_offset')
 
-    psf_size = stars_config['psf_size']
+    psf_size = stars_config['min_psf_size']
     
     if psf_size < 7:
         logger.error('Unable to refine star fit because PSF SIZE of %d is '+
                      'too small',
                      psf_size)
         return offset
-    
-    gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector])
     
     delta_u_list = []
     delta_v_list = []
@@ -852,9 +1050,18 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
             continue
         if star.photometry_confidence < stars_config['min_confidence']:
             continue
+        if abs(star.move_u) > 1 or abs(star.move_v) > 1:
+            logger.info('Aborting refine fit due to excessive streaking')
+            return (offset[0], offset[1])
         u = star.u + offset[0]
         v = star.v + offset[1]
-        ret = gausspsf.find_position(calib_data, (psf_size,psf_size),
+        psf_size_u = psf_size + np.round(abs(star.move_u))
+        psf_size_u = (psf_size_u // 2) * 2 + 1
+        psf_size_v = psf_size + np.round(abs(star.move_v))
+        psf_size_v = (psf_size_v // 2) * 2 + 1
+        gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+                               movement=(star.move_v,star.move_u))
+        ret = gausspsf.find_position(calib_data, (psf_size_v,psf_size_u),
                       (v,u), search_limit=(1.5, 1.5),
                       bkgnd_degree=2, bkgnd_ignore_center=(2,2),
                       bkgnd_num_sigma=5,
@@ -909,11 +1116,8 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         stars_config = STARS_DEFAULT_CONFIG
         
     min_dn = stars_config[('min_detectable_dn', obs.detector)]
-    psf_size = stars_config['psf_size']
     min_stars = stars_config['min_stars']
     
-    margin = psf_size // 2
-
     metadata = {}
 
     set_obs_ext_bp(obs, extend_fov)
@@ -1003,9 +1207,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
 #                filtered_data[mask] = 0.
 
             if DEBUG_STARS_FILTER_IMGDISP:
-                toplevel = Tkinter.Tk()
                 imdisp = ImageDisp([filtered_data],
-                                   parent=toplevel,
                                    canvas_size=(512,512),
                                    allow_enlarge=True, enlarge_limit=10,
                                    auto_update=True)
@@ -1057,11 +1259,11 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                 
                 # The remaining search levels are inside the subroutine
                 ret = _stars_find_offset(obs, filtered_data, new_star_list,
-                                         margin, min_stars, search_multipler,
+                                         min_stars, search_multipler,
                                          5, already_tried, 4, stars_config) 
         
                 # Save the offset and maybe continue iterating
-                (offset, good_stars, 
+                (offset, good_stars, corr,
                  keep_searching, no_peaks) = ret
 
                 if no_peaks and search_multipler == 1.:
@@ -1074,10 +1276,10 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                     logger.debug('No valid offset found - iterating')
                     continue
 
-                logger.debug('Found valid offset U,V %d,%d', 
-                             offset[0], offset[1])
+                logger.debug('Found valid offset U,V %d,%d STARS %d CORR %f', 
+                             offset[0], offset[1], good_stars, corr)
                 saved_star_list = copy.deepcopy(star_list)
-                saved_offsets.append((offset, good_stars, saved_star_list))
+                saved_offsets.append((offset, good_stars, corr, saved_star_list))
                 if not keep_searching:
                     got_it = True
                     break
@@ -1135,26 +1337,31 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         best_offset = None
         best_star_list = None
         best_good_stars = -1
-        for offset, good_stars, saved_star_list in saved_offsets:
+        best_corr = -1
+        for offset, good_stars, corr, saved_star_list in saved_offsets:
             if len(saved_offsets) > 1:
-                logger.info('Saved offset U,V %d,%d / Good stars %d',
-                            offset[0], offset[1], good_stars)
-            if good_stars > best_good_stars:
+                logger.info('Saved offset U,V %d,%d / Good stars %d / Corr %f',
+                            offset[0], offset[1], good_stars, corr)
+            if (good_stars > best_good_stars or
+                (good_stars == best_good_stars and 
+                 corr > best_corr)):
                 best_offset = offset
                 best_good_stars = good_stars
+                best_corr = corr
                 best_star_list = saved_star_list
         offset = best_offset
         good_stars = best_good_stars
+        corr = best_corr
         star_list = saved_star_list
 
-        logger.info('Trial final offset U,V %d,%d / Good stars %d',
-                     offset[0], offset[1], good_stars)
+        logger.info('Trial final offset U,V %d,%d / Good stars %d / Corr %f',
+                     offset[0], offset[1], good_stars, corr)
 
         offset = _stars_refine_offset(obs, obs.data, star_list,
                                       offset, stars_config)
         
-        logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d',
-                    offset[0], offset[1], good_stars)
+        logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d / Corr %f',
+                    offset[0], offset[1], good_stars, corr)
             
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
