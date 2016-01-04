@@ -354,6 +354,7 @@ def master_find_offset(obs,
             logger.info('Image appears to be entirely rings')
             entirely_rings = True
             metadata['rings_only'] = True
+#            entirely_rings = False # XXX
     
     
                     ######################

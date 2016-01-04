@@ -539,6 +539,11 @@ def bodies_reproject(
         'phase'            The phase angle [latitude,longitude].
         'emission'         The emission angle [latitude,longitude].
         'incidence'        The incidence angle [latitude,longitude].
+
+        Note that the image data is taken from the zoomed, interpolated image,
+        while the incidence, emission, phase, and resolution are taken from
+        the original non-interpolated data and thus will be slightly more
+        coarse-grained.
     """
     logger = logging.getLogger(_LOGGING_NAME+'.bodies_reproject')
 
@@ -909,6 +914,8 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     
     assert mosaic_metadata['latlon_type'] == repro_metadata['latlon_type']
     assert mosaic_metadata['lon_direction'] == repro_metadata['lon_direction']
+    assert mosaic_metadata['lat_resolution'] == repro_metadata['lat_resolution']
+    assert mosaic_metadata['lon_resolution'] == repro_metadata['lon_resolution']
     
     repro_lat_idx_range = repro_metadata['lat_idx_range']
     repro_lon_idx_range = repro_metadata['lon_idx_range']

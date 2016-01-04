@@ -175,6 +175,8 @@ BODIES_DEFAULT_CONFIG = {
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
     # correlation.
+    # Set both 'curvature_threshold_frac' and 'curvature_threshold_pixels' to
+    # eliminate the check for curvature and mark all bodies as OK. 
     'curvature_threshold_frac': 0.1,
     
     # The number of pixels of the width/height of a body that must be visible
@@ -186,10 +188,13 @@ BODIES_DEFAULT_CONFIG = {
     
     # The maximum incidence that can be considered a limb instead of a
     # terminator.
+    # Set to oops.TWOPI to eliminate the check for limbs and mark
+    # all bodies as OK.
     'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
     
     # Whether or not Lambert shading should be used, as opposed to just a
-    # solid unshaded shape or cartographic reprojection.
+    # solid unshaded shape, when a cartographic reprojection is not
+    # available.
     'use_lambert': True,
     
     # The resolution in longitude and latitude (radians) for the metadata

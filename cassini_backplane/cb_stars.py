@@ -147,33 +147,15 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     u_list = u_list.vals
     v_list = v_list.vals
 
-    orig_time = obs.time
-    orig_midtime = obs.midtime
-    orig_scalar_time = obs.scalar_time
-    orig_scalar_midtime = obs.scalar_midtime
-    
-    obs.time = (orig_time[0], orig_time[0])
-    obs.midtime = orig_time[0]
-    obs.scalar_time = (Scalar(orig_time[0]), Scalar(orig_time[0]))
-    obs.scalar_midtime = Scalar(orig_time[0])
-    uv1 = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
+    uv1 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=0., apparent=True)
     u1_list, v1_list = uv1.to_scalars()
     u1_list = u1_list.vals
     v1_list = v1_list.vals
 
-    obs.time = (orig_time[1], orig_time[1])
-    obs.midtime = orig_time[1]
-    obs.orig_scalar_time = (Scalar(orig_time[1]), Scalar(orig_time[1]))
-    obs.scalar_midtime = Scalar(orig_time[1])
-    uv2 = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
+    uv2 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=1., apparent=True)
     u2_list, v2_list = uv2.to_scalars()
     u2_list = u2_list.vals
     v2_list = v2_list.vals
-
-    obs.time = orig_time
-    obs.midtime = orig_midtime
-    obs.orig_scalar_time = orig_scalar_time
-    obs.scalar_midtime = orig_scalar_midtime
 
     new_star_list = []
 
@@ -1183,7 +1165,15 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
             # For star use only, need data in DN for photometry
             obs.calib_dn_ext_data = calibrate_iof_image_as_dn(
                                                       obs, data=obs.ext_data)
-        
+    
+# XXX           rings_radial_model = rings_create_model_from_image(obs)
+#            if rings_radial_model is not None:
+#                imdisp = ImageDisp([obs.data, rings_radial_model, obs.data-rings_radial_model],
+#                                   canvas_size=(512,512),
+#                                   allow_enlarge=True, enlarge_limit=10,
+#                                   auto_update=True)
+#                Tkinter.mainloop()
+
             # Filter that calibrated data.
             # 1) Subtract the local background (median)
             # 2) Eliminate anything that is < 0

@@ -445,8 +445,7 @@ def _reproject_one_image(offrepdata):
         ret = rings_reproject(obs, offset=offset,
                               longitude_resolution=options.longitude_resolution*oops.RPD,
                               radius_resolution=options.radius_resolution,
-                              radius_inner=options.radius_inner,
-                              radius_outer=options.radius_outer,
+                              radius_range=(options.radius_inner,options.radius_outer),
                               corotating='F')
     except:
         if options.verbose:

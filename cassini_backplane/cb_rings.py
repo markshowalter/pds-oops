@@ -5,6 +5,7 @@
 #
 # Exported routines:
 #    rings_create_model
+#    rings_create_model_from_image
 #    rings_sufficient_curvature
 #    rings_fiducial_features
 #
@@ -32,6 +33,7 @@ import time
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
+import scipy.interpolate as sciinterp
 import matplotlib.pyplot as plt
 
 import polymath
@@ -164,10 +166,11 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
 
     radius_step = (max_radius-min_radius) / 10.
     longitude_step = (max_longitude-min_longitude) / 100.
-    for radius in np.arange(min_radius, max_radius+radius_step, radius_step):
-        trial_longitudes = np.arange(min_longitude, 
-                                     max_longitude+longitude_step,
-                                     longitude_step)
+    for radius in rings_generate_radii(min_radius, max_radius, 
+                                       radius_resolution=radius_step):
+        trial_longitudes = rings_generate_longitudes(
+                                         min_longitude, max_longitude,
+                                         longitude_resolution=longitude_step)
         trial_radius = np.empty(trial_longitudes.shape)
         trial_radius[:] = radius
         (new_longitudes, new_radius,
@@ -286,8 +289,8 @@ def _blur_ring_radial_data(tab, resolution):
     radial_resolution = 1.
     domain = tab.domain()
     start_radius, end_radius = domain
-    new_radius = np.arange(start_radius, end_radius+radial_resolution,
-                           radial_resolution)
+    new_radius = rings_generate_radii(start_radius, end_radius, 
+                                      radius_resolution=radial_resolution)
     data = tab(new_radius)
     blurred_data = data.copy()
     
@@ -377,7 +380,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                enough fiducial features.
         include_body_shadows   True to include the shadows of bodies near 
                                equinox. Saturn's shadow is always incldued.
-        star_config            Configuration parameters. None uses the default.
+        rings_config           Configuration parameters. None uses the default.
 
     Returns:
         metadata           A dictionary containing information about the
@@ -508,6 +511,93 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['end_time'] = time.time()
     return model, metadata
 
+def rings_create_model_from_image(obs):
+    """Create a model for the rings from a radial scan of this image.
+
+    If the image is not entirely filled by the main rings, return None.
+    
+    Inputs:
+        obs                    The Observation.
+
+    Returns:
+        The model.
+    """
+    logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model_from_image')
+
+    set_obs_corner_bp(obs)
+
+    # Check using the corner BP first for performance
+    corner_radii = obs.corner_bp.ring_radius('saturn:ring').vals.astype('float')
+    min_radius = np.min(corner_radii)
+    max_radius = np.max(corner_radii)
+
+    logger.info('Corner radii %.2f to %.2f', min_radius, max_radius)
+
+    if max_radius > RINGS_MAX_RADIUS or min_radius < RINGS_MIN_RADIUS:
+        logger.info('Image is not entirely main rings - aborting')
+        return None
+
+    set_obs_bp(obs)
+
+    bp_radii = obs.bp.ring_radius('saturn:ring').vals.astype('float')
+    min_radius = np.min(bp_radii)
+    max_radius = np.max(bp_radii)
+    if max_radius > RINGS_MAX_RADIUS or min_radius < RINGS_MIN_RADIUS:
+        # In case we missed something earlier
+        logger.info('Image is not entirely main rings - aborting')
+        return None
+
+    diag = np.sqrt(obs.data.shape[0]*obs.data.shape[1])
+    
+    radius_resolution = (max_radius-min_radius) / diag
+
+    # XXX This will have a problem with wrap-around
+    longitude = obs.bp.ring_longitude('saturn:ring').vals.astype('float')
+    min_longitude = np.min(longitude)
+    max_longitude = np.max(longitude)
+    longitude_resolution = (max_longitude-min_longitude) / diag
+
+    logger.info('Image radii %.2f to %.2f res %.3f / '+
+                'longitudes %.2f to %.2f, res %.5f', 
+                min_radius, max_radius, radius_resolution,
+                min_longitude*oops.DPR, max_longitude*oops.DPR,
+                longitude_resolution*oops.DPR)
+
+    reproj = rings_reproject(
+            obs, 
+            radius_range=(min_radius,max_radius),
+            radius_resolution=radius_resolution,
+            longitude_range=(min_longitude,max_longitude),
+            longitude_resolution=longitude_resolution,
+#            zoom_amt=1,
+            compress_longitude=False,
+            omit_saturns_shadow=False,
+            data_only=True,
+            mask_fill_value=None)
+    
+    reproj_img = reproj['img']
+    radial_scan = ma.median(reproj_img, axis=1)
+    
+    radii = rings_generate_radii(min_radius, max_radius, 
+                                 radius_resolution=radius_resolution)
+    
+    max_radius_list = np.max(radii)
+    bp_radii[bp_radii > max_radius_list] = max_radius_list
+
+#    radial_tab = Tabulation(radii, radial_scan)
+#    radial_data = radial_tab(radii)
+#    
+#    radial_index = np.round((bp_radii-min_radius)/radius_resolution)
+#    radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
+#    radial_index = radial_index.astype('int')
+#    model = radial_data[radial_index]
+    
+    print np.max(radii), np.max(bp_radii)
+    interp = sciinterp.interp1d(radii, radial_scan)
+    
+    model = interp(bp_radii)
+    
+    return model
 
 #==============================================================================
 # 
@@ -538,7 +628,7 @@ def rings_generate_longitudes(longitude_start=0.,
 
 def rings_generate_radii(radius_inner, radius_outer,
                          radius_resolution=
-                             RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+                             RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION):
     """Generate a list of radii (km)."""
     return np.arange(radius_inner, radius_outer+_RINGS_RADIUS_SLOP,
                      radius_resolution)
@@ -699,16 +789,17 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
 def rings_reproject(
             obs, data=None, offset=None,
             longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+            longitude_range=None,
             radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
-            radius_inner=None,
-            radius_outer=None,
+            radius_range=None,
             zoom_amt=_RINGS_DEFAULT_REPRO_ZOOM_AMT,
             zoom_order=_RINGS_DEFAULT_REPRO_ZOOM_ORDER,
             corotating=None,
-            longitude_range=None,
             uv_range=None,
             compress_longitude=True,
-            mask_fill_value=0.):
+            mask_fill_value=0.,
+            omit_saturns_shadow=True,
+            data_only=False):
     """Reproject the rings in an image into a rectangular longitude/radius
     space.
     
@@ -721,19 +812,17 @@ def rings_reproject(
                                  values.
         longitude_resolution     The longitude resolution of the new image
                                  (rad/pix).
+        longitude_range          None, or a tuple (start,end) specifying the
+                                 longitude limits to reproject.
         radius_resolution        The radius resolution of the new image
                                  (km/pix).
-        radius_inner             The radius closest to Saturn to reproject
-                                 (km).
-        radius_outer             The radius furthest from Saturn to reproject
-                                 (km).
+        radius_range             None, or a tuple (inner,outer) specifying the
+                                 radius limits to reproject.
         zoom                     The amount to magnify the original image for
                                  pixel value interpolation.
         corotating               The name of the ring to use to compute
                                  co-rotating longitude. None if inertial
                                  longitude should be used.
-        longitude_range          None, or a tuple (start,end) specifying the
-                                 longitude limits to reproject.
         uv_range                 None, or a tuple (start_u,end_u,start_v,end_v)
                                  that defines the part of the image to be
                                  reprojected.
@@ -743,31 +832,47 @@ def rings_reproject(
                                  longitude_range.
         mask_fill_value          What to replace masked values with. None means
                                  leave the values masked.
+        omit_saturns_shadow      True to mask out pixels that are in Saturn's
+                                 shadow.
+        data_only                True to only include pixel data. False to
+                                 also include incidence, emission, phase,
+                                 and resolution.
                                  
     Returns:
         A dictionary containing
         
-        'long_mask'        The mask of longitudes from the full 2PI-radian
-                           set that contain reprojected data. This can be
-                           used to recreate the list of actual longitudes
-                           present.
-        'time'             The midtime of the observation (TDB).
+        'long_mask'            The mask of longitudes from the full 2PI-radian
+                               set that contain reprojected data. This can be
+                               used to recreate the list of actual longitudes
+                               present.
+        'time'                 The midtime of the observation (TDB).
+        'radius_resolution'    The radius resolution.
+        'longitude_resolution' The longitude resolution.
                            
             The following only contain longitudes with mask values of True
             above. All angles are in degrees.
-        'img'              The reprojected image [radius,longitude].
-        'resolution'       The radial resolution [radius,longitude].
-        'phase'            The phase angle [radius,longitude].
-        'emission'         The emission angle [radius,longitude].
-        'incidence'        The incidence angle [radius,longitude].
-        'mean_resolution'  The radial resolution averaged over all radii
-                           [longitude].
-        'mean_phase'       The phase angle averaged over all radii [longitude].
-        'mean_emission'    The emission angle averaged over all radii
-                           [longitude].
-        'mean_incidence'   The incidence angle averaged over all radii AND
-                           longitudes (it shouldn't change over the ring 
-                           plane).
+        'img'                  The reprojected image [radius,longitude].
+        
+            If data_only is False:
+        
+        'resolution'           The radial resolution [radius,longitude].
+        'phase'                The phase angle [radius,longitude].
+        'emission'             The emission angle [radius,longitude].
+        'incidence'            The incidence angle [radius,longitude].
+        'mean_resolution'      The radial resolution averaged over all radii
+                               [longitude].
+        'mean_phase'           The phase angle averaged over all radii 
+                               [longitude].
+        'mean_emission'        The emission angle averaged over all radii
+                               [longitude].
+        'mean_incidence'       The incidence angle averaged over all radii AND
+                               longitudes (it shouldn't change over the ring 
+                               plane).
+        
+        Note that the image data is taken from the zoomed, interpolated image,
+        while the incidence, emission, phase, and resolution are taken from
+        the original non-interpolated data and thus will be slightly more
+        coarse-grained.
     """
     logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
@@ -776,16 +881,22 @@ def rings_reproject(
     if data is None:
         data = obs.data
     
+    if radius_range is None:
+        radius_inner = RINGS_MIN_RADIUS
+        radius_outer = RINGS_MAX_RADIUS
+    else:
+        radius_inner, radius_outer = radius_range
+        
     if longitude_range is None:
         longitude_start = 0.
         longitude_end = _RINGS_MAX_LONGITUDE
     else:
         longitude_start, longitude_end = longitude_range
-        
-    # We need to be careful not to use obs.bp from this point forward because
-    # it will disagree with our current OffsetFOV
+
     orig_fov = None
     if offset is not None and offset != (0,0):
+        # We need to be careful not to use obs.bp from this point forward
+        # because it will disagree with our current OffsetFOV
         orig_fov = obs.fov
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
     
@@ -801,24 +912,34 @@ def rings_reproject(
                                      origin=(start_u+.5, start_v+.5), 
                                      limit=(end_u+.5, end_v+.5), swap=True)
 
-    bp = oops.Backplane(obs, meshgrid)
+    if orig_fov is None and meshgrid is None:
+        # No offset and no uv_range means it's safe to use the normal Backplane
+        set_obs_bp(obs)
+        bp = obs.bp
+    else:
+        bp = oops.Backplane(obs, meshgrid)
+        
     bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
-    bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float') 
-    bp_resolution = (bp.ring_radial_resolution('saturn:ring')
-                     .vals.astype('float'))
-    bp_phase = bp.phase_angle('saturn:ring').vals.astype('float')
-    bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
-    bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float') 
-    saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
-    data = data.copy()
-    data[saturn_shadow] = 0
+    bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float')
+    
+    if not data_only: 
+        bp_resolution = (bp.ring_radial_resolution('saturn:ring')
+                         .vals.astype('float'))
+        bp_phase = bp.phase_angle('saturn:ring').vals.astype('float')
+        bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
+        bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float')
+
+    if omit_saturns_shadow:
+        saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
+        data = data.copy()
+        data[saturn_shadow] = 0
     
     # The number of pixels in the final reprojection
     radius_pixels = int(np.ceil((radius_outer-radius_inner+
                                  _RINGS_RADIUS_SLOP) / radius_resolution))
-    longitude_pixels = int(np.ceil((longitude_end-longitude_start+
-                                    _RINGS_LONGITUDE_SLOP) /
-                                   longitude_resolution))
+#    longitude_pixels = int(np.ceil((longitude_end-longitude_start+
+#                                    _RINGS_LONGITUDE_SLOP) /
+#                                   longitude_resolution))
     longitude_start_pixel = int(longitude_start / longitude_resolution)
 
     if corotating == 'F':
@@ -830,11 +951,12 @@ def rings_reproject(
     # This fails to be efficient if the longitude range wraps around.
     min_longitude_pixel = (np.floor(max(longitude_start, np.min(bp_longitude))/ 
                                     longitude_resolution)).astype('int')
-    min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
+#    min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
     max_longitude_pixel = (np.ceil(min(longitude_end, np.max(bp_longitude)) / 
                                    longitude_resolution)).astype('int')
-    max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
+#    max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
     num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
+    longitude_pixels = num_longitude_pixel # XXX
     
     # Longitude bin numbers
     long_bins = np.tile(np.arange(num_longitude_pixel), radius_pixels)
@@ -867,8 +989,9 @@ def rings_reproject(
     logger.debug('Longitude bin range %6.2f %6.2f', 
                  np.min(long_bins_act)*oops.DPR,
                  np.max(long_bins_act)*oops.DPR)
-    logger.info('Resolution range %7.2f %7.2f', np.min(bp_resolution),
-                 np.max(bp_resolution))
+    if not data_only:
+        logger.info('Resolution range %7.2f %7.2f', np.min(bp_resolution),
+                     np.max(bp_resolution))
     logger.debug('Data range %f %f', np.min(data), np.max(data))
 
     u_pixels, v_pixels = rings_longitude_radius_to_pixels(
@@ -878,7 +1001,10 @@ def rings_reproject(
     
     # Zoom the data and restrict the bins and pixels to ones actually in the
     # final reprojection.
-    zoom_data = ndinterp.zoom(data, zoom_amt, order=zoom_order)
+    if zoom_amt == 1:
+        zoom_data = data
+    else:
+        zoom_data = ndinterp.zoom(data, zoom_amt, order=zoom_order)
 
     u_zoom = (u_pixels*zoom_amt).astype('int')
     v_zoom = (v_pixels*zoom_amt).astype('int')
@@ -894,7 +1020,7 @@ def rings_reproject(
     u_zoom = u_zoom[goodmask]
     v_zoom = v_zoom[goodmask]
     good_rad = rad_bins[goodmask]
-    good_long = long_bins[goodmask] + min_longitude_pixel
+    good_long = long_bins[goodmask]
     
     interp_data = zoom_data[v_zoom, u_zoom]
     
@@ -903,77 +1029,87 @@ def rings_reproject(
     repro_img.mask = True
     repro_img[good_rad,good_long] = interp_data
 
-    repro_res = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
-    repro_res.mask = True
-    repro_res[good_rad,good_long] = bp_resolution[v_pixels,u_pixels]
-    repro_mean_res = ma.mean(repro_res, axis=0)
-    # Mean will mask if ALL radii are masked are a particular longitude
+    if data_only:
+        # Mean will mask if ALL radii are masked are a particular longitude
+        # We should do this more efficiently using operations on the mask itself
+        good_long_mask = np.logical_not(ma.getmaskarray(ma.mean(repro_img, axis=0)))
+    else:
+        repro_res = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
+        repro_res.mask = True
+        repro_res[good_rad,good_long] = bp_resolution[v_pixels,u_pixels]
+        repro_mean_res = ma.mean(repro_res, axis=0)
+        # Mean will mask if ALL radii are masked are a particular longitude
+    
+        # All interpolated data should be masked the same, so we might as well
+        # take one we've already computed.
+        good_long_mask = np.logical_not(ma.getmaskarray(repro_mean_res))
 
-    # All interpolated data should be masked the same, so we might as well
-    # take one we've already computed.
-    good_long_mask = np.logical_not(ma.getmaskarray(repro_mean_res))
-
-    repro_phase = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
-    repro_phase.mask = True
-    repro_phase[good_rad,good_long] = bp_phase[v_pixels,u_pixels]
-    repro_mean_phase = ma.mean(repro_phase, axis=0)
-
-    repro_emission = ma.zeros((radius_pixels, longitude_pixels), 
-                              dtype=np.float32)
-    repro_emission.mask = True
-    repro_emission[good_rad,good_long] = bp_emission[v_pixels,u_pixels]
-    repro_mean_emission = ma.mean(repro_emission, axis=0)
-
-    repro_incidence = ma.zeros((radius_pixels, longitude_pixels), 
+    if not data_only:
+        repro_phase = ma.zeros((radius_pixels, longitude_pixels), 
                                dtype=np.float32)
-    repro_incidence.mask = True
-    repro_incidence[good_rad,good_long] = bp_incidence[v_pixels,u_pixels]
-    repro_mean_incidence = ma.mean(repro_incidence) # scalar
+        repro_phase.mask = True
+        repro_phase[good_rad,good_long] = bp_phase[v_pixels,u_pixels]
+        repro_mean_phase = ma.mean(repro_phase, axis=0)
+    
+        repro_emission = ma.zeros((radius_pixels, longitude_pixels), 
+                                  dtype=np.float32)
+        repro_emission.mask = True
+        repro_emission[good_rad,good_long] = bp_emission[v_pixels,u_pixels]
+        repro_mean_emission = ma.mean(repro_emission, axis=0)
+    
+        repro_incidence = ma.zeros((radius_pixels, longitude_pixels), 
+                                   dtype=np.float32)
+        repro_incidence.mask = True
+        repro_incidence[good_rad,good_long] = bp_incidence[v_pixels,u_pixels]
+        repro_mean_incidence = ma.mean(repro_incidence) # scalar
 
     if compress_longitude:
         repro_img = repro_img[:,good_long_mask]
-        repro_res = repro_res[:,good_long_mask]
-        repro_phase = repro_phase[:,good_long_mask]
-        repro_emission = repro_emission[:,good_long_mask]
-        repro_incidence = repro_incidence[:,good_long_mask]
-
-        repro_mean_res = repro_mean_res[good_long_mask]
-        repro_mean_phase = repro_mean_phase[good_long_mask]
-        repro_mean_emission = repro_mean_emission[good_long_mask]
-
-        assert ma.count_masked(repro_mean_res) == 0
-        assert ma.count_masked(repro_mean_phase) == 0
-        assert ma.count_masked(repro_mean_emission) == 0
+        if not data_only:
+            repro_res = repro_res[:,good_long_mask]
+            repro_phase = repro_phase[:,good_long_mask]
+            repro_emission = repro_emission[:,good_long_mask]
+            repro_incidence = repro_incidence[:,good_long_mask]
+    
+            repro_mean_res = repro_mean_res[good_long_mask]
+            repro_mean_phase = repro_mean_phase[good_long_mask]
+            repro_mean_emission = repro_mean_emission[good_long_mask]
+    
+            assert ma.count_masked(repro_mean_res) == 0
+            assert ma.count_masked(repro_mean_phase) == 0
+            assert ma.count_masked(repro_mean_emission) == 0
 
     if mask_fill_value is not None:
         repro_img = ma.filled(repro_img, mask_fill_value)
-        repro_res = ma.filled(repro_res, mask_fill_value)
-        repro_phase = ma.filled(repro_phase, mask_fill_value)
-        repro_emission = ma.filled(repro_emission, mask_fill_value)
-        repro_incidence = ma.filled(repro_incidence, mask_fill_value)
+        if not data_only:
+            repro_res = ma.filled(repro_res, mask_fill_value)
+            repro_phase = ma.filled(repro_phase, mask_fill_value)
+            repro_emission = ma.filled(repro_emission, mask_fill_value)
+            repro_incidence = ma.filled(repro_incidence, mask_fill_value)
 
     if orig_fov is not None:   
         obs.fov = orig_fov
 
     ret = {}    
+    ret['time'] = obs.midtime
     ret['long_mask'] = good_long_mask
     ret['img'] = repro_img
-    ret['resolution'] = repro_res
-    ret['phase'] = repro_phase
-    ret['emission'] = repro_emission
-    ret['incidence'] = repro_incidence
-    ret['mean_resolution'] = repro_mean_res
-    ret['mean_phase'] = repro_mean_phase
-    ret['mean_emission'] = repro_mean_emission
-    ret['mean_incidence'] = repro_mean_incidence
-    ret['time'] = obs.midtime
+    if not data_only:
+        ret['resolution'] = repro_res
+        ret['phase'] = repro_phase
+        ret['emission'] = repro_emission
+        ret['incidence'] = repro_incidence
+        ret['mean_resolution'] = repro_mean_res
+        ret['mean_phase'] = repro_mean_phase
+        ret['mean_emission'] = repro_mean_emission
+        ret['mean_incidence'] = repro_mean_incidence
     
     return ret
 
 def rings_mosaic_init(
         longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
         radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
-        radius_inner=None, radius_outer=None):
+        radius_range=None):
     """Create the data structure for a ring mosaic.
 
     Inputs:
@@ -981,23 +1117,23 @@ def rings_mosaic_init(
                                  (rad/pix).
         radius_resolution        The radius resolution of the new image
                                  (km/pix).
-        radius_inner             The radius closest to Saturn to reproject
-                                 (km).
-        radius_outer             The radius furthest from Saturn to reproject
-                                 (km).
+        radius_range             None, or a tuple (inner,outer) specifying the
+                                 radius limits of the new image.
                                  
     Returns:
         A dictionary containing an empty mosaic
 
-        'img'              The full mosaic image.
-        'long_mask'        The valid-longitude mask (all False).
-        'mean_resolution'  The per-longitude mean resolution.
-        'mean_phase'       The per-longitude mean phase angle.
-        'mean_emission'    The per-longitude mean emission angle.
-        'mean_incidence'   The scalar mean incidence angle.
-        'image_number'     The per-longitude image number giving the image
-                           used to fill the data for each longitude.
-        'time'             The per-longitude time (TDB).
+        'img'                    The full mosaic image.
+        'radius_resolution'      The radius resolution.
+        'longitude_resolution'   The longitude resolution.
+        'long_mask'              The valid-longitude mask (all False).
+        'mean_resolution'        The per-longitude mean resolution.
+        'mean_phase'             The per-longitude mean phase angle.
+        'mean_emission'          The per-longitude mean emission angle.
+        'mean_incidence'         The scalar mean incidence angle.
+        'image_number'           The per-longitude image number giving the image
+                                 used to fill the data for each longitude.
+        'time'                   The per-longitude time (TDB).
     """
     radius_pixels = int(np.ceil((radius_outer-radius_inner+_RINGS_RADIUS_SLOP) / 
                                 radius_resolution))
