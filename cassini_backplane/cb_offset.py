@@ -134,10 +134,16 @@ def master_find_offset(obs,
             'image_shape'      A tuple indicating the shape (in pixels) of the
                                image.
             'midtime'          The midtime of the observation.
-            'ra_dec_corner'    A tuple (ra_min, ra_max, dec_min, dec_max)
-                               giving the corners of the FOV-extended image.
-            'ra_dec_center'    A tuple (ra,dec) for the center of the
-                               image.
+            'ra_dec_corner_orig'
+                               A tuple (ra_min, ra_max, dec_min, dec_max)
+                               giving the corners of the FOV-extended image
+                               with the original SPICE navigation.
+            'ra_dec_center_orig'
+                               A tuple (ra,dec) for the center of the image
+                               with the original SPICE navigation.
+            'ra_dec_center_offset'
+                               A tuple (ra,dec) for the center of the image
+                               with the new navigation.
 
           Data about the offset process:
           
@@ -251,12 +257,13 @@ def master_find_offset(obs,
     metadata['filter2'] = obs.filter2
     metadata['image_shape'] = obs.data.shape
     metadata['midtime'] = obs.midtime
-    metadata['ra_dec_corner'] = compute_ra_dec_limits(obs, 
-                                                      extend_fov=extend_fov)    
+    metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
+                                           obs, extend_fov=extend_fov)    
     set_obs_center_bp(obs)
     ra = obs.center_bp.right_ascension()
     dec = obs.center_bp.declination()
-    metadata['ra_dec_center'] = (ra.vals,dec.vals)
+    metadata['ra_dec_center_orig'] = (ra.vals,dec.vals)
+    metadata['ra_dec_center_offset'] = None
     # Offset process
     metadata['start_time'] = start_time
     metadata['end_time'] = None
@@ -665,6 +672,16 @@ def master_find_offset(obs,
         logger.info('Final combined offset U,V %.2f %.2f', offset[0], offset[1])
 
     metadata['offset'] = offset
+
+    if offset is not None:
+        orig_fov = obs.fov
+        obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
+        set_obs_center_bp(obs, force=True)
+        ra = obs.center_bp.right_ascension()
+        dec = obs.center_bp.declination()
+        metadata['ra_dec_center_offset'] = (ra.vals,dec.vals)
+        obs.fov = orig_fov
+        set_obs_center_bp(obs, force=True)
 
 
                 ######################

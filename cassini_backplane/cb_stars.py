@@ -566,13 +566,11 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
                  center_u-boxsize//2+1:center_u+boxsize//2]
 
     min_allowed_val = np.min(subpsf)
-#    print 'MAV', min_allowed_val
 
     subpsf = psf[center_v-boxsize//2:center_v+boxsize//2+1,
                  center_u-boxsize//2:center_u+boxsize//2+1]
 
     min_bkgnd_val = np.min(subpsf)
-#    print 'MBV', min_bkgnd_val
     
     subimage = calib_data[v-psf_size_half_v:v+psf_size_half_v+1,
                           u-psf_size_half_u:u+psf_size_half_u+1]
@@ -584,16 +582,8 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
                                 np.logical_not(streak_bool))
     bkgnd_data = subimage[bkgnd_bool]
     
-#    new_data = subimage.copy()
-#    new_data[np.where(psf < min_allowed_val)] = 0
-#    plt.imshow(new_data)
-#    plt.show()
-    
     bkgnd = ma.mean(bkgnd_data)
     bkgnd_std = ma.std(bkgnd_data)
-    print 'MIN', ma.min(bkgnd_data), 'MAX', ma.max(bkgnd_data)
-    
-#    print 'SUM', np.sum(streak_data), 'BKGND', bkgnd
     
     integrated_dn = np.sum(streak_data-bkgnd)
     integrated_std = np.std(streak_data-bkgnd)
@@ -665,7 +655,6 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
                 confidence = ((integrated_dn >= min_dn)*0.5 +
                               (integrated_std >= bkgnd_std*2)*0.5)
             else:
-                print integrated_std, bkgnd_std
                 confidence = ((star.dn/3 < integrated_dn < star.dn*3)*0.5 +
                               (integrated_std >= bkgnd_std*1.5)*0.5)
                 

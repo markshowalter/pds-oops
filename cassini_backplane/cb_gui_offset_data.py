@@ -37,7 +37,7 @@ def _callback_mousemove(x, y, metadata):
         (metadata['label_ring_longitude'].config(text=
                                ('%7.3f'%metadata['ring_longitude'][y,x])))
         (metadata['label_ring_radius'].config(text=
-                               ('%8d'%metadata['ring_radius'][y,x])))
+                               ('%12.3f'%metadata['ring_radius'][y,x])))
         (metadata['label_ring_resolution'].config(text=
                                ('%7.3f'%metadata['ring_resolution'][y,x])))
         (metadata['label_ring_emission'].config(text=
@@ -105,7 +105,8 @@ def _callback_mousemove(x, y, metadata):
                                          ('%7.3f'%val.vals))
         
 def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
-                        latlon_type='centric', lon_direction='east'):
+                        latlon_type='centric', lon_direction='east',
+                        canvas_size=(1024,512)):
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']
@@ -261,7 +262,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     else:
         title = fn4 + '/' + fn3 + '/' + fn2 + '/' + fn1
 
-    imgdisp = ImageDisp([ext_data], [overlay], canvas_size=(1024,512), 
+    if canvas_size is None:
+        canvas_size = (obs.data.shape[1], obs.data.shape[0])
+    imgdisp = ImageDisp([ext_data], [overlay], canvas_size=canvas_size, 
                         title=title,
                         allow_enlarge=True,
                         auto_update=True, origin=(ext_u,ext_v))

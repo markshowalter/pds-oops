@@ -41,7 +41,18 @@ if len(command_list) == 0:
 #    command_line_str = 'N1595336241_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
 #    command_line_str = 'N1751425716_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
 #    command_line_str = 'N1484580522_1 --force-offset --image-log-console-level debug --display-offset-results'
-    command_line_str = 'N1654250545_1 --force-offset --image-log-console-level debug --display-offset-results' # rings closeup
+#    command_line_str = 'N1654250545_1 --force-offset --image-log-console-level debug --display-offset-results' # rings closeup
+#    command_line_str = 'N1477599121_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1588310978_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1600327271_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1608902918_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1624548280_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+
+    command_line_str = 'N1589083632_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1591063671_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1595336241_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1601009125_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1625958009_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
     
     command_list = command_line_str.split()
 
@@ -514,7 +525,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         return True
 
     if arguments.display_offset_results:
-        display_offset_data(obs, metadata)
+        display_offset_data(obs, metadata, canvas_size=None)
 
     results = offset_result_str(image_path)
     main_logger.info(results)

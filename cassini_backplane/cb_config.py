@@ -208,18 +208,35 @@ BODIES_DEFAULT_CONFIG = {
 }
 
 RINGS_DEFAULT_CONFIG = {
-    # The source for profile data - 'voyager' or 'uvis'.
-    'model_source': 'uvis',
+    # The source for profile data - 'voyager', 'uvis', or 'ephemeris'.
+    'model_source': 'ephemeris',
     
     # Fiducial feature list to use.
     # french93 - French et al. 1993
     # french1404 - Features from Dick French 2014
-    'fiducial_feature_list': 'french1404',
+    # french1601 - Features from Dick French 2016
+    'fiducial_feature_list': 'french1601',
     
     # There must be at least this many fiducial features for rings to be used
     # for correlation.
     'fiducial_feature_threshold': 3,
     
+    # There must be at least this many pixels beyond a fiducial feature in the
+    # non-extended image for it to count as being in the image for counting
+    # purposes.
+    'fiducial_feature_margin': 50,
+    
+    # The RMS error of a feature must be this many times less than the
+    # finest resolution of the image in order for the feature to be
+    # used. This makes sure that the statistical scatter of the feature
+    # is blurred out during correlation.
+    'fiducial_rms_gain': 3,
+    
+    # When manufacturing a model from an ephemeris list, each feature is
+    # approximately this many pixels wide.
+    'fiducial_ephemeris_width': 30,
+    
+    # 
     # There must be at least this number of pixels of curvature present for
     # rings to be used for correlation.
     'curvature_threshold': 2,

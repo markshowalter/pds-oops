@@ -39,11 +39,11 @@ def make_corner_meshgrid(obs, extend_fov=(0,0)):
     """Create a Meshgrid with points only in the four corners of the extended
     FOV."""
     mg = oops.Meshgrid.for_fov(obs.fov,
-             origin     =(-extend_fov[0]+0.5,-extend_fov[1]+0.5),
-             limit      =(obs.data.shape[1]+extend_fov[0]-0.5,
-                          obs.data.shape[0]+extend_fov[1]-0.5),
-             undersample=(obs.data.shape[1]+extend_fov[0]*2-1,
-                          obs.data.shape[0]+extend_fov[1]*2-1),
+             origin     =(-extend_fov[0],-extend_fov[1]),
+             limit      =(obs.data.shape[1]+extend_fov[0],
+                          obs.data.shape[0]+extend_fov[1]),
+             undersample=(obs.data.shape[1]+extend_fov[0]*2,
+                          obs.data.shape[0]+extend_fov[1]*2),
              swap       =True)
     return mg
 

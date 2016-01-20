@@ -30,11 +30,11 @@ import logging
 import os
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
-import matplotlib.pyplot as plt
 
 import polymath
 import oops
@@ -51,27 +51,50 @@ _LOGGING_NAME = 'cb.' + __name__
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
 
-RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02 * oops.RPD
-RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5. # KM
+_RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02 * oops.RPD
+_RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5. # KM
 _RINGS_DEFAULT_REPRO_ZOOM_AMT = 5
 _RINGS_DEFAULT_REPRO_ZOOM_ORDER = 3
 
-FRING_DEFAULT_REPRO_RADIUS_INNER = 139500. - 140220.
-FRING_DEFAULT_REPRO_RADIUS_OUTER = 141000. - 140220.
-
 _RINGS_LONGITUDE_SLOP = 1e-6 # Must be smaller than any longitude or radius
-_RINGS_RADIUS_SLOP = 1e-6    # resolution we will be using
-_RINGS_MAX_LONGITUDE = oops.TWOPI-_RINGS_LONGITUDE_SLOP*2
+_RINGS_RADIUS_SLOP    = 1e-6 # resolution we will be using
+_RINGS_MAX_LONGITUDE  = oops.TWOPI-_RINGS_LONGITUDE_SLOP*2
 
 # These are bodies that might cast shadows on the ring plane near equinox
 _RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS', 
                            'JANUS', 'MIMAS', 'ENCELADUS', 'TETHYS'] # XXX
 
-_RINGS_UVIS_OCCULTATION = 'UVIS_HSP_2008_231_BETCEN_I_TAU_01KM'
+#===============================================================================
+#
+# FIDUCIAL FEATURE INFORMATION
+# 
+# We have various ways to analyze the rings. In all cases there need to be a
+# certain number of "fiducial features", edges that have predictable orbits.
+#
+# Which list of fiducial features to use is controlled by the
+# 'fiducial_feature_list' parameter in rings_config. The options are:
+#
+#    'french93' - French, R.G. et al. 1993, Icarus, 103, 163-213
+#        "Geometry of the Saturn system from the 3 July 1989 occultation of
+#          28 SGR and Voyager observations"
+#
+#    'french1404' - Features from Dick French 2014
+#        'ringfit_v1.8.Sa025S-RF-V4927.out'
+#
+#    'french1601' - Features from Dick French 2016. These include
+#        C Ring features - Nicholson, et al. 2014, Icarus, 241, 373-396
+#            "Noncircular features in Saturn's rings II: The C ring"
+#        Cassini Division features - French, et al. 2016, TBD
+#            "Noncircular features in Saturn's rings III: The Cassini 
+#             Division"
+#
+#===============================================================================
+
+_RINGS_FIDUCIAL_FEATURES = {}
 
 # From French et al. 1993, Geometry of the Saturn system from the 3 July 1989
 # occultation of 28 SGR and Voyager observations
-_RINGS_FIDUCIAL_FEATURES_1993 = [
+_RINGS_FIDUCIAL_FEATURES_FRENCH1993 = [
     # A RING
     (136552.0, 0.),         # Keeler Gap OEG
     (133745.2, 0.),         # Encke Gap OEG
@@ -117,15 +140,555 @@ _RINGS_FIDUCIAL_FEATURES_1993 = [
 
 _RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH = os.path.join(
      SUPPORT_FILES_ROOT, '20140419toRAJ', 'ringfit_v1.8.Sa025S-RF-V4927.out')
-_RINGS_FIDUCIAL_FEATURES = []
+
+_RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH = cspice.utc2et('2008-01-01 12:00:00')
+_RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
+    # (Feature type, (inner_data, outer_data))
+    #    inner/outer_data: (mode, reset)
+    #       If mode == 1, data: a, rms, ae, long_peri, rate_peri
+    #       If mode  > 1, data: amplitude, phase, pattern speed
+    
+    ###########################################################
+    ### C RING - Nicholson et al, Icarus 241 (2014) 373-396 ###
+    ###########################################################
+    
+    # Colombo Gap - #487, #43
+    ('GAP',     ((  1,  77747.89, 0.23,  3.11,  96.90,   22.57346),),  # IEG
+                ((  1,  77926.01, 0.27,  4.89, 280.02,   22.57696),)), # OEG
+
+    # Titan Ringlet - #63, #62
+    ('RINGLET', ((  1,  77867.13, 0.62, 17.39, 270.54,   22.57503),    # IER
+                 (  0,                   3.84,  40.93, 1391.16334),
+                 ( -5,                   0.45,  60.87, 1692.06574),
+                 ( -2,                   0.77,  30.21, 2109.40889)),
+                ((  1,  77890.21, 0.94, 27.20, 270.70,   22.57562),    # OER
+                 (  2,                   1.55, 172.61,  717.94917),
+                 (  3,                   1.54, 110.60,  949.74161),
+                 (  4,                   0.90,  80.30, 1065.62338))),
+
+    # Maxwell Gap - #163, #164
+    ('GAP',     ((  1,  87342.77, 0.43,  0.00,   0.00,    0.00000),),  # IEG
+                ((  1,  87610.12, 0.41,  1.11, 228.54,   14.69150),)), # OEG
+
+    # Maxwell Ringlet - #61, #60
+    ('RINGLET', ((  1,  87480.29, 0.23, 18.93,  55.60,   14.69572),),  # IER
+                ((  1,  87539.36, 0.16, 58.02,  57.20,   14.69314),    # OER
+                 (  2,                   0.19,  73.26,  599.52336),
+                 (  4,                   0.29,  16.55,  891.94002))),
+
+    # Bond Gap - #111, #110
+    ('GAP',     ((  1,  88686.01, 0.76,  0.00,   0.00,    0.00000),),  # IEG 
+                ((  1,  88723.04, 0.30,  0.00,   0.00,    0.00000),)), # OEG
+     
+    # Bond Ringlet - #59, #58
+    ('RINGLET', ((  1,  88701.89, 0.28,  0.00,   0.00,    0.00000),    # IER
+                 (  0,                   0.17,  79.75, 1146.43579),
+                 (  3,                   0.16,  88.49,  778.35308)),
+                ((  1,  88719.24, 0.32,  0.00,   0.00,    0.00000),    # OER
+                 (  2,                   1.08, 105.07,  587.29003),
+                 (  3,                   0.55, 107.67,  778.34105),
+                 (  4,                   0.47,  40.22,  873.86707),
+                 (  5,                   0.30,  52.06,  931.20532),
+                 (  6,                   0.30,  30.39,  969.40781),
+                 (  7,                   0.41,  14.05,  996.70499))),
+
+    # Dawes Ringlet - Not included because the edge is not sharp
+
+    # Dawes Gap - #56, #112
+    ('GAP',     ((  1,  90200.38, 0.75,  6.10,  69.24,   13.18027),
+                 (  2,                   5.27,  62.92,  572.50536),
+                 (  3,                   1.46,  41.67,  758.94278),
+                 (  5,                   0.89,  71.02,  908.10954)),
+                ((  1,  90220.77, 0.32,  2.29, 241.79,   13.17088),
+                 (  2,                   0.43, 157.21,  572.48458))),
+
+        
+    #######################################################################                               
+    ### B RING OUTER EDGE - Nicholson, et al. Icarus 227 (2014) 152-175 ###
+    #######################################################################                         
+    
+    ###### XXX TO DO XXX ######
+
+
+    #############################################
+    ### CASSINI DIVISION - French et al (XXX) ###
+    #############################################
+
+    # Huygens Ringlet - #54, #53
+    ('RINGLET', ((  1, 117805.55, 1.30, 27.81, 137.53,    5.02872),
+                 ( 91,                   0.59, 115.57,   -4.98852),
+                 ( 92,                   2.09,  81.56,  381.98744),
+                 (-10,                   0.74,  14.73,  831.59967),
+                 ( -5,                   0.85,  43.95,  906.74404),
+                 ( -4,                   1.85,  32.20,  944.31186),
+                 ( -3,                   1.20,  84.52, 1006.92419),
+                 ( -2,                   1.12, 168.38, 1132.15800)),
+                # The first of the two fits
+                ((  1, 117823.65, 1.50, 28.03, 141.77,    5.02587),
+                 ( 91,                   0.58,  96.86,   -4.97462),
+                 (  2,                   1.54, 105.43,  380.68870),
+                 ( 92,                   1.84,  71.33,  381.98878),
+                 (  5,                   0.71,  26.40,  606.07903))),
+                               
+    # Strange Ringlet - #560, #561
+    ('RINGLET', ((  1, 117907.04, 1.63,  7.63, 153.21,    5.00570),
+                 ( 91,                   7.44, 117.20,   -4.97620),
+                 (  0,                   2.42,   9.73,  750.48932),
+                 (  2,                   3.75, 105.79,  380.25154),
+                 ( 92,                   1.29,  75.92,  381.97024),
+                 (  3,                   2.49,  37.53,  505.33539),
+                 (  5,                   1.06,  29.00,  605.39489)),
+                ((  1, 117908.77, 1.99,  7.40, 153.83,    5.00735),
+                 ( 91,                   7.39, 120.60,   -4.97938),
+                 (  0,                   2.56,  19.83,  750.47956),
+                 (  2,                   4.13, 106.14,  380.25204),
+                 ( 92,                   1.55,  77.43,  381.96666),
+                 (  3,                   2.60,  33.24,  505.33449),
+                 ( -1,                   1.14, 352.19, 1505.96783))),
+                               
+    # Huygens Gap - #20 OEG only
+    ('GAP',     None,
+                ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),
+                 ( 91,                   0.44, 245.70,   -4.98425),
+                 (  0,                   1.82, 143.78,  750.25165),
+                 ( 92,                   1.34,  76.25,  381.98386),
+                 ( -4,                   0.35,  45.39,  942.82221),
+                 ( -3,                   0.40,  84.88, 1005.34987),
+                 ( -1,                   0.82,  67.16, 1505.51205))),
+                
+    # Herschel Gap - #19, #16
+    ('GAP',     ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),
+                 ( 91,                   0.34, 279.55,   -4.95092),
+                 (  2,                   1.34,  95.16,  378.89248),
+                 ( 92,                   0.89,  82.69,  381.98160),
+                 (  3,                   0.71,   5.26,  503.53264),
+                 (  4,                   0.35,  89.58,  565.85131),
+                 (  5,                   0.36,  71.76,  603.24143),
+                 (  6,                   0.37,   4.74,  628.16426),
+                 (  7,                   0.37,  45.09,  645.97255),
+                 (  8,                   0.34,  31.40,  659.32551),
+                 ( 10,                   0.25,  24.43,  678.02618)),
+                ((  1, 118283.52, 0.15,  0.24, 127.45,    4.94609),
+                 ( 91,                   0.25,  57.07,   -4.92430),
+                 (  0,                   1.27, 232.50,  746.91637),
+                 ( 92,                   0.67,  76.01,  381.98441),
+                 ( -3,                   0.11,  96.61, 1000.83562),
+                 ( -2,                   0.11, 144.86, 1125.34236),
+                 ( -1,                   0.23, 197.18, 1498.79019))),
+                               
+    # Herschel Ringlet - #18, #17        
+    ('RINGLET', ((  1, 118234.30, 0.26,  1.49, 172.81,    4.96229),
+                 ( 91,                   1.49, 274.14,   -4.92970),
+                 (  0,                   0.32, 237.88,  747.36440),
+                 ( 92,                   0.69,  79.00,  381.98129)),
+                ((  1, 118263.25, 0.35,  1.76, 264.77,    4.95659),
+                 ( 91,                   2.12, 294.58,   -4.93101),
+                 (  2,                   0.37,   6.80,  378.53785),
+                 ( 92,                   0.72,  77.59,  381.98303),
+                 (  3,                   0.32,  32.76,  503.04880),
+                 (  4,                   0.20,  76.13,  565.30770),
+                 (  5,                   0.22,  54.38,  602.66098))),
+
+    # Russell Gap - #123, #13
+    ('GAP',     ((  1, 118589.92, 0.25,  7.60, 236.73,    4.90922),
+                 (  2,                   0.23, 165.64,  376.94996),
+                 ( 92,                   0.51,  80.23,  381.98584),
+                 (  3,                   0.25,  92.19,  500.95134)),
+                ((  1, 118628.40, 0.09,  0.11,  73.68,    4.90829),
+                 ( 92,                   0.47,  78.01,  381.98525))),
+
+    # Jeffreys Gap - #120, #15
+    ('GAP',     ((  1, 118929.63, 0.13,  3.26, 333.51,    4.85753),
+                 ( 91,                   0.17, 292.09,   -4.82576),
+                 ( 92,                   0.44,  75.98,  381.99151)),
+                ((  1, 118966.70, 0.12,  0.08, 114.89,    4.80910),
+                 ( 92,                   0.37,  74.90,  381.98629))),
+
+    # Kuiper Gap - #119, #118      
+    ('GAP',     ((  1, 119401.67, 0.16,  0.93,  19.55,    4.79845),
+                 ( 91,                   0.18, 226.51,   -4.78025),
+                 ( 92,                   0.25,  79.87,  381.98534)),
+                ((  1, 119406.30, 0.13,  0.10, 220.24,    4.75654),
+                 ( 92,                   0.29,  79.03,  381.98449))),
+
+    # Laplace Gap - #115, #114 
+    ('GAP',     ((  1, 119844.78, 0.26,  3.25, 310.11,    4.72673),
+                 ( 91,                   0.25,  10.17,   -4.69233),
+                 ( 92,                   0.29,  82.70,  381.98579)),
+                ((  1, 120085.65, 0.10,  1.34, 308.79,    4.71705),
+                 ( 92,                   0.22,  76.51,  381.98639))),
+                               
+    # Laplace Ringlet - #14, #12
+    ('RINGLET', ((  1, 120036.53, 0.20,  1.19, 236.12,   4.71250),
+                 (  0,                   2.22, 160.05, 730.64946),
+                 ( 92,                   0.27,  75.51, 381.98821),
+                 ( -4,                   0.13,  19.39, 918.04749),
+                 ( -2,                   0.74, 141.40,1100.71164),
+                 ( -1,                   0.61, 193.60,1466.03143)),
+                ((  1, 120077.75, 0.14,  2.79,  51.49,   4.72457),
+                 (  2,                   0.62,  86.10, 369.88543),
+                 ( 92,                   0.22,  78.01, 381.98827),
+                 (  3,                   0.42,  34.20, 491.60221),
+                 (  4,                   0.25,  46.96, 552.46291),
+                 (  6,                   0.12,  16.13, 613.31846))),
+    
+    # Bessel Gap - #127, #11
+    ('GAP',     ((  1, 120231.17, 0.44,  1.78, 263.16,    4.68450),
+                 ( 92,                   0.29,  73.47,  381.97875),
+                 (  8,                   0.36,  10.70,  642.50158)),
+                ((  1, 120243.71, 0.23,  0.64, 206.50,    4.68561),
+                 (  0,                   0.21, 350.29,  728.80170),
+                 ( 92,                   0.23,  75.99,  381.98988),
+                 ( -1,                   0.14, 302.16, 1462.27593))),
+
+    # Barnard Gap - #10, #9
+    ('GAP',     ((  1, 120303.69, 0.43,  0.44, 200.07,    4.68212),
+                 (  2,                   0.61,  44.12,  368.82370),
+                 ( 92,                   0.25,  67.07,  381.99503),
+                 (  3,                   1.31, 108.47,  490.20424),
+                 (  4,                   1.64,  46.00,  550.89054),
+                 (  5,                   1.36,  27.61,  587.28565),
+                 (  6,                   0.59,  24.56,  611.58228),
+                 (  7,                   0.55,  46.93,  628.91493),
+                 (  8,                   0.30,  10.41,  641.92788),
+                 (  9,                   0.71,   8.38,  652.04071),
+                 ( 10,                   0.42,   1.75,  660.13055),
+                 ( 13,                   0.36,  26.84,  676.93190)),
+                ((  1, 120316.04, 0.11,  0.23, 166.62,    4.66313),
+                 ( 92,                   0.22,  79.36,  381.98624),
+                 (  5,                   0.19,  58.97,  587.28403))),
+                               
+
+    #################################################################                               
+    ### A RING OUTER EDGE - Moutamid, et al. Icarus (TBD) XXX ###
+    #################################################################                               
+
+    # 2005 MAY 1 - 2005 AUG 1
+    ('RINGLET_2005-MAY-1_2005-AUG-1', None,
+                ((  1, 136767.20, 7.55,  0.00,   0.00,    0.00000),)),
+
+    # 2006 JAN 1 - 2009 JULY 1
+    ('RINGLET_2006-JAN-1_2009-JULY-1', None,
+                ((  1, 136770.09, 1.78,  0.00,   0.00,    0.00000),
+                 (  3,                   2.28,   8.31,  403.85329),
+                 (  4,                   1.80,   6.64,  453.94649),
+                 (  5,                   4.85,  60.92,  484.02086),
+                 (  6,                   1.92,  17.10,  504.07364),
+                 (  7,                  12.91,   4.15,  518.35437),
+                 (  8,                   2.77,  23.89,  529.10426),
+                 (  9,                   3.12,  30.56,  537.44541),
+                 ( 10,                   1.51,  30.95,  544.12491),
+                 ( 18,                   1.95,   4.62,  570.85163))),
+
+    # 2010 JAN 1 - 2013 AUG 1
+    ('RINGLET_2010-JAN-1_2013-AUG-1', None,
+                ((  1, 136772.74, 4.25,  0.00,   0.00,    0.00000),
+                 (  9,                   6.14,  27.17,  537.45029),
+                 ( 12,                   7.94,  12.84,  554.11853))),
+
+    ########################################
+    ### OTHER SORT-OF-CIRCULAR FEATURES  ###
+    ### ringfit_v1.8.Sa025S-RF-V5351.out ###
+    ########################################
+
+    # XXX These need to be updated with new ringfit data when available from Dick
+    
+    ### C RING ###
+            
+    # #135 - IEG unpaired
+    ('GAP',     ((  1,  74614.73965, 0.164346, 0.0000000,   0.0000000,   0.0000000),),
+                None),
+
+    # #144 - OER paired with #143, uncircular
+    ('RINGLET', None,
+                ((  1,  75988.65895, 0.142803, 0.0000000,   0.0000000,   0.0000000),
+                 (  1,                         0.1345940, 101.5205612,  22.5997842))),
+
+    # #40 - OER unpaired
+    ('RINGLET', None,
+                ((  1,  76261.77387, 0.158014, 0.0000000,   0.0000000,   0.0000000),
+                 (  1,                         0.2666899,  97.8944271,  22.5677381))),
+
+    # #39 - OER unpaired
+    ('RINGLET', None,
+                ((  1,  77162.11501, 0.127343, 0.0000000,   0.0000000,   0.0000000),
+                 (  1,                         0.5803149,  95.1273754,  22.5786349))),
+
+    # #38, #37
+    ('RINGLET', ((  1,  79222.04152, 0.113388, 0.0000000,   0.0000000,   0.0000000),
+                 (  1,                         0.2341692, 287.4580718,  22.5734575)),
+                ((  1,  79262.91082, 0.112969, 0.0000000,   0.0000000,   0.0000000),
+                 (  1,                         0.1892659, 284.0750895,  22.5732605))),
+
+    # #35, #34
+    ('RINGLET', ((  1, 84751.77410, 0.159019, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 84947.29467, 0.137759, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #33, #42
+    ('RINGLET', ((  1, 85661.96178, 0.113055, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 85757.24532, 0.176563, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #31 - IER unpaired
+    ('RINGLET', ((  1, 85923.69993, 0.104101, 0.0000000,   0.0000000,   0.0000000),),
+                None),
+
+    # #30 - IER paired with #29, uncircular
+    ('RINGLET', ((  1, 86373.17361, 0.171814, 0.0000000,   0.0000000,   0.0000000),),
+                None),
+
+    # #28 - OER unpaired
+    ('RINGLET', None,
+                ((  1, 88592.73625, 0.115294, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #27, #41
+    ('RINGLET', ((  1, 89190.58600, 0.086866, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 89294.05618, 0.181465, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #26, #25
+    ('RINGLET', ((  1, 89789.57831, 0.081971, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 89937.78988, 0.141344, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #24, #23
+    ('RINGLET', ((  1, 90406.12658, 0.094128, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 90613.79856, 0.156829, 0.0000000,   0.0000000,   0.0000000),)),
+
+    ### B RING ###
+    
+    # #77 - OEG unpaired
+    ('GAP',     None,
+                ((  1, 100024.40676, 0.117471, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #74 - OEG paired with #75, uncircular
+    ('GAP',     None,
+                ((  1, 101743.40857, 0.110368, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #73 - OER unpaired
+    ('RINGLET', None,
+                ((  1, 103008.64563, 0.114512, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #71 - OEG paired with #72, uncircular
+    ('GAP',     None,
+                ((  1, 104082.65168, 0.144307, 0.0000000,   0.0000000,   0.0000000),)),
+
+
+
+# XXX We don't know what to do with these yet
+#    # #272
+#    ('RINGLET', ((  1, 99363.03967, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #277
+#    ('RINGLET', ((  1, 99576.11351, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #280
+#    ('RINGLET', ((  1, 99738.56217, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #284
+#    ('RINGLET', ((  1, 99865.92191, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #286
+#    ('RINGLET', ((  1, 100420.17808, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #287
+#    ('RINGLET', ((  1, 100451.97168, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #288
+#    ('RINGLET', ((  1, 101081.94349, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #289
+#    ('RINGLET', ((  1, 101190.08197, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #292
+#    ('RINGLET', ((  1, 101379.30068, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #293
+#    ('RINGLET', ((  1, 101482.86849, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #296
+#    ('RINGLET', ((  1, 101879.53499, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #299
+#    ('RINGLET', ((  1, 102122.39406, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #302
+#    ('RINGLET', ((  1, 102231.65659, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #303
+#    ('RINGLET', ((  1, 102245.52922, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #304
+#    ('RINGLET', ((  1, 102257.61110, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #305
+#    ('RINGLET', ((  1, 102283.10732, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #306
+#    ('RINGLET', ((  1, 102291.06343, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #308
+#    ('RINGLET', ((  1, 102405.68758, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #309
+#    ('RINGLET', ((  1, 102454.79241, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #311
+#    ('RINGLET', ((  1, 102578.80565, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #313
+#    ('RINGLET', ((  1, 102618.48930, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #314
+#    ('RINGLET', ((  1, 102622.17113, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #323
+#    ('RINGLET', ((  1, 103260.33884, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #325
+#    ('RINGLET', ((  1, 103340.83908, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #326
+#    ('RINGLET', ((  1, 103448.48530, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #328
+#    ('RINGLET', ((  1, 103452.13918, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #329
+#    ('RINGLET', ((  1, 103536.20766, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #331
+#    ('RINGLET', ((  1, 103772.49882, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #332
+#    ('RINGLET', ((  1, 103778.78296, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #348
+#    ('RINGLET', ((  1, 76457.67497, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #352
+#    ('RINGLET', ((  1, 102303.00173, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #353
+#    ('RINGLET', ((  1, 102305.84060, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#
+#    # #140 - ????
+#    ('RINGLET', ((  1, 75845.19820, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #145 - ????
+#    ('RINGLET', ((  1, 76043.29517, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #153
+#    ('RINGLET', ((  1, 77349.11966, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #162
+#    ('RINGLET', ((  1, 87291.76260, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #176
+#    ('RINGLET', ((  1, 92366.30175, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #177
+#    ('RINGLET', ((  1, 92376.71329, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #178
+#    ('RINGLET', ((  1, 92395.16613, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+#
+#    # #179
+#    ('RINGLET', ((  1, 92452.82163, 0.0000000,   0.0000000,   0.0000000),),
+#                None),
+
+
+    ########################################
+    ### OTHER SORT-OF-CIRCULAR FEATURES  ###
+    ### ringfit_v1.8.Sa025S-RF-V5577.out ###
+    ########################################
+
+    ### A RING ###
+    
+    # 1 - Keeler OEG unpaired
+    ('GAP',     None,
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    
+    # #4, #3 - Encke IEG/OEG
+    ('GAP',     ((  1, 133423.23793, 0.948856, 0.0000000,   0.0000000,   0.0000000),),
+                ((  1, 133744.83759, 0.808255, 0.0000000,   0.0000000,   0.0000000),)),
+
+    # #7 - A ring IER
+    ('RINGLET', ((  1, 122050.07651, 1.135272, 0.0000000,   0.0000000,   0.0000000),),
+                None),
+    
+]
+
+
+#===============================================================================
+#
+# PROFILE INFORMATION
+# 
+# We have various ways to create a model of the rings based on radius and
+# longitude. We can use radial I/F scans, radial occultation scans, or
+# manufacture a model from edge orbit information.
+#
+# Which method to use is controlled by the 'model_source' parameter in
+# rings_config. The options are:
+#
+#    'voyager' - The Voyager I/F profile from IS2_P0001_V01_KM002
+#    'uvis' - A UVIS stellar occulation
+#    'manufacturer' - Manufacture a model using orbit information. This
+#        is only valid if using the french1601 fiducial feature list.
+#
+#===============================================================================
+
+_RINGS_UVIS_OCCULTATION = 'UVIS_HSP_2008_231_BETCEN_I_TAU_01KM'
+
 
 #==============================================================================
 # 
-# RING MODELS
+# RING MODEL UTILITIES
 #
 #==============================================================================
 
+### Curvature ###
+
 def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
+    """Determine if the rings in an image have sufficient curvature."""
+    
     logger = logging.getLogger(_LOGGING_NAME+'.rings_sufficient_curvature')
 
     if rings_config is None:
@@ -217,20 +780,22 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     logger.debug('Distance %.2f is far enough for curvature', dist)
     return True
 
+
+### Fiducial Features ###
+
 def _rings_read_fiducial_features(rings_config):
-    global _RINGS_FIDUCIAL_FEATURES, _RINGS_FIDUCIAL_FEATURES_NAME
+    global _RINGS_FIDUCIAL_FEATURES
     
-    if (len(_RINGS_FIDUCIAL_FEATURES) > 0 and
-        _RINGS_FIDUCIAL_FEATURES_NAME == 
-            rings_config['fiducial_feature_list']):
+    features_name = rings_config['fiducial_feature_list']
+    if features_name in _RINGS_FIDUCIAL_FEATURES:
         return
     
-    _RINGS_FIDUCIAL_FEATURES_NAME = rings_config['fiducial_feature_list']
-    
-    if _RINGS_FIDUCIAL_FEATURES_NAME == 'french93':
-        _RINGS_FIDUCIAL_FEATURES = _RINGS_FIDUCIAL_FEATURES_1993
+    if features_name == 'french93':
+        _RINGS_FIDUCIAL_FEATURES[features_name] = _RINGS_FIDUCIAL_FEATURES_1993
         return
-    elif _RINGS_FIDUCIAL_FEATURES_NAME == 'french1404':
+    
+    if features_name == 'french1404':
+        entries = []
         with open(_RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH, 'r') as fp:
             for line in fp:
                 if line.startswith('Ring         A'):
@@ -243,15 +808,31 @@ def _rings_read_fiducial_features(rings_config):
                 if line[9] != '*': # Circular feature?
                     continue
                 a = float(line[10:21])
-                _RINGS_FIDUCIAL_FEATURES.append((a,0.))
+                entries.append((a,0.))
         
-        _RINGS_FIDUCIAL_FEATURES.sort(key=lambda x:x[0], reverse=True)
-        
+        entries.sort(key=lambda x:x[0], reverse=True)
+        _RINGS_FIDUCIAL_FEATURES[features_name] = entries
         return
 
-    assert False    
-    
+    if features_name == 'french1601':
+        entries = []
+        for entry_type, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+            if inner is not None:
+                assert inner[0][0] == 1 # m=1 mode
+                entries.append((inner[0][1], inner[0][2]))
+            if outer is not None:
+                assert outer[0][0] == 1 # m=1 mode
+                entries.append((outer[0][1], outer[0][2]))
+
+        entries.sort(key=lambda x:x[0], reverse=True)
+        _RINGS_FIDUCIAL_FEATURES[features_name] = entries
+        return
+
+    assert False
+
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
+    """Return a list of fiducial features in the image."""
+    
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
 
     if rings_config is None:
@@ -264,20 +845,36 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
-    
+
     logger.debug('Radii %.2f to %.2f', min_radius, max_radius) 
+
+    margin_pixels = (rings_config['fiducial_feature_margin'] +
+                     max(extend_fov[0], extend_fov[1]))
+    rms_gain = rings_config['fiducial_rms_gain']
+    
+    resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                   astype('float'))
+    min_res = np.min(resolutions)
+    max_res = np.max(resolutions)
+
+    margin_km = margin_pixels * max_res
     
     feature_list = []
-    
-    for fiducial_feature in _RINGS_FIDUCIAL_FEATURES:
-        location, resolution = fiducial_feature
-        if min_radius < location < max_radius:
+
+    features_name = rings_config['fiducial_feature_list']
+    for fiducial_feature in _RINGS_FIDUCIAL_FEATURES[features_name]:
+        location, rms = fiducial_feature
+        if (min_radius+margin_km < location < max_radius-margin_km and
+            rms*rms_gain < min_res):
             feature_list.append(fiducial_feature)
-    
+
     logger.debug('Returning %d fiducial features', len(feature_list))
-    
+
     return feature_list
 
+
+# Given an I/F or occultation profile, blur out the areas that aren't
+# associated with fiducial features.
 
 _RING_VOYAGER_IF_DATA = None
 _RING_UVIS_OCC_DATA = None
@@ -360,6 +957,112 @@ def _compute_ring_radial_data(source, resolution):
     return ret
 
 
+def _make_ephemeris_radii(obs, descr_list):
+    orig_radii = obs.ext_bp.ring_radius('saturn:ring')
+
+    last_radii = orig_radii
+        
+    for descr in descr_list:
+        if len(descr) == 6: # First entry
+            mode, main_a, rms, amp, long_peri, rate_peri = descr
+        else:
+            mode, amp, long_peri, rate_peri = descr
+        
+        last_radii = obs.ext_bp.radial_mode(last_radii.key,
+                                            mode, _RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH, 
+                                            amp, long_peri*oops.RPD, 
+                                            rate_peri*oops.RPD/86400.)
+
+    return last_radii.vals.astype('float')
+
+def _shade_model(model, radii, a, shade_above, radius_width_km):
+    if shade_above:
+        shade_sign = 1.
+    else:
+        shade_sign = -1.
+    shade = 1.-shade_sign*(radii-a)/radius_width_km
+    shade[shade < 0.] = 0.
+    shade[shade > 1.] = 0.
+    
+    return model+shade
+
+def _compute_model_ephemeris(obs, extend_fov, rings_config):
+    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
+    resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                   astype('float'))
+    
+    assert rings_config['fiducial_feature_list'] == 'french1601'
+    
+    min_radius = np.min(radii)
+    max_radius = np.max(radii)
+
+    min_res = np.min(resolutions)
+    
+    radius_width_pix = rings_config['fiducial_ephemeris_width']
+    radius_width_km = radius_width_pix * min_res
+    
+    model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
+                      obs.data.shape[1]+extend_fov[0]*2),
+                     dtype=np.float32)
+
+    # Do gaps first, because gaps might actually have ringlets inside of them.
+    # Then go back and add the ringlets, which might fill in the gpas.
+    for do_type in ['GAP', 'RINGLET']:
+        for entry_type_str, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+            entry_type_list = entry_type_str.split('_')
+            entry_type = entry_type_list[0]
+            if entry_type != do_type:
+                continue
+            if len(entry_type_list) > 1:
+                assert len(entry_type_list) == 3
+                start_date = cspice.utc2et(entry_type_list[1])
+                end_date = cspice.utc2et(entry_type_list[2])
+                if not (start_date <= obs.midtime <= end_date):
+                    continue
+            inner_radii = None
+            outer_radii = None
+            if inner is not None and outer is not None:
+                inner_a = inner[0][1]
+                outer_a = outer[0][1]
+                if (min_radius < inner_a < max_radius or
+                    min_radius < outer_a < max_radius):
+                    inner_radii = _make_ephemeris_radii(obs, inner)
+                    outer_radii = _make_ephemeris_radii(obs, outer)
+            else:
+                if inner is not None:
+                    inner_a = inner[0][1]
+                    if min_radius < inner_a < max_radius:
+                        inner_radii = _make_ephemeris_radii(obs, inner)
+                if outer is not None:
+                    outer_a = outer[0][1]
+                    if min_radius < outer_a < max_radius:
+                        outer_radii = _make_ephemeris_radii(obs, outer)
+            if (inner_radii is not None and outer_radii is not None and
+                entry_type == 'RINGLET'):
+                # We have both edges for a ringlet - just make it solid
+                inner_above = inner_radii >= inner_a
+                outer_below = outer_radii <= outer_a
+                intersect = np.logical_and(inner_above, outer_below)
+                model[intersect] += 1.
+            else:
+                if inner_radii is not None:
+                    shade_above = entry_type == 'RINGLET'
+                    model = _shade_model(model, inner_radii, inner_a, shade_above,
+                                         radius_width_km)
+                if outer_radii is not None:
+                    shade_above = entry_type == 'GAP'
+                    model = _shade_model(model, outer_radii, outer_a, shade_above,
+                                         radius_width_km)
+
+    return model
+
+#===============================================================================
+# 
+# CREATE THE MODEL
+#
+#===============================================================================
+
 def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                        include_body_shadows=False, rings_config=None):
     """Create a model for the rings.
@@ -404,7 +1107,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     if rings_config is None:
         rings_config = RINGS_DEFAULT_CONFIG
         
-    assert rings_config['model_source'] in ('uvis', 'voyager')
+    assert rings_config['model_source'] in ('uvis', 'voyager', 'ephemeris')
     
     metadata = {}
     metadata['shadow_bodies'] = []
@@ -437,30 +1140,34 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             metadata['end_time'] = time.time()
             return None, metadata
     
-    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
-    min_radius = np.min(radii)
-    max_radius = np.max(radii)
+    model_source = rings_config['model_source']
+    if model_source != 'ephemeris':
+        radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+        min_radius = np.min(radii)
+        max_radius = np.max(radii)
+        
+        logger.info('Radii %.2f to %.2f', min_radius, max_radius)
+        
+        if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
+            logger.info('No main rings in image - aborting')
+            metadata['end_time'] = time.time()
+            return None, metadata
     
-    logger.info('Radii %.2f to %.2f', min_radius, max_radius)
+        radii[radii < RINGS_MIN_RADIUS] = 0
+        radii[radii > RINGS_MAX_RADIUS] = 0
+        
+        ret = _compute_ring_radial_data(model_source, 0.) # XXX
+        radial_data, start_radius, end_radius, radial_resolution = ret
     
-    if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
-        logger.info('No main rings in image - aborting')
-        metadata['end_time'] = time.time()
-        return None, metadata
-
-    radii[radii < RINGS_MIN_RADIUS] = 0
-    radii[radii > RINGS_MAX_RADIUS] = 0
+        radii[radii < start_radius] = 0
+        radii[radii > end_radius] = 0
     
-    ret = _compute_ring_radial_data(rings_config['model_source'], 0.) # XXX
-    radial_data, start_radius, end_radius, radial_resolution = ret
-
-    radii[radii < start_radius] = 0
-    radii[radii > end_radius] = 0
-
-    radial_index = np.round((radii-start_radius)/radial_resolution)
-    radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
-    radial_index = radial_index.astype('int')
-    model = radial_data[radial_index]
+        radial_index = np.round((radii-start_radius)/radial_resolution)
+        radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
+        radial_index = radial_index.astype('int')
+        model = radial_data[radial_index]
+    else:
+        model = _compute_model_ephemeris(obs, extend_fov, rings_config)
     
 #    model = ma.masked_equal(model, 0.)
 #    model = ma.masked_equal(model, 10000.)
@@ -592,7 +1299,6 @@ def rings_create_model_from_image(obs):
 #    radial_index = radial_index.astype('int')
 #    model = radial_data[radial_index]
     
-    print np.max(radii), np.max(bp_radii)
     interp = sciinterp.interp1d(radii, radial_scan)
     
     model = interp(bp_radii)
@@ -613,7 +1319,7 @@ def rings_create_model_from_image(obs):
 def rings_generate_longitudes(longitude_start=0.,
                               longitude_end=_RINGS_MAX_LONGITUDE,
                               longitude_resolution=
-                                    RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+                                    _RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
     """Generate a list of longitudes.
     
     The list will be on longitude_resolution boundaries and is guaranteed to
@@ -628,7 +1334,7 @@ def rings_generate_longitudes(longitude_start=0.,
 
 def rings_generate_radii(radius_inner, radius_outer,
                          radius_resolution=
-                             RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION):
+                             _RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION):
     """Generate a list of radii (km)."""
     return np.arange(radius_inner, radius_outer+_RINGS_RADIUS_SLOP,
                      radius_resolution)
@@ -788,9 +1494,9 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
 
 def rings_reproject(
             obs, data=None, offset=None,
-            longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+            longitude_resolution=_RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
             longitude_range=None,
-            radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
+            radius_resolution=_RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
             radius_range=None,
             zoom_amt=_RINGS_DEFAULT_REPRO_ZOOM_AMT,
             zoom_order=_RINGS_DEFAULT_REPRO_ZOOM_ORDER,
@@ -1107,8 +1813,8 @@ def rings_reproject(
     return ret
 
 def rings_mosaic_init(
-        longitude_resolution=RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-        radius_resolution=RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
+        longitude_resolution=_RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+        radius_resolution=_RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
         radius_range=None):
     """Create the data structure for a ring mosaic.
 
