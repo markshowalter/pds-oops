@@ -51,7 +51,7 @@ CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
 
 PYTHON_EXE = os.environ['PYTHON_EXE']
 
-CBMAIN_PY = os.path.join(CB_ROOT, 'cb_main.py')
+CBMAIN_OFFSET_PY = os.path.join(CB_ROOT, 'cb_main_offset.py')
 DISPLAY_OFFSET_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
                                           'display_offset_metadata.py')
 DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',

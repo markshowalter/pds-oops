@@ -345,6 +345,8 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     
     rings_config = RINGS_DEFAULT_CONFIG.copy()
     rings_config['fiducial_feature_threshold'] = 1 # XXX
+    rings_config['fiducial_feature_margin'] = 30 # XXX
+    rings_config['fiducial_ephemeris_width'] = 10 # XXX
     
     try:
         offrepdata.off_metadata = master_find_offset(obs,
@@ -704,7 +706,8 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     
     # The original image and overlaid ring curves
     offrepdispdata.imdisp_offset = ImageDisp([offrepdata.obs.data], canvas_size=(512,512),
-                                             allow_enlarge=True, auto_update=True)
+                                             allow_enlarge=True, auto_update=True,
+                                             parent=frame_toplevel)
 #    offrepdispdata.imdisp_offset.set_image_params(0., 0.00121, 0.5) # XXX - N1557046172_1
     
 

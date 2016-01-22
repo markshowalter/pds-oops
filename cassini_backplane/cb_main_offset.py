@@ -1,5 +1,5 @@
 ###############################################################################
-# cb_main.py
+# cb_main_offset.py
 #
 # The main top-level driver for all of CB.
 ###############################################################################
@@ -20,7 +20,6 @@ import traceback
 import oops.inst.cassini.iss as iss
 import oops
 
-from cb_bootstrap import *
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
@@ -29,40 +28,40 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --force-offset --image-log-console-level none --max-subprocesses 4'
-#     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-log-console-level none --max-subprocesses 4'
+    command_line_str = '--first-image-num 1487299402 --last-image-num 1487302209 --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --force-offset --image-console-level none --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-console-level none --max-subprocesses 4'
 #N1736967486_1
 #N1736967706_1
-#    command_line_str = '''--force-offset --image-log-console-level debug --display-offset-results
+#    command_line_str = '''--force-offset --image-console-level debug --display-offset-results
 #N1760870348_1'''
-#    command_line_str = '--force-offset N1496877261_8 --image-log-console-level debug --profile'
-#    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-log-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
+#    command_line_str = '--force-offset N1496877261_8 --image-console-level debug --profile'
+#    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
-#    command_line_str = 'N1595336241_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
-#    command_line_str = 'N1751425716_1 --force-offset --image-log-console-level debug --display-offset-results' # Smear
-#    command_line_str = 'N1484580522_1 --force-offset --image-log-console-level debug --display-offset-results'
-#    command_line_str = 'N1654250545_1 --force-offset --image-log-console-level debug --display-offset-results' # rings closeup
-#    command_line_str = 'N1477599121_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1588310978_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1600327271_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1608902918_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1624548280_1 --force-offset --image-log-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Smear
+#    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Smear
+#    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results'
+#    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # rings closeup
+#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-    command_line_str = 'N1589083632_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
-#    command_line_str = 'N1591063671_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
-#    command_line_str = 'N1595336241_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
-#    command_line_str = 'N1601009125_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
-#    command_line_str = 'N1625958009_1 --force-offset --image-log-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
     
     command_list = command_line_str.split()
 
 ## XXX Check restrict image list is included in first->last range 
 
 parser = argparse.ArgumentParser(
-    description='Cassini Backplane Main Interface',
+    description='Cassini Backplane Main Interface for Offsets',
     epilog='''Default behavior is to perform an offset pass on all images
-              without associated offset files followed by a bootstrap pass
-              on all images''')
+              without associated offset files''')
 
 def validate_image_name(name):
     valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
@@ -85,14 +84,14 @@ def validate_image_name(name):
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
-            to $(RESULTS_ROOT)/logs/cb_main/<datetime>.log''')
+            to $(RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to the main loop logfile')
 parser.add_argument(
-    '--main-log-console-level', metavar='LEVEL', default='info',
+    '--main-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for the main loop')
 parser.add_argument(
@@ -105,7 +104,7 @@ parser.add_argument(
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
-    '--image-log-console-level', metavar='LEVEL', default='info',
+    '--image-console-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
@@ -146,12 +145,6 @@ parser.add_argument(
 to process''')
 
 # Arguments about the offset process
-parser.add_argument(
-    '--offset', dest='offset', action='store_true', default=True,
-    help='Perform an offset computation pass (default)')
-parser.add_argument(
-    '--no-offset', dest='offset', action='store_false',
-    help='Don\'t perform an offset computation pass')
 parser.add_argument(
     '--force-offset', action='store_true', default=False,
     help='Force offset computation even if the offset file exists')
@@ -202,77 +195,8 @@ parser.add_argument(
     '--no-allow-saturn', dest='allow_saturn', action='store_false',
     help='Do not include saturn in navigation')
 
-# Arguments about the bootstrap process
-parser.add_argument(
-    '--bootstrap', dest='bootstrap', action='store_true', default=True,
-    help='Perform a bootstrap pass (default)')
-parser.add_argument(
-    '--no-bootstrap', dest='bootstrap', action='store_false',
-    help='Don\'t perform a bootstrap pass')
-
 
 arguments = parser.parse_args(command_list)
-
-
-###############################################################################
-#
-# SET UP LOGGING
-#
-###############################################################################
-
-# Set up main loop logging
-main_logfile_level = log_decode_level(arguments.main_logfile_level)
-main_log_console_level = log_decode_level(arguments.main_log_console_level)
-
-# Note the main loop logger is not part of the cb.* name hierarchy.
-main_logger = logging.getLogger('cb_main')
-main_logger.setLevel(log_min_level(main_logfile_level,
-                                   main_log_console_level))
-
-main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '+
-                                   '%(message)s',
-                                   datefmt='%m/%d/%Y %H:%M:%S')
-
-if main_logfile_level is not cb_logging.LOGGING_SUPERCRITICAL:
-    # Only create the logfile is we're actually going to log to it
-    if arguments.main_logfile is not None:
-        main_log_path = arguments.main_logfile
-    else:
-        main_log_path = os.path.join(RESULTS_ROOT, 'logs')
-        if not os.path.exists(main_log_path):
-            os.mkdir(main_log_path)
-        main_log_path = os.path.join(main_log_path, 'cb_main')
-        if not os.path.exists(main_log_path):
-            os.mkdir(main_log_path)
-        main_log_datetime = datetime.now().isoformat()[:-7].replace(':','-')
-        main_log_path = os.path.join(main_log_path, main_log_datetime+'.log')
-    
-    main_log_file_handler = logging.FileHandler(main_log_path)
-    main_log_file_handler.setLevel(main_logfile_level)
-    main_log_file_handler.setFormatter(main_formatter)
-    main_logger.addHandler(main_log_file_handler)
-
-# Always create a console logger so we don't get a 'no handler' error
-main_log_console_handler = logging.StreamHandler()
-main_log_console_handler.setLevel(main_log_console_level)
-main_log_console_handler.setFormatter(main_formatter)
-main_logger.addHandler(main_log_console_handler)
-
-# Set up per-image logging
-_LOGGING_NAME = 'cb.' + __name__
-image_logger = logging.getLogger(_LOGGING_NAME)
-
-image_logfile_level = log_decode_level(arguments.image_logfile_level)
-image_log_console_level = log_decode_level(arguments.image_log_console_level)
-
-cb_logging.log_set_default_level(log_min_level(image_logfile_level,
-                                               image_log_console_level))
-cb_logging.log_set_util_flux_level(logging.CRITICAL)
-
-cb_logging.log_remove_console_handler()
-cb_logging.log_add_console_handler(image_log_console_level)
-
-# The rest of the per-image logging is set up in the main loops
 
 
 ###############################################################################
@@ -354,11 +278,10 @@ def collect_cmd_line(image_path):
     ret += ['--first-image-num', '1']
     ret += ['--last-image-num', '0']
     ret += ['--main-logfile-level', 'none']
-    ret += ['--main-log-console-level', 'none']
+    ret += ['--main-console-level', 'none']
     ret += ['--image-logfile-level', arguments.image_logfile_level]
-    ret += ['--image-log-console-level', 'none']
+    ret += ['--image-console-level', 'none']
     ret += ['--force-offset']
-    ret += ['--no-bootstrap']
     if arguments.profile:
         ret += ['--profile']
     if not arguments.allow_stars:
@@ -407,7 +330,7 @@ def wait_for_all():
 
 ###############################################################################
 #
-# FIRST PASS - PERFORM INDIVIDUAL OFFSETS ON NAC/WAC IMAGES
+# PERFORM INDIVIDUAL OFFSETS ON NAC/WAC IMAGES
 #
 ###############################################################################
 
@@ -436,7 +359,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         main_logger.debug('Processing %s - no offset file', image_path)
 
     if arguments.max_subprocesses:
-        run_and_maybe_wait([PYTHON_EXE, CBMAIN_PY] + 
+        run_and_maybe_wait([PYTHON_EXE, CBMAIN_OFFSET_PY] + 
                            collect_cmd_line(image_path), image_path) 
         return True
 
@@ -548,8 +471,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
 #===============================================================================
 
 if arguments.profile and arguments.max_subprocesses == 0:
-    # Only do image profiling if we're going to do the actual work in this
-    # process
+    # Only do image offset profiling if we're going to do the actual work in 
+    # this process
     pr = cProfile.Profile()
     pr.enable()
 
@@ -557,6 +480,13 @@ if arguments.display_offset_results:
     root = tk.Tk()
     root.withdraw()
 
+main_logger, image_logger = log_setup_main_logging(
+               'cb_main_offset', arguments.main_logfile_level, 
+               arguments.main_console_level, arguments.main_logfile,
+               arguments.image_logfile_level, arguments.image_console_level)
+
+image_logfile_level = log_decode_level(arguments.image_logfile_level)
+    
 force_offset = arguments.force_offset
 redo_offset_error = arguments.offset_redo_error
 
@@ -617,65 +547,62 @@ first_image_number = arguments.first_image_num
 last_image_number = arguments.last_image_num
 
     
-if not arguments.offset:
-    main_logger.info('*** Skipping main offset pass')
-else:
-    start_time = time.time()
-    num_files_processed = 0
-    num_files_skipped = 0
+start_time = time.time()
+num_files_processed = 0
+num_files_skipped = 0
 
-    main_logger.info('')
-    main_logger.info('**********************************')
-    main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
-    main_logger.info('**********************************')
-    main_logger.info('')
-    main_logger.info('Allow stars:  %s', str(arguments.allow_stars))
-    main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
-    main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
-    main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
-    main_logger.info('Offset XY:    %s', str(offset_xy))
-    main_logger.info('')
+main_logger.info('')
+main_logger.info('**********************************')
+main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
+main_logger.info('**********************************')
+main_logger.info('')
+main_logger.info('Allow stars:  %s', str(arguments.allow_stars))
+main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
+main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
+main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
+main_logger.info('Offset XY:    %s', str(offset_xy))
+main_logger.info('')
+
+if arguments.image_full_path:
+    for image_path in arguments.image_full_path:
+        process_offset_one_image(
+                     image_path, 
+                     allow_stars=arguments.allow_stars, 
+                     allow_rings=arguments.allow_rings, 
+                     allow_moons=arguments.allow_moons, 
+                     allow_saturn=arguments.allow_saturn,
+                     offset_xy=offset_xy)
     
-    if arguments.image_full_path:
-        for image_path in arguments.image_full_path:
-            process_offset_one_image(
-                         image_path, 
-                         allow_stars=arguments.allow_stars, 
-                         allow_rings=arguments.allow_rings, 
-                         allow_moons=arguments.allow_moons, 
-                         allow_saturn=arguments.allow_saturn,
-                         offset_xy=offset_xy)
-        
-    if first_image_number <= last_image_number:
-        main_logger.info('*** Image #s %010d - %010d / Camera %s',
-                         first_image_number, last_image_number,
-                         restrict_camera)
-        main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
-        if restrict_image_list is not None:
-            main_logger.info('*** Images restricted to list:')
-            for filename in restrict_image_list:
-                main_logger.info('        %s', filename)
-        for image_path in yield_image_filenames(
-                first_image_number, last_image_number,
-                camera=restrict_camera, restrict_list=restrict_image_list):
-            if process_offset_one_image(
-                            image_path,
-                            allow_stars=arguments.allow_stars, 
-                            allow_rings=arguments.allow_rings, 
-                            allow_moons=arguments.allow_moons, 
-                            allow_saturn=arguments.allow_saturn,
-                            offset_xy=offset_xy):
-                num_files_processed += 1
-            else:
-                num_files_skipped += 1
+if first_image_number <= last_image_number:
+    main_logger.info('*** Image #s %010d - %010d / Camera %s',
+                     first_image_number, last_image_number,
+                     restrict_camera)
+    main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
+    if restrict_image_list is not None:
+        main_logger.info('*** Images restricted to list:')
+        for filename in restrict_image_list:
+            main_logger.info('        %s', filename)
+    for image_path in yield_image_filenames(
+            first_image_number, last_image_number,
+            camera=restrict_camera, restrict_list=restrict_image_list):
+        if process_offset_one_image(
+                        image_path,
+                        allow_stars=arguments.allow_stars, 
+                        allow_rings=arguments.allow_rings, 
+                        allow_moons=arguments.allow_moons, 
+                        allow_saturn=arguments.allow_saturn,
+                        offset_xy=offset_xy):
+            num_files_processed += 1
+        else:
+            num_files_skipped += 1
 
-    wait_for_all()
+wait_for_all()
 
-    end_time = time.time()
-    
-    main_logger.info('Total files processed %d', num_files_processed)
-    main_logger.info('Total files skipped %d', num_files_skipped)
-    main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
+end_time = time.time()
+
+main_logger.info('Total files processed %d', num_files_processed)
+main_logger.info('Total files skipped %d', num_files_skipped)
+main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
 
 if arguments.profile and arguments.max_subprocesses == 0:
     pr.disable()
@@ -685,83 +612,3 @@ if arguments.profile and arguments.max_subprocesses == 0:
     ps.print_stats()
     ps.print_callers()
     main_logger.info('Profile results:\n%s', s.getvalue())
-
-###############################################################################
-#
-# SECOND PASS - PERFORM BOOTSTAPPING
-#
-###############################################################################
-
-def process_bootstrap_one_image(image_path, image_logfile_level):
-    if image_path is None:
-        bootstrap_add_file(None, None,
-                           image_logfile_level=image_logfile_level, 
-                           log_root='cb_main',
-                           redo_bootstrapped=True)
-        return
-    
-    image_filename = file_clean_name(image_path)
-    
-    offset_path = file_img_to_offset_path(image_path)
-    if not os.path.exists(offset_path):
-        main_logger.debug('%s - No offset file', image_filename)
-        return
-
-    metadata = file_read_offset_metadata(image_path)
-
-    if 'error' in metadata:
-        main_logger.info('%s - Skipping due to offset file error', image_filename)
-        return
-         
-    bootstrap_add_file(image_path, metadata, 
-                       image_logfile_level=image_logfile_level, 
-                       log_root='cb_main',
-                       redo_bootstrapped=True)
-
-
-if not arguments.bootstrap:
-    main_logger.info('*** Skipping bootstrap pass')
-else:
-    start_time = time.time()
-
-    if arguments.profile:
-        # Always do boostrap profiling
-        pr = cProfile.Profile()
-        pr.enable()
-    
-    main_logger.info('')
-    main_logger.info('********************************')
-    main_logger.info('*** BEGINNING BOOTSTRAP PASS ***')
-    main_logger.info('********************************')
-    main_logger.info('')
-    
-    if arguments.image_full_path:
-        for image_path in arguments.image_full_path:
-            process_bootstrap_one_image(image_path)
-        
-    if first_image_number <= last_image_number:
-        main_logger.info('*** Image #s %010d - %010d / Camera %s',
-                         first_image_number, last_image_number,
-                         restrict_camera)
-        if restrict_image_list is not None:
-            main_logger.info('*** Images restricted to list:')
-            for filename in restrict_image_list:
-                main_logger.info('        %s', filename)
-        for image_path in yield_image_filenames(
-                first_image_number, last_image_number,
-                camera=restrict_camera, restrict_list=restrict_image_list):
-            process_bootstrap_one_image(image_path, image_logfile_level)
-
-    process_bootstrap_one_image(None, image_logfile_level)
-
-    end_time = time.time()
-    main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
-
-    if arguments.profile:
-        pr.disable()
-        s = StringIO.StringIO()
-        sortby = 'cumulative'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        ps.print_callers()
-        main_logger.info('Profile results:\n%s', s.getvalue())

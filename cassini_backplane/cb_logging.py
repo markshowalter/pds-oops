@@ -4,7 +4,11 @@
 # Routines related to logging.
 ###############################################################################
 
+import datetime
 import logging
+import os
+
+from cb_config import *
 
 _LOG_DEFAULT_LEVEL = logging.INFO
 _LOG_OVERRIDE_BODIES     = None #logging.ERROR
@@ -159,3 +163,63 @@ def log_min_level(level1, level2):
         if level1 == level or level2 == level:
             return level
     return LOGGING_SUPERCRITICAL
+
+
+def log_setup_main_logging(module_name, main_logfile_level, main_console_level, 
+                           main_logfile, image_logfile_level, 
+                           image_console_level):
+    # Set up main loop logging
+    main_logfile_level = log_decode_level(main_logfile_level)
+    main_console_level = log_decode_level(main_console_level)
+    
+    # Note the main loop logger is not part of the cb.* name hierarchy.
+    main_logger = logging.getLogger(module_name)
+    main_logger.setLevel(log_min_level(main_logfile_level,
+                                       main_console_level))
+    
+    main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '+
+                                       '%(message)s',
+                                       datefmt='%m/%d/%Y %H:%M:%S')
+    
+    if main_logfile_level is not LOGGING_SUPERCRITICAL:
+        # Only create the logfile is we're actually going to log to it
+        if main_logfile is not None:
+            main_log_path = main_logfile
+        else:
+            main_log_path = os.path.join(RESULTS_ROOT, 'logs')
+            if not os.path.exists(main_log_path):
+                os.mkdir(main_log_path)
+            main_log_path = os.path.join(main_log_path, module_name)
+            if not os.path.exists(main_log_path):
+                os.mkdir(main_log_path)
+            main_log_datetime = datetime.datetime.now().isoformat()[:-7]
+            main_log_datetime = main_log_datetime.replace(':','-')
+            main_log_path = os.path.join(main_log_path, 
+                                         main_log_datetime+'.log')
+        
+        main_log_file_handler = logging.FileHandler(main_log_path)
+        main_log_file_handler.setLevel(main_logfile_level)
+        main_log_file_handler.setFormatter(main_formatter)
+        main_logger.addHandler(main_log_file_handler)
+    
+    # Always create a console logger so we don't get a 'no handler' error
+    main_log_console_handler = logging.StreamHandler()
+    main_log_console_handler.setLevel(main_console_level)
+    main_log_console_handler.setFormatter(main_formatter)
+    main_logger.addHandler(main_log_console_handler)
+    
+    # Set up per-image logging
+    _LOGGING_NAME = 'cb.' + module_name
+    image_logger = logging.getLogger(_LOGGING_NAME)
+    
+    image_logfile_level = log_decode_level(image_logfile_level)
+    image_log_console_level = log_decode_level(image_console_level)
+    
+    log_set_default_level(log_min_level(image_logfile_level,
+                                        image_console_level))
+    log_set_util_flux_level(logging.CRITICAL)
+    
+    log_remove_console_handler()
+    log_add_console_handler(image_log_console_level)
+
+    return main_logger, image_logger
