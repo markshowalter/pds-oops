@@ -37,13 +37,13 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = [
-                '--recompute-auto-offset',
+#                '--recompute-auto-offset',
 #                 '--image-logfile-level', 'debug',
-                '--image-log-console-level', 'warning',
+                '--image-log-console-level', 'debug',
 #                 '-a',
-#                 '--max-subprocesses', '3',
+                 '--max-subprocesses', '3',
 #                 '--start-obsid', 'ISS_007RI_AZSCNLOPH001_PRIME',
-                '--start-obsid', 'ISS_115RF_FMOVIEEQX001_PRIME',
+#                '--start-obsid', 'ISS_115RF_FMOVIEEQX001_PRIME',
 #                 'ISS_000RI_SATSRCHAP001_PRIME',
 #                 'ISS_007RI_LPHRLFMOV001_PRIME/N1493646036_2',
 #                 'ISS_030RF_FMOVIE001_VIMS',
@@ -84,7 +84,8 @@ if len(cmd_line) == 0:
 #'--no-allow-stars',
 #'--no-allow-moons',
 
-#'ISS_029RF_FMOVIE002_VIMS',
+'ISS_036RF_FMOVIE001_VIMS',
+#'ISS_029RF_FMOVIE001_VIMS/N1538192308_1',
 #'ISS_081RI_FMOVIE106_VIMS',
 #'ISS_075RB_BMOVIE4001_VIMS',
 #'ISS_096RF_FMOVIE004_PRIME',
@@ -406,7 +407,7 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_resolutions = metadata['mean_resolution']
         offrepdata.repro_phase_angles = metadata['mean_phase']
         offrepdata.repro_emission_angles = metadata['mean_emission']
-        offrepdata.repro_incidence_angle = metadata['mean_incidence']
+        offrepdata.repro_incidence_angle = metadata['incidence']
         offrepdata.repro_time = metadata['time']
         
         full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution*oops.RPD)
@@ -421,7 +422,7 @@ def _write_repro_data(offrepdata):
         metadata['mean_resolution'] = offrepdata.repro_resolutions
         metadata['mean_phase'] = offrepdata.repro_phase_angles
         metadata['mean_emission'] = offrepdata.repro_emission_angles
-        metadata['mean_incidence'] = offrepdata.repro_incidence_angle
+        metadata['incidence'] = offrepdata.repro_incidence_angle
         metadata['time'] = offrepdata.repro_time
     
     fring_util.write_repro(offrepdata.repro_path, metadata)
@@ -969,9 +970,9 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     radius = y*options.radius_resolution+options.radius_inner
     offrepdispdata.label_radius.config(text = '%7.3f'%radius)
     offrepdispdata.label_resolution.config(text=('%7.3f'%offrepdispdata.repro_resolutions[x]))
-    offrepdispdata.label_phase.config(text=('%7.3f'%offrepdispdata.repro_phase_angles[x]))
-    offrepdispdata.label_emission.config(text=('%7.3f'%offrepdispdata.repro_emission_angles[x]))
-    offrepdispdata.label_incidence.config(text=('%7.3f'%offrepdispdata.repro_incidence_angle))
+    offrepdispdata.label_phase.config(text=('%7.3f'%(offrepdispdata.repro_phase_angles[x]*oops.DPR)))
+    offrepdispdata.label_emission.config(text=('%7.3f'%(offrepdispdata.repro_emission_angles[x]*oops.DPR)))
+    offrepdispdata.label_incidence.config(text=('%7.3f'%(offrepdispdata.repro_incidence_angle*oops.DPR)))
 
 
 #####################################################################################

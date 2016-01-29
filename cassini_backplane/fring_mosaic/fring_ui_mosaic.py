@@ -19,6 +19,7 @@ import colorsys
 from imgdisp import ImageDisp, FloatEntry
 from Tkinter import *
 from PIL import Image
+import oops
 from cb_rings import *
 
 python_dir = os.path.split(sys.argv[0])[0]
@@ -28,13 +29,13 @@ cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
     cmd_line = ['--verbose',
-                '-a',
+#                '-a',
 #                 'ISS_030RF_FMOVIE001_VIMS',
 #                'ISS_041RF_FMOVIE002_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
-#                'ISS_029RF_FMOVIE002_VIMS',
-#                 '--display-mosaic'
+                'ISS_036RF_FMOVIE001_VIMS',
+                 '--display-mosaic'
 ]
 
 parser = OptionParser()
@@ -150,9 +151,9 @@ def make_mosaic(mosaicdata, option_no, option_no_update, option_recompute):
     
     print 'Making mosaic for', mosaicdata.obsid
     
-    mosaic_metadata = rings_mosaic_init(options.longitude_resolution * oops.RPD,
-                                        options.radius_resolution,
-                                        options.radius_inner, options.radius_outer)
+    mosaic_metadata = rings_mosaic_init((options.radius_inner, options.radius_outer),
+                                        options.longitude_resolution * oops.RPD,
+                                        options.radius_resolution)
 
     for i, repro_path in enumerate(mosaicdata.repro_path_list):
         repro_metadata = fring_util.read_repro(repro_path)
@@ -240,8 +241,6 @@ def command_refresh_color(mosaicdata, mosaicdispdata):
     if minval is None:
         minval = np.min(valsrc[np.where(mosaicdata.longitudes >= 0.)[0]])
         maxval = np.max(valsrc[np.where(mosaicdata.longitudes >= 0.)[0]])
-    
-    print minval, maxval
     
     color_data = np.zeros((mosaicdata.longitudes.shape[0], 3))
 
@@ -406,14 +405,14 @@ def callback_move_mosaic(x, y, mosaicdata):
         mosaicdispdata.label_obsid.config(text='')
         mosaicdispdata.label_date.config(text='')
     else:
-        mosaicdispdata.label_inertial_longitude.config(text=('%7.3f'%rings_fring_corotating_to_inertial(mosaicdata.longitudes[x],
-                                                                                                   mosaicdata.ETs[x])))
-        mosaicdispdata.label_longitude.config(text=('%7.3f'%mosaicdata.longitudes[x]))
+        mosaicdispdata.label_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(mosaicdata.longitudes[x],
+                                                                                                   mosaicdata.ETs[x])*oops.DPR)))
+        mosaicdispdata.label_longitude.config(text=('%7.3f'%(mosaicdata.longitudes[x]*oops.DPR)))
 #        radius = mosaic.IndexToRadius(y, options.radius_resolution)
 #        mosaicdispdata.label_radius.config(text = '%7.3f'%radius)
-        mosaicdispdata.label_phase.config(text=('%7.3f'%mosaicdata.phase_angles[x]))
-        mosaicdispdata.label_incidence.config(text=('%7.3f'%mosaicdata.incidence_angle))
-        mosaicdispdata.label_emission.config(text=('%7.3f'%mosaicdata.emission_angles[x]))
+        mosaicdispdata.label_phase.config(text=('%7.3f'%(mosaicdata.phase_angles[x]*oops.DPR)))
+        mosaicdispdata.label_incidence.config(text=('%7.3f'%(mosaicdata.incidence_angle*oops.DPR)))
+        mosaicdispdata.label_emission.config(text=('%7.3f'%(mosaicdata.emission_angles[x]*oops.DPR)))
         mosaicdispdata.label_resolution.config(text=('%7.3f'%mosaicdata.resolutions[x]))
         mosaicdispdata.label_image.config(text=mosaicdata.image_name_list[mosaicdata.image_numbers[x]])
         mosaicdispdata.label_obsid.config(text=mosaicdata.obsid_list[mosaicdata.image_numbers[x]])

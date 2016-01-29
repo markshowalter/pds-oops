@@ -97,8 +97,8 @@ def get_file_status(guidata):
             offrepstatus.offset_status = '--'
             offrepstatus.offset_mtime = 1e38
 
-        if os.path.exists(offrepstatus.repro_path):
-            offrepstatus.repro_mtime = os.stat(offrepstatus.repro_path).st_mtime
+        if os.path.exists(offrepstatus.repro_path+'.pickle'):
+            offrepstatus.repro_mtime = os.stat(offrepstatus.repro_path+'.pickle').st_mtime
             if not os.path.exists(offrepstatus.offset_path):
                 offrepstatus.repro_status = 'r'
             elif offrepstatus.offset_mtime > offrepstatus.repro_mtime:

@@ -56,8 +56,8 @@ _RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5. # KM
 _RINGS_DEFAULT_REPRO_ZOOM_AMT = 5
 _RINGS_DEFAULT_REPRO_ZOOM_ORDER = 3
 
-_RINGS_LONGITUDE_SLOP = 1e-6 # Must be smaller than any longitude or radius
-_RINGS_RADIUS_SLOP    = 1e-6 # resolution we will be using
+_RINGS_LONGITUDE_SLOP = 1e-6 * oops.RPD  # Must be smaller than any longitude 
+_RINGS_RADIUS_SLOP    = 1e-6             # or radius resolution we'll be using
 _RINGS_MAX_LONGITUDE  = oops.TWOPI-_RINGS_LONGITUDE_SLOP*2
 
 # These are bodies that might cast shadows on the ring plane near equinox
@@ -96,46 +96,46 @@ _RINGS_FIDUCIAL_FEATURES = {}
 # occultation of 28 SGR and Voyager observations
 _RINGS_FIDUCIAL_FEATURES_FRENCH1993 = [
     # A RING
-    (136552.0, 0.),         # Keeler Gap OEG
-    (133745.2, 0.),         # Encke Gap OEG
-    (133423.5, 0.),         # Encke Gap IEG XXX
-    (122052.5, 0.),         # A Ring IER
-    (120245.0, 0.),         # 1.994 Rs ringlet IER
-    (120076.3, 0.),         # 1.990 Rs ringlet OER
-    (118968.3, 0.),         # OEG
-    (118629.1, 0.),         # OEG
-    (118283.9, 0.),         # OEG
-    (117932.2, 0.),         # OEG
+    ('X', 136552.0, 0.),         # Keeler Gap OEG
+    ('X', 133745.2, 0.),         # Encke Gap OEG
+    ('X', 133423.5, 0.),         # Encke Gap IEG XXX
+    ('X', 122052.5, 0.),         # A Ring IER
+    ('X', 120245.0, 0.),         # 1.994 Rs ringlet IER
+    ('X', 120076.3, 0.),         # 1.990 Rs ringlet OER
+    ('X', 118968.3, 0.),         # OEG
+    ('X', 118629.1, 0.),         # OEG
+    ('X', 118283.9, 0.),         # OEG
+    ('X', 117932.2, 0.),         # OEG
     # B RING
-    (104083.4, 0.),         # OEG
-    (103673.2, 0.),         # IEG
-    (101549.3, 0.),         # IEG
-    (101009.7, 0.),         # IEG
-    ( 98287.2, 0.),         # OER
-    ( 96899.6, 0.),         # IEG
-    ( 95358.3, 0.),         # B Ring flat spot OEG
-    ( 94444.1, 0.),         # B Ring flat spot IEG
+    ('X', 104083.4, 0.),         # OEG
+    ('X', 103673.2, 0.),         # IEG
+    ('X', 101549.3, 0.),         # IEG
+    ('X', 101009.7, 0.),         # IEG
+    ('X',  98287.2, 0.),         # OER
+    ('X',  96899.6, 0.),         # IEG
+    ('X',  95358.3, 0.),         # B Ring flat spot OEG
+    ('X',  94444.1, 0.),         # B Ring flat spot IEG
     # C RING
-    ( 90614.9, 0.),         # OER
-    ( 90405.7, 0.),         # IER
-    ( 89938.8, 0.),         # OER
-    ( 89788.3, 0.),         # IER
-    ( 89295.3, 0.),         # OER
-    ( 89190.4, 0.),         # IER
-    ( 88594.3, 0.),         # OER
-    ( 86602.4, 0.),         # OER
-    ( 86371.9, 0.),         # IER
-    ( 85923.6, 0.),         # IER
-    ( 85758.7, 0.),         # OER
-    ( 85661.5, 0.),         # IER
-    ( 84949.2, 0.),         # OER
-    ( 84750.3, 0.),         # IER
-    ( 82041.6, 0.),         # COR
-    ( 79265.1, 0.),         # OER
-    ( 79221.0, 0.),         # IER
-    ( 77164.4, 0.),         # OER
-    ( 76262.9, 0.),         # OER
-    ( 74490.0, 0.),         # C Ring IER    
+    ('X',  90614.9, 0.),         # OER
+    ('X',  90405.7, 0.),         # IER
+    ('X',  89938.8, 0.),         # OER
+    ('X',  89788.3, 0.),         # IER
+    ('X',  89295.3, 0.),         # OER
+    ('X',  89190.4, 0.),         # IER
+    ('X',  88594.3, 0.),         # OER
+    ('X',  86602.4, 0.),         # OER
+    ('X',  86371.9, 0.),         # IER
+    ('X',  85923.6, 0.),         # IER
+    ('X',  85758.7, 0.),         # OER
+    ('X',  85661.5, 0.),         # IER
+    ('X',  84949.2, 0.),         # OER
+    ('X',  84750.3, 0.),         # IER
+    ('X',  82041.6, 0.),         # COR
+    ('X',  79265.1, 0.),         # OER
+    ('X',  79221.0, 0.),         # IER
+    ('X',  77164.4, 0.),         # OER
+    ('X',  76262.9, 0.),         # OER
+    ('X',  74490.0, 0.),         # C Ring IER    
 ]
 
 _RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH = os.path.join(
@@ -363,12 +363,18 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ### A RING OUTER EDGE - Moutamid, et al. Icarus (TBD) XXX ###
     #################################################################                               
 
+    # These also include the Keeler OEG to make a solid ringlet
+    # Keeler OEG -> A Ring OER
+    # See below
+    
     # 2005 MAY 1 - 2005 AUG 1
-    ('RINGLET_2005-MAY-1_2005-AUG-1', None,
+    ('RINGLET_2005-MAY-1_2005-AUG-1',
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136767.20, 7.55,  0.00,   0.00,    0.00000),)),
 
     # 2006 JAN 1 - 2009 JULY 1
-    ('RINGLET_2006-JAN-1_2009-JULY-1', None,
+    ('RINGLET_2006-JAN-1_2009-JULY-1',
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),     
                 ((  1, 136770.09, 1.78,  0.00,   0.00,    0.00000),
                  (  3,                   2.28,   8.31,  403.85329),
                  (  4,                   1.80,   6.64,  453.94649),
@@ -381,10 +387,29 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( 18,                   1.95,   4.62,  570.85163))),
 
     # 2010 JAN 1 - 2013 AUG 1
-    ('RINGLET_2010-JAN-1_2013-AUG-1', None,
+    ('RINGLET_2010-JAN-1_2013-AUG-1',
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136772.74, 4.25,  0.00,   0.00,    0.00000),
                  (  9,                   6.14,  27.17,  537.45029),
                  ( 12,                   7.94,  12.84,  554.11853))),
+
+    # Fill in the other dates, when the Keeler gap edge is OK but the A ring edge
+    # isn't.
+    ('GAP_1990-JAN-1_2005-MAY-1', # Before 2005-MAY-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                None),
+                                       
+    ('GAP_2005-AUG-1_2006-JAN-1', # Between 2005-AUG-1 and 2006-JAN-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                None),
+
+    ('GAP_2009-JULY-1_2010-JAN-1', # Between 2009-JULY-1 and 2010-JAN-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                None),
+
+    ('GAP_2013-AUG-1_2030-JAN-1', # After 2013-AUG-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                None),
 
     ########################################
     ### OTHER SORT-OF-CIRCULAR FEATURES  ###
@@ -643,8 +668,14 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ### A RING ###
     
     # 1 - Keeler OEG unpaired
-    ('GAP',     None,
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    # This is paired with the A ring outer edge above
+
+    # Keeler IEG. Note this would normally be paired with the Keeler OEG above,
+    # but it's better to call the area between the OEG and the A ring OER a
+    # ringlet so it gets filled in in the model.
+    # From Dec 2013 CMF-V4687
+    ('GAP',     ((  1, 136484.91000, 3.620000, 0.0000000,   0.0000000,   0.0000000),),
+                None),
     
     # #4, #3 - Encke IEG/OEG
     ('GAP',     ((  1, 133423.23793, 0.948856, 0.0000000,   0.0000000,   0.0000000),),
@@ -653,6 +684,7 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # #7 - A ring IER
     ('RINGLET', ((  1, 122050.07651, 1.135272, 0.0000000,   0.0000000,   0.0000000),),
                 None),
+
     
 ]
 
@@ -808,7 +840,7 @@ def _rings_read_fiducial_features(rings_config):
                 if line[9] != '*': # Circular feature?
                     continue
                 a = float(line[10:21])
-                entries.append((a,0.))
+                entries.append(('X', a, 0.))
         
         entries.sort(key=lambda x:x[0], reverse=True)
         _RINGS_FIDUCIAL_FEATURES[features_name] = entries
@@ -816,13 +848,13 @@ def _rings_read_fiducial_features(rings_config):
 
     if features_name == 'french1601':
         entries = []
-        for entry_type, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+        for entry_type_str, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
             if inner is not None:
                 assert inner[0][0] == 1 # m=1 mode
-                entries.append((inner[0][1], inner[0][2]))
+                entries.append((entry_type_str, inner[0][1], inner[0][2]))
             if outer is not None:
                 assert outer[0][0] == 1 # m=1 mode
-                entries.append((outer[0][1], outer[0][2]))
+                entries.append((entry_type_str, outer[0][1], outer[0][2]))
 
         entries.sort(key=lambda x:x[0], reverse=True)
         _RINGS_FIDUCIAL_FEATURES[features_name] = entries
@@ -863,7 +895,14 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
 
     features_name = rings_config['fiducial_feature_list']
     for fiducial_feature in _RINGS_FIDUCIAL_FEATURES[features_name]:
-        location, rms = fiducial_feature
+        entry_type_str, location, rms = fiducial_feature
+        entry_type_list = entry_type_str.split('_')
+        if len(entry_type_list) > 1:
+            assert len(entry_type_list) == 3
+            start_date = cspice.utc2et(entry_type_list[1])
+            end_date = cspice.utc2et(entry_type_list[2])
+            if not (start_date < obs.midtime < end_date):
+                continue
         if (min_radius+margin_km < location < max_radius-margin_km and
             rms*rms_gain < min_res):
             feature_list.append(fiducial_feature)
@@ -992,7 +1031,8 @@ def _compute_model_ephemeris(obs, extend_fov, rings_config):
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
     
-    assert rings_config['fiducial_feature_list'] == 'french1601'
+    features_name = rings_config['fiducial_feature_list']
+    assert features_name == 'french1601'
     
     min_radius = np.min(radii)
     max_radius = np.max(radii)
@@ -1018,10 +1058,18 @@ def _compute_model_ephemeris(obs, extend_fov, rings_config):
                 assert len(entry_type_list) == 3
                 start_date = cspice.utc2et(entry_type_list[1])
                 end_date = cspice.utc2et(entry_type_list[2])
-                if not (start_date <= obs.midtime <= end_date):
+                if not (start_date < obs.midtime < end_date):
                     continue
+            if (inner is not None and
+                (entry_type_str, inner[0][1], inner[0][2]) not in 
+                _RINGS_FIDUCIAL_FEATURES[features_name]):
+                inner = None
+            if (outer is not None and
+                (entry_type_str, outer[0][1], outer[0][2]) not in 
+                _RINGS_FIDUCIAL_FEATURES[features_name]):
+                outer = None
             inner_radii = None
-            outer_radii = None
+            outer_radii = None                     
             if inner is not None and outer is not None:
                 inner_a = inner[0][1]
                 outer_a = outer[0][1]
@@ -1277,9 +1325,8 @@ def rings_create_model_from_image(obs):
             longitude_range=(min_longitude,max_longitude),
             longitude_resolution=longitude_resolution,
 #            zoom_amt=1,
-            compress_longitude=False,
             omit_saturns_shadow=False,
-            data_only=True,
+            image_only=True,
             mask_fill_value=None)
     
     reproj_img = reproj['img']
@@ -1505,7 +1552,7 @@ def rings_reproject(
             compress_longitude=True,
             mask_fill_value=0.,
             omit_saturns_shadow=True,
-            data_only=False):
+            image_only=False):
     """Reproject the rings in an image into a rectangular longitude/radius
     space.
     
@@ -1540,8 +1587,8 @@ def rings_reproject(
                                  leave the values masked.
         omit_saturns_shadow      True to mask out pixels that are in Saturn's
                                  shadow.
-        data_only                True to only include pixel data. False to
-                                 also include incidence, emission, phase,
+        image_only               True to only include image pixel data. False 
+                                 to also include incidence, emission, phase,
                                  and resolution.
                                  
     Returns:
@@ -1564,18 +1611,16 @@ def rings_reproject(
         'resolution'           The radial resolution [radius,longitude].
         'phase'                The phase angle [radius,longitude].
         'emission'             The emission angle [radius,longitude].
-        'incidence'            The incidence angle [radius,longitude].
+        'incidence'            The incidence angle. Note this is a scalar
+                               because it doesn't change over the ring plane.
         'mean_resolution'      The radial resolution averaged over all radii
                                [longitude].
         'mean_phase'           The phase angle averaged over all radii 
                                [longitude].
         'mean_emission'        The emission angle averaged over all radii
                                [longitude].
-        'mean_incidence'       The incidence angle averaged over all radii AND
-                               longitudes (it shouldn't change over the ring 
-                               plane).
         
-        Note that the image data is taken from the zoomed, interpolated image,
+        The image data is taken from the zoomed, interpolated image,
         while the incidence, emission, phase, and resolution are taken from
         the original non-interpolated data and thus will be slightly more
         coarse-grained.
@@ -1587,6 +1632,8 @@ def rings_reproject(
     if data is None:
         data = obs.data
     
+    # Radius defaults to the entire main rings
+    # Longitude defaults to the entire circle
     if radius_range is None:
         radius_inner = RINGS_MIN_RADIUS
         radius_outer = RINGS_MAX_RADIUS
@@ -1599,6 +1646,7 @@ def rings_reproject(
     else:
         longitude_start, longitude_end = longitude_range
 
+    # Offset the image if we can
     orig_fov = None
     if offset is not None and offset != (0,0):
         # We need to be careful not to use obs.bp from this point forward
@@ -1606,7 +1654,7 @@ def rings_reproject(
         orig_fov = obs.fov
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
     
-    # Get all the info for each pixel
+    # Get all the info for each pixel, restricted to uv_range if provided
     meshgrid = None
     start_u = 0
     end_u = data.shape[1]-1
@@ -1620,6 +1668,8 @@ def rings_reproject(
 
     if orig_fov is None and meshgrid is None:
         # No offset and no uv_range means it's safe to use the normal Backplane
+        # We would prefer to do this for performance since it might already be
+        # cached
         set_obs_bp(obs)
         bp = obs.bp
     else:
@@ -1628,50 +1678,67 @@ def rings_reproject(
     bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
     bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float')
     
-    if not data_only: 
+    if not image_only: 
         bp_resolution = (bp.ring_radial_resolution('saturn:ring')
                          .vals.astype('float'))
         bp_phase = bp.phase_angle('saturn:ring').vals.astype('float')
         bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
         bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float')
 
+    # Clear out any pixels in Saturn's shadow
     if omit_saturns_shadow:
         saturn_shadow = bp.where_inside_shadow('saturn:ring','saturn').vals
         data = data.copy()
         data[saturn_shadow] = 0
-    
-    # The number of pixels in the final reprojection
-    radius_pixels = int(np.ceil((radius_outer-radius_inner+
-                                 _RINGS_RADIUS_SLOP) / radius_resolution))
-#    longitude_pixels = int(np.ceil((longitude_end-longitude_start+
-#                                    _RINGS_LONGITUDE_SLOP) /
-#                                   longitude_resolution))
-    longitude_start_pixel = int(longitude_start / longitude_resolution)
 
+    # Deal with co-rotating longitudes
     if corotating == 'F':
-        # Convert longitude to co-rotating
         bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
                                                           obs.midtime)
     
-    # Restrict the longitude range for some attempt at efficiency.
-    # This fails to be efficient if the longitude range wraps around.
-    min_longitude_pixel = (np.floor(max(longitude_start, np.min(bp_longitude))/ 
-                                    longitude_resolution)).astype('int')
-#    min_longitude_pixel = np.clip(min_longitude_pixel, 0, longitude_pixels-1)
-    max_longitude_pixel = (np.ceil(min(longitude_end, np.max(bp_longitude)) / 
-                                   longitude_resolution)).astype('int')
-#    max_longitude_pixel = np.clip(max_longitude_pixel, 0, longitude_pixels-1)
-    num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
-    longitude_pixels = num_longitude_pixel # XXX
-    
-    # Longitude bin numbers
-    long_bins = np.tile(np.arange(num_longitude_pixel), radius_pixels)
-    # Actual longitude for each bin (deg)
-    long_bins_act = (long_bins * longitude_resolution + 
-                     min_longitude_pixel * longitude_resolution)
+    # The number of pixels in the final reprojection in the radial direction
+    radius_pixels = int(np.ceil((radius_outer-radius_inner+
+                                 _RINGS_RADIUS_SLOP) / radius_resolution))
 
+    # The total number of pixels in the longitude direction if the whole ring
+    # (or at least the ring longitudes specified by the caller) is visible
+    full_min_longitude_pixel = (np.floor(longitude_start /
+                                         longitude_resolution)).astype('int')
+    full_max_longitude_pixel = (np.floor(longitude_end / 
+                                         longitude_resolution)).astype('int')
+    full_longitude_pixels = (full_max_longitude_pixel - 
+                             full_min_longitude_pixel + 1)
+    
+    # The longitudes restricted to the user-supplied range, if any
+    restr_bp_longitude = bp_longitude[
+              np.logical_and(bp_longitude >= longitude_start,
+                             bp_longitude <= longitude_end)]
+    
+    # The bin numbers for each longitude in the image
+    bp_longitude_binned = np.floor((restr_bp_longitude-longitude_start) / 
+                                   longitude_resolution).astype('int')
+                                   
+    # Mark which longitude bins are going to be used - True if that longitude
+    # exists in the image
+    full_good_long_bins_mask = np.zeros(full_longitude_pixels, dtype=np.bool)
+    full_good_long_bins_mask[bp_longitude_binned] = True
+
+    # Longitude bin numbers before we limit to what's actually in the image
+    full_long_bins = np.arange(full_longitude_pixels)
+     
+    # The actual set of longitude bins we're going to use
+    long_bins_restr = full_long_bins[full_good_long_bins_mask]
+    longitude_pixels = len(long_bins_restr)
+    
+    # The bin numbers go from 0->N-1, but the actual bin values
+    # are taken sparesly form the complete set 0->2PI based on what longitudes
+    # are in the image
+    long_bins = np.tile(np.arange(longitude_pixels), radius_pixels) 
+    long_bins_act = (np.tile(long_bins_restr, radius_pixels) * 
+                     longitude_resolution + longitude_start)
+        
     # Radius bin numbers
-    rad_bins = np.repeat(np.arange(radius_pixels), num_longitude_pixel)
+    rad_bins = np.repeat(np.arange(radius_pixels), longitude_pixels)
     # Actual radius for each bin (km)
     if corotating == 'F':
         rad_bins_offset = rings_fring_radius_at_longitude(obs,
@@ -1689,13 +1756,11 @@ def rings_reproject(
                  np.max(bp_radius))
     logger.debug('Radius bin range %8.2f %8.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))
-    logger.info('Longitude range %6.2f %6.2f', 
-                 np.min(bp_longitude)*oops.DPR, 
-                 np.max(bp_longitude)*oops.DPR)
     logger.debug('Longitude bin range %6.2f %6.2f', 
                  np.min(long_bins_act)*oops.DPR,
                  np.max(long_bins_act)*oops.DPR)
-    if not data_only:
+    logger.debug('Number of longitude bins %d', longitude_pixels)
+    if not image_only:
         logger.info('Resolution range %7.2f %7.2f', np.min(bp_resolution),
                      np.max(bp_resolution))
     logger.debug('Data range %f %f', np.min(data), np.max(data))
@@ -1725,69 +1790,57 @@ def rings_reproject(
     v_pixels = v_pixels[goodmask].astype('int') - start_v
     u_zoom = u_zoom[goodmask]
     v_zoom = v_zoom[goodmask]
-    good_rad = rad_bins[goodmask]
-    good_long = long_bins[goodmask]
+    good_rad_bins = rad_bins[goodmask]
+    good_long_bins = long_bins[goodmask]
     
     interp_data = zoom_data[v_zoom, u_zoom]
     
     # Create the reprojected results.
     repro_img = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
     repro_img.mask = True
-    repro_img[good_rad,good_long] = interp_data
+    repro_img[good_rad_bins,good_long_bins] = interp_data
 
-    if data_only:
-        # Mean will mask if ALL radii are masked are a particular longitude
-        # We should do this more efficiently using operations on the mask itself
-        good_long_mask = np.logical_not(ma.getmaskarray(ma.mean(repro_img, axis=0)))
-    else:
-        repro_res = ma.zeros((radius_pixels, longitude_pixels), dtype=np.float32)
-        repro_res.mask = True
-        repro_res[good_rad,good_long] = bp_resolution[v_pixels,u_pixels]
-        repro_mean_res = ma.mean(repro_res, axis=0)
-        # Mean will mask if ALL radii are masked are a particular longitude
+    # Mean will mask if ALL radii are masked at a particular longitude
+    # We should do this more efficiently using operations on the mask 
+    # itself
+    good_long_bins_mask = np.logical_not(ma.getmaskarray(ma.mean(repro_img,
+                                                                 axis=0)))
     
-        # All interpolated data should be masked the same, so we might as well
-        # take one we've already computed.
-        good_long_mask = np.logical_not(ma.getmaskarray(repro_mean_res))
+    repro_img = repro_img[:,good_long_bins_mask]
 
-    if not data_only:
+    if not image_only:
+        repro_res = ma.zeros((radius_pixels, longitude_pixels), 
+                             dtype=np.float32)
+        repro_res.mask = True
+        repro_res[good_rad_bins,good_long_bins] = bp_resolution[v_pixels,
+                                                                u_pixels]
+
+        repro_res = repro_res[:,good_long_bins_mask]
+        repro_mean_res = ma.mean(repro_res, axis=0)
+
         repro_phase = ma.zeros((radius_pixels, longitude_pixels), 
                                dtype=np.float32)
         repro_phase.mask = True
-        repro_phase[good_rad,good_long] = bp_phase[v_pixels,u_pixels]
+        repro_phase[good_rad_bins,good_long_bins] = bp_phase[v_pixels,u_pixels]
+        repro_phase = repro_phase[:,good_long_bins_mask] 
         repro_mean_phase = ma.mean(repro_phase, axis=0)
     
         repro_emission = ma.zeros((radius_pixels, longitude_pixels), 
                                   dtype=np.float32)
         repro_emission.mask = True
-        repro_emission[good_rad,good_long] = bp_emission[v_pixels,u_pixels]
+        repro_emission[good_rad_bins,good_long_bins] = bp_emission[v_pixels,
+                                                                   u_pixels]
+        repro_emission = repro_emission[:,good_long_bins_mask]
         repro_mean_emission = ma.mean(repro_emission, axis=0)
     
-        repro_incidence = ma.zeros((radius_pixels, longitude_pixels), 
-                                   dtype=np.float32)
-        repro_incidence.mask = True
-        repro_incidence[good_rad,good_long] = bp_incidence[v_pixels,u_pixels]
-        repro_mean_incidence = ma.mean(repro_incidence) # scalar
+        repro_incidence = ma.mean(bp_incidence[v_pixels,u_pixels])
 
-    if compress_longitude:
-        repro_img = repro_img[:,good_long_mask]
-        if not data_only:
-            repro_res = repro_res[:,good_long_mask]
-            repro_phase = repro_phase[:,good_long_mask]
-            repro_emission = repro_emission[:,good_long_mask]
-            repro_incidence = repro_incidence[:,good_long_mask]
-    
-            repro_mean_res = repro_mean_res[good_long_mask]
-            repro_mean_phase = repro_mean_phase[good_long_mask]
-            repro_mean_emission = repro_mean_emission[good_long_mask]
-    
-            assert ma.count_masked(repro_mean_res) == 0
-            assert ma.count_masked(repro_mean_phase) == 0
-            assert ma.count_masked(repro_mean_emission) == 0
+    new_full_good_long_bins_mask = np.zeros(full_longitude_pixels, dtype=np.bool)
+    new_full_good_long_bins_mask[long_bins_restr[good_long_bins_mask]] = True
 
     if mask_fill_value is not None:
         repro_img = ma.filled(repro_img, mask_fill_value)
-        if not data_only:
+        if not image_only:
             repro_res = ma.filled(repro_res, mask_fill_value)
             repro_phase = ma.filled(repro_phase, mask_fill_value)
             repro_emission = ma.filled(repro_emission, mask_fill_value)
@@ -1798,9 +1851,9 @@ def rings_reproject(
 
     ret = {}    
     ret['time'] = obs.midtime
-    ret['long_mask'] = good_long_mask
+    ret['long_mask'] = new_full_good_long_bins_mask
     ret['img'] = repro_img
-    if not data_only:
+    if not image_only:
         ret['resolution'] = repro_res
         ret['phase'] = repro_phase
         ret['emission'] = repro_emission
@@ -1808,14 +1861,13 @@ def rings_reproject(
         ret['mean_resolution'] = repro_mean_res
         ret['mean_phase'] = repro_mean_phase
         ret['mean_emission'] = repro_mean_emission
-        ret['mean_incidence'] = repro_mean_incidence
     
     return ret
 
 def rings_mosaic_init(
+        radius_range,
         longitude_resolution=_RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
-        radius_resolution=_RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION,
-        radius_range=None):
+        radius_resolution=_RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION):
     """Create the data structure for a ring mosaic.
 
     Inputs:
@@ -1841,6 +1893,9 @@ def rings_mosaic_init(
                                  used to fill the data for each longitude.
         'time'                   The per-longitude time (TDB).
     """
+    if radius_range is None:
+        radius_inner = _RINGS
+    radius_inner, radius_outer = radius_range
     radius_pixels = int(np.ceil((radius_outer-radius_inner+_RINGS_RADIUS_SLOP) / 
                                 radius_resolution))
     longitude_pixels = int(oops.TWOPI / longitude_resolution)
@@ -1864,7 +1919,7 @@ def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     mosaic if it has more valid radial data, or the same amount of radial
     data but the resolution is better.
     """
-    mosaic_metadata['mean_incidence'] = repro_metadata['mean_incidence']
+    mosaic_metadata['mean_incidence'] = repro_metadata['incidence']
     
     radius_pixels = mosaic_metadata['img'].shape[0]
     repro_good_long = repro_metadata['long_mask']
@@ -1885,6 +1940,7 @@ def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     repro_emission = np.zeros(mosaic_emission.shape)
     repro_emission[repro_good_long] = repro_metadata['mean_emission']
     mosaic_image_number = mosaic_metadata['image_number']
+    image_time = repro_metadata['time']
     mosaic_time = mosaic_metadata['time']
     
     # Calculate the number of good entries and where the number is larger than
@@ -1908,4 +1964,6 @@ def rings_mosaic_add(mosaic_metadata, repro_metadata, image_number):
     mosaic_res[good_longitude_mask] = repro_res[good_longitude_mask] 
     mosaic_phase[good_longitude_mask] = repro_phase[good_longitude_mask] 
     mosaic_emission[good_longitude_mask] = repro_emission[good_longitude_mask] 
-    mosaic_image_number[good_longitude_mask] = image_number 
+    mosaic_image_number[good_longitude_mask] = image_number
+    mosaic_time[good_longitude_mask] = image_time
+
