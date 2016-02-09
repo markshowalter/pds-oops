@@ -213,13 +213,13 @@ def log_setup_main_logging(module_name, main_logfile_level, main_console_level,
     image_logger = logging.getLogger(_LOGGING_NAME)
     
     image_logfile_level = log_decode_level(image_logfile_level)
-    image_log_console_level = log_decode_level(image_console_level)
+    image_console_level = log_decode_level(image_console_level)
     
     log_set_default_level(log_min_level(image_logfile_level,
                                         image_console_level))
     log_set_util_flux_level(logging.CRITICAL)
     
     log_remove_console_handler()
-    log_add_console_handler(image_log_console_level)
+    log_add_console_handler(image_console_level)
 
     return main_logger, image_logger

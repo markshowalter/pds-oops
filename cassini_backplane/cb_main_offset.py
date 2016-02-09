@@ -28,7 +28,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--first-image-num 1487299402 --last-image-num 1487302209 --max-subprocesses 4'
+#     command_line_str = '--first-image-num 1487299402 --last-image-num 1487302209 --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --force-offset --image-console-level none --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-console-level none --max-subprocesses 4'
 #N1736967486_1
@@ -52,7 +52,10 @@ if len(command_list) == 0:
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
-#    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#     command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # Bad star match
+#     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # Bad star match
+#     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring anti-alias
     
     command_list = command_line_str.split()
 

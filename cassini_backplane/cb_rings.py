@@ -396,20 +396,20 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # Fill in the other dates, when the Keeler gap edge is OK but the A ring edge
     # isn't.
     ('GAP_1990-JAN-1_2005-MAY-1', # Before 2005-MAY-1
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
-                None),
+                None,
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
                                        
     ('GAP_2005-AUG-1_2006-JAN-1', # Between 2005-AUG-1 and 2006-JAN-1
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
-                None),
+                None,
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
     ('GAP_2009-JULY-1_2010-JAN-1', # Between 2009-JULY-1 and 2010-JAN-1
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
-                None),
+                None,
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
     ('GAP_2013-AUG-1_2030-JAN-1', # After 2013-AUG-1
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
-                None),
+                None,
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
     ########################################
     ### OTHER SORT-OF-CIRCULAR FEATURES  ###
@@ -1007,14 +1007,31 @@ def _make_ephemeris_radii(obs, descr_list):
         else:
             mode, amp, long_peri, rate_peri = descr
         
-        last_radii = obs.ext_bp.radial_mode(last_radii.key,
-                                            mode, _RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH, 
-                                            amp, long_peri*oops.RPD, 
-                                            rate_peri*oops.RPD/86400.)
+        last_radii = obs.ext_bp.radial_mode(
+                            last_radii.key,
+                            mode, _RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH, 
+                            amp, long_peri*oops.RPD, 
+                            rate_peri*oops.RPD/86400.)
 
     return last_radii.vals.astype('float')
 
-def _shade_model(model, radii, a, shade_above, radius_width_km):
+def _shade_antialias(radii, a, shade_above, resolutions):
+    # The anti-aliasing shade
+    # If we're shading the main object above, then the anti-aliasing
+    # is shaded below!
+    if shade_above:
+        shade_sign = -1.
+    else:
+        shade_sign = 1.
+
+    shade = 1.-shade_sign*(radii-a)/resolutions
+    shade[shade < 0.] = 0.
+    shade[shade > 1.] = 0.
+    
+    return shade
+    
+def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions):
+    # The primary shade - the hard edge and shade away from it
     if shade_above:
         shade_sign = 1.
     else:
@@ -1023,9 +1040,14 @@ def _shade_model(model, radii, a, shade_above, radius_width_km):
     shade[shade < 0.] = 0.
     shade[shade > 1.] = 0.
     
-    return model+shade
+    shade_anti = _shade_antialias(radii, a, shade_above, resolutions)
+    
+    print np.max(shade+shade_anti)
+    return model + shade + shade_anti
 
 def _compute_model_ephemeris(obs, extend_fov, rings_config):
+    logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
+
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
@@ -1093,15 +1115,29 @@ def _compute_model_ephemeris(obs, extend_fov, rings_config):
                 outer_below = outer_radii <= outer_a
                 intersect = np.logical_and(inner_above, outer_below)
                 model[intersect] += 1.
+                shade = _shade_antialias(inner_radii, inner_a, False,
+                                         resolutions)
+                model += shade
+                shade = _shade_antialias(outer_radii, outer_a, True,
+                                         resolutions)
+                model += shade
+                logger.debug('Adding RINGLET a=%9.2f to %9.2f', inner_a, 
+                             outer_a)
             else:
                 if inner_radii is not None:
                     shade_above = entry_type == 'RINGLET'
-                    model = _shade_model(model, inner_radii, inner_a, shade_above,
-                                         radius_width_km)
+                    model = _shade_model(model, inner_radii, inner_a, 
+                                         shade_above, radius_width_km, 
+                                         resolutions)
+                    logger.debug('Adding %s a=%9.2f shade_above %d',
+                                 entry_type, inner_a, shade_above)
                 if outer_radii is not None:
                     shade_above = entry_type == 'GAP'
-                    model = _shade_model(model, outer_radii, outer_a, shade_above,
-                                         radius_width_km)
+                    model = _shade_model(model, outer_radii, outer_a, 
+                                         shade_above, radius_width_km, 
+                                         resolutions)
+                    logger.debug('Adding %s a=%9.2f shade_above %d',
+                                 entry_type, outer_a, shade_above)
 
     return model
 
