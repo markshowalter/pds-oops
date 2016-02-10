@@ -1302,7 +1302,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['end_time'] = time.time()
     return model, metadata
 
-def rings_create_model_from_image(obs):
+def rings_create_model_from_image(obs, data=None):
     """Create a model for the rings from a radial scan of this image.
 
     If the image is not entirely filled by the main rings, return None.
@@ -1315,6 +1315,9 @@ def rings_create_model_from_image(obs):
     """
     logger = logging.getLogger(_LOGGING_NAME+'.rings_create_model_from_image')
 
+    if data is None:
+        data = obs.data
+        
     set_obs_corner_bp(obs)
 
     # Check using the corner BP first for performance
@@ -1338,7 +1341,7 @@ def rings_create_model_from_image(obs):
         logger.info('Image is not entirely main rings - aborting')
         return None
 
-    diag = np.sqrt(obs.data.shape[0]*obs.data.shape[1])
+    diag = np.sqrt(data.shape[0]*data.shape[1])
     
     radius_resolution = (max_radius-min_radius) / diag
 
@@ -1355,7 +1358,7 @@ def rings_create_model_from_image(obs):
                 longitude_resolution*oops.DPR)
 
     reproj = rings_reproject(
-            obs, 
+            obs, data=data,
             radius_range=(min_radius,max_radius),
             radius_resolution=radius_resolution,
             longitude_range=(min_longitude,max_longitude),
@@ -1374,14 +1377,6 @@ def rings_create_model_from_image(obs):
     max_radius_list = np.max(radii)
     bp_radii[bp_radii > max_radius_list] = max_radius_list
 
-#    radial_tab = Tabulation(radii, radial_scan)
-#    radial_data = radial_tab(radii)
-#    
-#    radial_index = np.round((bp_radii-min_radius)/radius_resolution)
-#    radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
-#    radial_index = radial_index.astype('int')
-#    model = radial_data[radial_index]
-    
     interp = sciinterp.interp1d(radii, radial_scan)
     
     model = interp(bp_radii)
