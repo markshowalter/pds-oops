@@ -17,6 +17,7 @@ import polymath
 from imgdisp import *
 import Tkinter as tk
 
+import cspice
 import oops
 
 from cb_config import *
@@ -130,7 +131,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     if offset is not None:
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
 
-    set_obs_ext_bp(obs, (ext_u, ext_v))
+    # Beware - this now has the offset FOV!
+    set_obs_ext_bp(obs, (ext_u, ext_v), force=True)
     
     if show_rings:
         bp_ring_radius = obs.ext_bp.ring_radius('saturn:ring')
@@ -261,6 +263,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         title = fn4 + '/' + fn2 + '/' + fn1
     else:
         title = fn4 + '/' + fn3 + '/' + fn2 + '/' + fn1
+        
+    title += '    ' + cspice.et2utc(obs.midtime, 'C', 0)
 
     if canvas_size is None:
         canvas_size = (obs.data.shape[1], obs.data.shape[0])
@@ -323,7 +327,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
     mosaic_path = metadata['bootstrap_mosaic_path']
-    if mosaic_path is not None:
+    if mosaic_path is None:
+        mosaic_path = 'N/A'
+    else:
         _, mosaic_path = os.path.split(mosaic_path)
     label = tk.Label(addon_control_frame,
                      text=mosaic_path,
@@ -417,12 +423,15 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
 
-    shadow_bodies = ''
+    rings_metadata = metadata['rings_metadata']
     
-    if 'rings_shadow_bodies' in metadata:
-        for body_name in metadata['rings_shadow_bodies']:
+    shadow_bodies = 'N/A'
+    
+    if rings_metadata and 'shadow_bodies' in rings_metadata:
+        shadow_bodies = ''
+        for body_name in rings_metadata['shadow_bodies']:
             shadow_bodies += body_name.upper()[:2] + ' '
-        
+
     label = tk.Label(addon_control_frame, text='Ring Shadowed By:', 
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
@@ -430,6 +439,53 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
 
+    gridrow += 1
+
+    fiducial_features = 'N/A'
+    
+    if rings_metadata and 'fiducial_features' in rings_metadata:
+        num_features = int(np.sum([(x[1] is not None) + (x[2] is not None)
+                       for x in rings_metadata['fiducial_features']]))
+        fiducial_features = str(num_features)
+        if rings_metadata['fiducial_features_ok']:
+            fiducial_features += ' (OK)'
+        else:
+            fiducial_features += ' NOT OK'
+
+    label = tk.Label(addon_control_frame, text='Ring # Features:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+0, sticky='w')
+    label = tk.Label(addon_control_frame, text=fiducial_features,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+
+    fiducial_blur = 'N/A'
+    
+    if rings_metadata and 'fiducial_blur' in rings_metadata:
+        if rings_metadata['fiducial_blur'] is None:
+            fiducial_blur = 'None'
+        else:
+            fiducial_blur = ('%.3f' % rings_metadata['fiducial_blur'])
+        
+    label = tk.Label(addon_control_frame, text='Ring Blur:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+    label = tk.Label(addon_control_frame, text=fiducial_blur,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+
+    curvature_ok = 'N/A'
+            
+    if rings_metadata and 'curvature_ok' in rings_metadata:
+        curvature_ok = str(rings_metadata['curvature_ok'])
+        
+    label = tk.Label(addon_control_frame, text='Curvature OK:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
+    label = tk.Label(addon_control_frame, text=fiducial_blur,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        
     gridrow += 1
 
     if show_rings:
@@ -556,5 +612,6 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
 
     tk.mainloop()
 
+    # Restore the original FOV
     obs.fov = orig_fov
-    
+    set_obs_ext_bp(obs, (ext_u, ext_v), force=True)

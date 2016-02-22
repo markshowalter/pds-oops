@@ -211,12 +211,6 @@ RINGS_DEFAULT_CONFIG = {
     # The source for profile data - 'voyager', 'uvis', or 'ephemeris'.
     'model_source': 'ephemeris',
     
-    # Fiducial feature list to use.
-    # french93 - French et al. 1993
-    # french1404 - Features from Dick French 2014
-    # french1601 - Features from Dick French 2016
-    'fiducial_feature_list': 'french1601',
-    
     # There must be at least this many fiducial features for rings to be used
     # for correlation.
     'fiducial_feature_threshold': 3,
@@ -227,10 +221,10 @@ RINGS_DEFAULT_CONFIG = {
     'fiducial_feature_margin': 50,
     
     # The RMS error of a feature must be this many times less than the
-    # finest resolution of the image in order for the feature to be
-    # used. This makes sure that the statistical scatter of the feature
+    # coarsest resolution of the feature in the image in order for the feature
+    # to be used. This makes sure that the statistical scatter of the feature
     # is blurred out during correlation.
-    'fiducial_rms_gain': 3,
+    'fiducial_rms_gain': 2,
     
     # When manufacturing a model from an ephemeris list, each feature is
     # approximately this many pixels wide.
@@ -239,7 +233,7 @@ RINGS_DEFAULT_CONFIG = {
     # 
     # There must be at least this number of pixels of curvature present for
     # rings to be used for correlation.
-    'curvature_threshold': 2,
+    'curvature_threshold': 5,
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
@@ -271,8 +265,21 @@ BOOTSTRAP_DEFAULT_CONFIG = {
 OFFSET_DEFAULT_CONFIG = {
     # A body has to be at least this many pixels in area for us to pay 
     # attention to it for bootstrapping purposes.
-    'min_body_area': 9,
+    'min_body_area': 100,
     
+    # By default, each image and model is Gaussian blurred by this much
+    # before correlation. This can be overridden if the rings model requests
+    # additional blurring.
+    'default_gaussian_blur': 0.25,
+    
+    # By default, the median filter looks at this many pixels.
+    'median_filter_size': 11,
+    
+    # By default, the median filter is Gaussian blurred by this much before 
+    # being subtracted from the image or model.
+    'median_filter_blur': 1.2,
+    
+    #vvv
     # If there are at least this many bodies in the image, then we trust the
     # body-based model correlation result.
     'num_bodies_threshold': 3,
@@ -282,7 +289,9 @@ OFFSET_DEFAULT_CONFIG = {
     # If the bodies cover at least this fraction of the image, then we trust
     # the body-based model correlation result. 
     'bodies_cov_threshold': 0.0005,
+    #^^^
     
+    #vvv
     # If the total model covers at least this fraction of the image, then we 
     # might trust it.
     'model_cov_threshold': 0.0005,
@@ -292,6 +301,7 @@ OFFSET_DEFAULT_CONFIG = {
     # If the total model has any contents further than this distance from an 
     # edge, then we might trust it.
     'model_edge_pixels': 5,
+    #^^^
     
     # The number of pixels to search in U,V during secondary correlation.
     'secondary_corr_search_size': 15,  

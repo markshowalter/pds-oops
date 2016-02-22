@@ -59,9 +59,14 @@ def _combine_models(model_list, solid=False, masked=False):
 
     return _normalize(new_model, masked=masked)
 
-def _model_filter(image, masked=False):
+def _model_filter(image, gaussian_pre_blur, median_boxsize, 
+                  gaussian_median_blur, masked=False):
     """The filter to use on an image when looking for moons and rings."""
-    ret = filter_sub_median(image, median_boxsize=11, gaussian_blur=1.2)
+    if gaussian_pre_blur:
+        image = filt.gaussian_filter(image, gaussian_pre_blur)
+
+    ret = filter_sub_median(image, median_boxsize=median_boxsize, 
+                            gaussian_blur=gaussian_median_blur)
     if masked:
         ret = ret.view(ma.MaskedArray)
         ret.mask = image.mask
@@ -73,8 +78,7 @@ def master_find_offset(obs,
                    create_overlay=False,
                    
                    allow_stars=True,
-                       stars_overlay_box_width=None,
-                       stars_overlay_box_thickness=None,
+                       stars_show_streaks=False,
                        stars_config=None,
                         
                    allow_saturn=True,
@@ -97,9 +101,7 @@ def master_find_offset(obs,
 
         allow_stars              True to allow finding the offset based on
                                  stars.
-        stars_overlay_box_width      Parameters to pass to 
-        stars_overlay_box_thickness  star_make_good_bad_overlay to make star
-                                     overlay symbols.
+        stars_show_streaks       Include streaks in the overlay.
         stars_config             Config parameters for stars.
 
         allow_saturn             True to allow finding the offset based on
@@ -229,7 +231,7 @@ def master_find_offset(obs,
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
         
-    masked_model = False # XXX
+    masked_model = False
     
     extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
     search_size_max_u, search_size_max_v = extend_fov
@@ -372,13 +374,10 @@ def master_find_offset(obs,
     # TRY TO FIND THE OFFSET USING STARS ONLY. STARS ARE ALWAYS OUR BEST
     # CHOICE.
     #
-    # If the image is entirely rings then by definition we can't see any stars.
-    # XXX Might want to allow stars to show through ring gaps.
-    #
 
     star_offset = None
         
-    if (not entirely_rings and not entirely_body and
+    if (not entirely_body and
         allow_stars and not force_offset and not force_bootstrap_candidate):
         stars_metadata = stars_find_offset(obs,
                                            extend_fov=extend_fov,
@@ -396,9 +395,8 @@ def master_find_offset(obs,
             # later
             star_overlay = stars_make_good_bad_overlay(obs,
                               stars_metadata['full_star_list'], (0,0),
+                              show_streaks=stars_show_streaks,
                               extend_fov=extend_fov,
-                              overlay_box_width=stars_overlay_box_width,
-                              overlay_box_thickness=stars_overlay_box_thickness,
                               stars_config=stars_config)
 
 
@@ -433,7 +431,7 @@ def master_find_offset(obs,
             bodies_metadata[body_name] = body_metadata
             if body_model is not None:
                 bodies_model_list.append((body_model, body_metadata))
-            
+
     if entirely_body:
         if (entirely_body not in FUZZY_BODY_LIST and
             (bodies_cartographic_data is None or
@@ -459,7 +457,9 @@ def master_find_offset(obs,
                           metadata['rings_metadata']['curvature_ok'])
     rings_features_ok = (metadata['rings_metadata'] is not None and
                          metadata['rings_metadata']['fiducial_features_ok'])
-
+    rings_features_blurred = (metadata['rings_metadata'] is not None and
+                              metadata['rings_metadata']['fiducial_blur'])
+    
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
         logger.info('Forcing bootstrap candidate and returning')
@@ -475,11 +475,18 @@ def master_find_offset(obs,
     used_model_str_list = []
 
     # XXX Deal with moons on the far side of the rings
-    if rings_model is not None and rings_curvature_ok and rings_features_ok:
+    if (rings_model is not None and rings_curvature_ok and 
+        rings_features_ok and
+        (rings_features_blurred is None or 
+         len(bodies_model_list) == 0)):
         # Only include the rings if they are going to provide a valid
         # navigation reference
+        # Only use blurred rings if there are no bodies to use
         model_list = model_list + [rings_model]
         used_model_str_list.append('rings')
+        if rings_features_blurred is not None:
+            logger.info('Using rings model blurred by %f because there are no'+
+                        ' bodies', rings_features_blurred)
 
     good_body = False # True if we have cartographic data OR
                       #         the limb and curvature are both OK
@@ -531,14 +538,23 @@ def master_find_offset(obs,
                         'coverage')
             model_offset = None
             peak = None
-        else:            
+        else:
+            gaussian_blur = offset_config['default_gaussian_blur']
+            if rings_features_blurred is not None:
+                gaussian_blur = rings_features_blurred
+            model_filter_func = (lambda image, masked=False:
+                     _model_filter(image, 
+                                   gaussian_blur, 
+                                   offset_config['median_filter_size'],
+                                   offset_config['median_filter_blur'],
+                                   masked=masked))
             model_offset_list = find_correlation_and_offset(
                                        obs.ext_data,
                                        final_model, search_size_min=0,
                                        search_size_max=(search_size_max_u, 
                                                         search_size_max_v),
                                        extend_fov=extend_fov,
-                                       filter=_model_filter,
+                                       filter=model_filter_func,
                                        masked=masked_model)
             model_offset = None
             peak = None
@@ -565,19 +581,18 @@ def master_find_offset(obs,
                                            offset_model, search_size_min=0,
                                            search_size_max=(sec_search_size,
                                                             sec_search_size),
-                                           filter=_model_filter,
+                                           filter=model_filter_func,
                                            masked=masked_model)
                 new_model_offset = None
                 if len(model_offset_list):
                     (new_model_offset, new_peak) = model_offset_list[0]
+                metadata['secondary_corr_ok'] = False
                 if new_model_offset is None:
-                    metadata['secondary_corr_ok'] = False
                     logger.info('Secondary model correlation FAILED - '+
                                  'Not trusting result')
                     model_offset = None
                     peak = None
                 else:
-                    metadata['secondary_corr_ok'] = True
                     logger.info('Secondary model correlation dU,dV %d,%d '+
                                  'CORR %f', new_model_offset[0],
                                  new_model_offset[1], new_peak)
@@ -594,6 +609,7 @@ def master_find_offset(obs,
                         model_offset = (model_offset[0]+new_model_offset[0],
                                         model_offset[1]+new_model_offset[1])
                         peak = new_peak
+                        metadata['secondary_corr_ok'] = True
                         
         if model_offset is None:
             logger.info('Final model offset N/A')
@@ -652,8 +668,6 @@ def master_find_offset(obs,
                 star_overlay = stars_make_good_bad_overlay(obs,
                           star_list, (0,0),
                           extend_fov=extend_fov,
-                          overlay_box_width=stars_overlay_box_width,
-                          overlay_box_thickness=stars_overlay_box_thickness,
                           stars_config=stars_config)
                 offset = model_offset
                 metadata['model_overrides_stars'] = True
@@ -699,7 +713,9 @@ def master_find_offset(obs,
         if rings_model is not None:
             overlay[...,2] = _normalize(rings_model) * 255
         if star_overlay is not None:
-            overlay = np.clip(overlay+star_overlay, 0, 255)
+            star_overlay_color = np.zeros(overlay.shape)
+            star_overlay_color[:,:,0] = star_overlay
+            overlay = np.clip(overlay+star_overlay_color, 0, 255)
 
         if offset is not None:
             overlay = shift_image(overlay, -int(np.round(offset[0])), -int(np.round(offset[1])))
@@ -721,4 +737,6 @@ def master_find_offset(obs,
     
     metadata['end_time'] = time.time()
 
+    logger.info('Total elapsed time %d seconds', metadata['end_time']-metadata['start_time'])
+    
     return metadata

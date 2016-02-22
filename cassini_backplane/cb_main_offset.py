@@ -48,14 +48,17 @@ if len(command_list) == 0:
 #    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # A ring edge
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
-    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
-#     command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # Bad star match
-#     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # Bad star match
-#     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring anti-alias
+#    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # Bad star match
+#    command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Bad star match
+#    command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring anti-alias
+#    command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # Good star match
+#    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring
+    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring
     
     command_list = command_line_str.split()
 

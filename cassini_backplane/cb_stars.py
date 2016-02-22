@@ -116,6 +116,7 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     for star in orig_star_list:
         star.conflicts = None
         star.temperature_faked = False
+        star.integrated_dn = 0.
         if star.temperature is None:
             star.temperature_faked = True
             star.temperature = SCLASS_TO_SURFACE_TEMP[default_star_class]
@@ -273,7 +274,7 @@ def stars_list_for_obs(obs, extend_fov=(0,0), stars_config=None,
 # 
 #===============================================================================
     
-def stars_create_model(obs, star_list, offset=None,
+def stars_create_model(obs, star_list, offset=None, ignore_conflicts=False,
                        extend_fov=(0,0), stars_config=None):
     """Create a model containing nothing but stars.
     
@@ -302,7 +303,7 @@ def stars_create_model(obs, star_list, offset=None,
     offset_v = 0
     if offset is not None:
         offset_u, offset_v = offset
-        
+
     psf_size = stars_config['min_psf_size']
     max_move_steps = stars_config['max_movement_steps']
     
@@ -311,6 +312,8 @@ def stars_create_model(obs, star_list, offset=None,
                      dtype=np.float32)
     
     for star in star_list:
+        if ignore_conflicts and star.conflicts:
+            continue
         u_idx = star.u+offset_u+extend_fov[0]
         v_idx = star.v+offset_v+extend_fov[1]
         u_int = int(u_idx)
@@ -350,9 +353,7 @@ def stars_create_model(obs, star_list, offset=None,
 
 def stars_make_good_bad_overlay(obs, star_list, offset,
                                 extend_fov=(0,0),
-                                overlay_box_width=None,
-                                overlay_box_thickness=None,
-                                show_streaks=True,
+                                show_streaks=False,
                                 stars_config=None):
     """Create an overlay with high and low confidence stars marked.
     
@@ -365,23 +366,16 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                                limits of the obs FOV. The returned model will 
                                be the shape of the obs FOV plus two times the 
                                extend value in each dimension.
-        overlay_box_width      If None, draw a circle of radius 3.
-                               If 0, draw a box of the size of the photometry
-                                 measurement.
-                               Otherwise, draw a box of the given size.
-        overlay_box_thickness  If a box is drawn, this is the thickness of the
-                               box sides.
-        show_streaks           If False, draw a box or circle as specified 
-                               above. 
-                               If True, draw the streak from the star's PSF.
+        show_streaks           If True, draw the streak from the star's PSF in
+                               addition to the box or circle.
         stars_config           Configuration parameters.
                            
     Returns:
         overlay                The overlay.
         
-        Star excluded by brightness or conflict: red
-        Star bad photometry: blue
-        Star good photometry: green
+        Star excluded by brightness or conflict: circle
+        Star bad photometry: thin square
+        Star good photometry: thick square
     """
     if stars_config is None:
         stars_config = STARS_DEFAULT_CONFIG
@@ -392,7 +386,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
         offset_u, offset_v = offset
         
     overlay = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
-                        obs.data.shape[1]+extend_fov[0]*2, 3),
+                        obs.data.shape[1]+extend_fov[0]*2),
                        dtype=np.uint8)
     
     if show_streaks:
@@ -427,41 +421,28 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                                      scale=1.)
             psf = psf / np.max(psf) * 255
             
-            if (not star.is_bright_enough or not star.is_dim_enough or
-                star.conflicts):
-                plane = 0
-            else:
-                if star.photometry_confidence > stars_config['min_confidence']:
-                    plane = 1
-                else:
-                    plane = 2
             overlay[v_int-psf_size_half_v:v_int+psf_size_half_v+1, 
-                    u_int-psf_size_half_u:u_int+psf_size_half_u+1,
-                    plane] += psf
-    else:
-        for star in star_list:
-            # Should NOT be rounded for plotting, since all of coord
-            # X to X+0.9999 is the same pixel
-            u_idx = int(star.u+offset_u+extend_fov[0])
-            v_idx = int(star.v+offset_v+extend_fov[1])
-            
-            if (not star.is_bright_enough or not star.is_dim_enough or
-                star.conflicts):
-                color = (255,0,0)
+                    u_int-psf_size_half_u:u_int+psf_size_half_u+1] += psf
+
+    for star in star_list:
+        # Should NOT be rounded for plotting, since all of coord
+        # X to X+0.9999 is the same pixel
+        u_idx = int(star.u+offset_u+extend_fov[0])
+        v_idx = int(star.v+offset_v+extend_fov[1])
+        
+        if (not star.is_bright_enough or not star.is_dim_enough or
+            star.conflicts):
+            draw_circle(overlay, u_idx, v_idx, 3, 1)
+        else:
+            if star.integrated_dn == 0:
+                width = 3
             else:
-                if star.photometry_confidence > stars_config['min_confidence']:
-                    color = (0,255,0)
-                else:
-                    color = (0,0,255)
-            if overlay_box_width is not None:
-                width = overlay_box_width
-                if width == 0:
-                    width = star.photometry_box_size // 2
-                draw_rect(overlay, u_idx, v_idx, 
-                          width, width,
-                          color, overlay_box_thickness)
-            else:
-                draw_circle(overlay, u_idx, v_idx, 1, color, 3)
+                width = star.photometry_box_size // 2
+            thickness = 1
+            if star.photometry_confidence > stars_config['min_confidence']:
+                thickness = 3
+            draw_rect(overlay, u_idx, v_idx, 
+                      width, width, 1, thickness)
 
     return overlay
 
@@ -534,7 +515,7 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
     else:
         boxsize = stars_config['photometry_boxsize_default']
 
-    star.photometry_box_width = boxsize
+    star.photometry_box_size = boxsize
 
     psf_size_half_u = (boxsize + np.round(abs(star.move_u))) // 2
     psf_size_half_v = (boxsize + np.round(abs(star.move_v))) // 2
@@ -892,11 +873,12 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
             logger.debug('Offset %d,%d already tried (or reserved)', 
                          offset_list[i][0][0], offset_list[i][0][1])
 
-    logger.debug('Final peak list:')
-    for i in xrange(len(new_offset_list)):
-        logger.debug('Peak %d U,V %d,%d VAL %f', i+1, 
-                     new_offset_list[i][0], new_offset_list[i][1],
-                     new_peak_list[i])
+    if len(new_offset_list):
+        logger.debug('Final peak list:')
+        for i in xrange(len(new_offset_list)):
+            logger.debug('Peak %d U,V %d,%d VAL %f', i+1, 
+                         new_offset_list[i][0], new_offset_list[i][1],
+                         new_peak_list[i])
 
     if len(new_offset_list) == 0:
         # No peaks found at all - tell the top-level loop there's no point
@@ -938,7 +920,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                                               extend_fov=obs.extend_fov,
                                               stars_config=stars_config)
         logger.debug('Photometry found %d good stars', good_stars)
-        
+    
         # We have to see at least 2/3 of the really bright stars to
         # fully believe the result. If we don't see this many, it
         # triggers some more aggressive searching.
@@ -965,14 +947,15 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
             # Return False so the top-level loop gives up
             return offset, good_stars, peak, False, False
 
-        # OK that didn't work - get rid of the conflicting stars and
-        # recurse until there are no conflicts
-
         if not something_conflicted:
             # No point in trying again - we'd just have the same stars!
-            logger.debug('Nothing conflicted - continuing to next peak')
+            logger.debug('Nothing conflicted and photometry failed - '+
+                         'continuing to next peak')
             continue
-            
+
+        # Get rid of the conflicting stars and recurse until there are no 
+        # conflicts
+
         # Create the current non-conflicting star list
         non_conf_star_list = [x for x in star_list if not x.conflicts]
     
@@ -1150,19 +1133,30 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
             # First pass - don't do these things earlier outside the loop
             # because we'd just be wasting time if there were never enough
             # stars.
-             
+            
             # For star use only, need data in DN for photometry
             obs.calib_dn_ext_data = calibrate_iof_image_as_dn(
                                                       obs, data=obs.ext_data)
+            filtered_data = obs.calib_dn_ext_data
+            
+            if False:
+                calib_data = unpad_image(obs.calib_dn_ext_data, extend_fov)
+                rings_radial_model = rings_create_model_from_image(
+                                                       obs, data=calib_data,
+                                                       extend_fov=extend_fov)
+                if rings_radial_model is not None:
+                    imdisp = ImageDisp([calib_data, rings_radial_model, 
+                                        calib_data-rings_radial_model],
+                                       canvas_size=(512,512),
+                                       allow_enlarge=True, enlarge_limit=10,
+                                       auto_update=True)
+                    Tkinter.mainloop()
     
-# XXX           rings_radial_model = rings_create_model_from_image(obs)
-#            if rings_radial_model is not None:
-#                imdisp = ImageDisp([obs.data, rings_radial_model, obs.data-rings_radial_model],
-#                                   canvas_size=(512,512),
-#                                   allow_enlarge=True, enlarge_limit=10,
-#                                   auto_update=True)
-#                Tkinter.mainloop()
-
+                    filtered_data = pad_image(calib_data-rings_radial_model, 
+                                              extend_fov)
+                    obs.data[:,:] = calib_data-rings_radial_model
+                    obs.ext_data[:,:] = filtered_data
+                    
             # Filter that calibrated data.
             # 1) Subtract the local background (median)
             # 2) Eliminate anything that is < 0
@@ -1179,11 +1173,11 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
 
             # If we trust the DN values, then we can eliminate any pixels that
             # are way too bright.            
-#            if _trust_star_dn(obs):
-#                max_dn = star_list[0].dn # Star list is sorted by DN            
-#                mask = filtered_data > max_dn
-#                mask = filt.maximum_filter(mask, 11)
-#                filtered_data[mask] = 0.
+            if _trust_star_dn(obs):
+                max_dn = star_list[0].dn # Star list is sorted by DN            
+                mask = filtered_data > max_dn*2
+                mask = filt.maximum_filter(mask, 11)
+                filtered_data[mask] = 0.
 
             if DEBUG_STARS_FILTER_IMGDISP:
                 imdisp = ImageDisp([filtered_data],
@@ -1346,5 +1340,25 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = good_stars
     metadata['offset'] = offset
+
+    offset_x = 0
+    offset_y = 0
+    if offset is not None:
+        offset_x = offset[0]
+        offset_y = offset[1]
+        
+    logger.info('Final star list after offset:')
+    for star in star_list:
+        logger.info('Star %9d U %8.3f+%7.3f V %8.3f+%7.3f DN %7.2f MAG %6.3f '+
+                    'SCLASS %3s TEMP %6d PRED %7.2f MEAS %7.2f CONF %4.2f CONFLICTS %s',
+                    star.unique_number, 
+                    star.u+offset_x, abs(star.move_u), 
+                    star.v+offset_y, abs(star.move_v),
+                    star.dn, star.vmag,
+                    'XX' if star.spectral_class is None else
+                            star.spectral_class,
+                    0 if star.temperature is None else star.temperature,
+                    star.dn, star.integrated_dn, star.photometry_confidence,
+                    str(star.conflicts))
     
     return metadata

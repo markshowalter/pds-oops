@@ -90,57 +90,6 @@ _RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS',
 #
 #===============================================================================
 
-_RINGS_FIDUCIAL_FEATURES = {}
-
-# From French et al. 1993, Geometry of the Saturn system from the 3 July 1989
-# occultation of 28 SGR and Voyager observations
-_RINGS_FIDUCIAL_FEATURES_FRENCH1993 = [
-    # A RING
-    ('X', 136552.0, 0.),         # Keeler Gap OEG
-    ('X', 133745.2, 0.),         # Encke Gap OEG
-    ('X', 133423.5, 0.),         # Encke Gap IEG XXX
-    ('X', 122052.5, 0.),         # A Ring IER
-    ('X', 120245.0, 0.),         # 1.994 Rs ringlet IER
-    ('X', 120076.3, 0.),         # 1.990 Rs ringlet OER
-    ('X', 118968.3, 0.),         # OEG
-    ('X', 118629.1, 0.),         # OEG
-    ('X', 118283.9, 0.),         # OEG
-    ('X', 117932.2, 0.),         # OEG
-    # B RING
-    ('X', 104083.4, 0.),         # OEG
-    ('X', 103673.2, 0.),         # IEG
-    ('X', 101549.3, 0.),         # IEG
-    ('X', 101009.7, 0.),         # IEG
-    ('X',  98287.2, 0.),         # OER
-    ('X',  96899.6, 0.),         # IEG
-    ('X',  95358.3, 0.),         # B Ring flat spot OEG
-    ('X',  94444.1, 0.),         # B Ring flat spot IEG
-    # C RING
-    ('X',  90614.9, 0.),         # OER
-    ('X',  90405.7, 0.),         # IER
-    ('X',  89938.8, 0.),         # OER
-    ('X',  89788.3, 0.),         # IER
-    ('X',  89295.3, 0.),         # OER
-    ('X',  89190.4, 0.),         # IER
-    ('X',  88594.3, 0.),         # OER
-    ('X',  86602.4, 0.),         # OER
-    ('X',  86371.9, 0.),         # IER
-    ('X',  85923.6, 0.),         # IER
-    ('X',  85758.7, 0.),         # OER
-    ('X',  85661.5, 0.),         # IER
-    ('X',  84949.2, 0.),         # OER
-    ('X',  84750.3, 0.),         # IER
-    ('X',  82041.6, 0.),         # COR
-    ('X',  79265.1, 0.),         # OER
-    ('X',  79221.0, 0.),         # IER
-    ('X',  77164.4, 0.),         # OER
-    ('X',  76262.9, 0.),         # OER
-    ('X',  74490.0, 0.),         # C Ring IER    
-]
-
-_RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH = os.path.join(
-     SUPPORT_FILES_ROOT, '20140419toRAJ', 'ringfit_v1.8.Sa025S-RF-V4927.out')
-
 _RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH = cspice.utc2et('2008-01-01 12:00:00')
 _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # (Feature type, (inner_data, outer_data))
@@ -684,9 +633,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # #7 - A ring IER
     ('RINGLET', ((  1, 122050.07651, 1.135272, 0.0000000,   0.0000000,   0.0000000),),
                 None),
-
-    
 ]
+
 
 
 #===============================================================================
@@ -734,7 +682,7 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float') 
     min_longitude = np.min(longitudes)
-    max_longitude  = np.max(longitudes)
+    max_longitude = np.max(longitudes)
 
     logger.debug('Radii %.2f to %.2f Longitudes %.2f to %.2f',
                  min_radius, max_radius, 
@@ -746,7 +694,7 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
 
     if max_longitude - min_longitude > np.pi/2.:
         # XXX This does not handle the wrap-around case! XXX
-        # Seeing 90+ degress of the ring - definitely enough curvature!
+        # Seeing 90+ degrees of the ring - definitely enough curvature!
         logger.debug('More than 90 degrees visible - returning curvature OK')
         return True
 
@@ -815,65 +763,55 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
 
 ### Fiducial Features ###
 
-def _rings_read_fiducial_features(rings_config):
-    global _RINGS_FIDUCIAL_FEATURES
+def _find_resolutions_by_a(obs, extend_fov, a):
+    resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                   astype('float'))
     
-    features_name = rings_config['fiducial_feature_list']
-    if features_name in _RINGS_FIDUCIAL_FEATURES:
-        return
+    longitudes = rings_generate_longitudes(longitude_resolution=0.1*oops.RPD)
+
+    new_long, new_rad, u, v = _rings_restrict_longitude_radius_to_obs(
+                              obs, longitudes, a, extend_fov=extend_fov)
+
+    u = u.astype('int')
+    v = v.astype('int')
+    feature_res = resolutions[v,u]
     
-    if features_name == 'french93':
-        _RINGS_FIDUCIAL_FEATURES[features_name] = _RINGS_FIDUCIAL_FEATURES_1993
-        return
+    min_res = np.min(feature_res)
+    max_res = np.max(feature_res)
     
-    if features_name == 'french1404':
-        entries = []
-        with open(_RINGS_FIDUCIAL_FEATURES_FRENCH2014_PATH, 'r') as fp:
-            for line in fp:
-                if line.startswith('Ring         A'):
-                    break
-            else:
-                assert False
-            for line in fp:
-                if line.startswith('Index'):
-                    break
-                if line[9] != '*': # Circular feature?
-                    continue
-                a = float(line[10:21])
-                entries.append(('X', a, 0.))
-        
-        entries.sort(key=lambda x:x[0], reverse=True)
-        _RINGS_FIDUCIAL_FEATURES[features_name] = entries
-        return
+    return min_res, max_res
 
-    if features_name == 'french1601':
-        entries = []
-        for entry_type_str, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
-            if inner is not None:
-                assert inner[0][0] == 1 # m=1 mode
-                entries.append((entry_type_str, inner[0][1], inner[0][2]))
-            if outer is not None:
-                assert outer[0][0] == 1 # m=1 mode
-                entries.append((entry_type_str, outer[0][1], outer[0][2]))
-
-        entries.sort(key=lambda x:x[0], reverse=True)
-        _RINGS_FIDUCIAL_FEATURES[features_name] = entries
-        return
-
-    assert False
-
+def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur, 
+                    extend_fov):
+    if blur is None:
+        blur = 1.
+    a = feature[0][1]
+    rms = feature[0][2]
+    if not min_radius < a < max_radius:
+        return None
+    min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
+    print 'RMS', rms, 'COMP', rms*rms_gain/blur, 'MAX RES', max_res
+    if rms*rms_gain/blur > max_res:
+        return (rms*rms_gain/blur)/max_res # Additional blurring needed
+    return 1. # OK as is
+    
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
-    """Return a list of fiducial features in the image."""
+    """Return a list of fiducial features in the image.
+    
+    We first attempt to return at least fiducial_feature_threshold features
+    that satisfy resolution requirements. If we can't, then we relax the
+    constraints until we can and return the amount that we had to relax. 
+    """
     
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
 
     if rings_config is None:
         rings_config = RINGS_DEFAULT_CONFIG
 
-    _rings_read_fiducial_features(rings_config)
-    
     set_obs_ext_bp(obs, extend_fov)
 
+    min_features = rings_config['fiducial_feature_threshold']
+    
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
@@ -884,32 +822,65 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                      max(extend_fov[0], extend_fov[1]))
     rms_gain = rings_config['fiducial_rms_gain']
     
-    resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
-                   astype('float'))
-    min_res = np.min(resolutions)
-    max_res = np.max(resolutions)
-
-    margin_km = margin_pixels * max_res
+    margin_km = 0#margin_pixels * max_res XXX
     
-    feature_list = []
+    blur = None
+    blur_list = []
+    for phase in [0,1]:
+        logger.debug('Trying blur %s', str(blur))
+        
+        # Eliminate any features that don't match the observation date
+        # or are completely outside the radius range
+        feature_list = []
+        best_blur = None
+        for fiducial_feature in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+            entry_type_str, inner, outer = fiducial_feature
+            entry_type_list = entry_type_str.split('_')
+            entry_type = entry_type_list[0]
+            if len(entry_type_list) > 1:
+                assert len(entry_type_list) == 3
+                start_date = cspice.utc2et(entry_type_list[1])
+                end_date = cspice.utc2et(entry_type_list[2])
+                if not (start_date < obs.midtime < end_date):
+                    continue
+            if inner is not None:
+                ret = _fiducial_is_ok(obs, inner, min_radius, max_radius, 
+                                      rms_gain, blur, extend_fov)
+                if ret is None or ret != 1.:
+                    inner = None
+                if ret is not None and ret != 1.:
+                    blur_list.append(ret)
+            if outer is not None:
+                ret = _fiducial_is_ok(obs, outer, min_radius, max_radius, 
+                                      rms_gain, blur, extend_fov)
+                if ret is None or ret != 1.:
+                    outer = None
+                if ret is not None and ret != 1.:
+                    blur_list.append(ret)
+            if inner is not None or outer is not None:
+                feature_list.append((entry_type, inner, outer))
+                print 'KEEPING', feature_list[-1]
 
-    features_name = rings_config['fiducial_feature_list']
-    for fiducial_feature in _RINGS_FIDUCIAL_FEATURES[features_name]:
-        entry_type_str, location, rms = fiducial_feature
-        entry_type_list = entry_type_str.split('_')
-        if len(entry_type_list) > 1:
-            assert len(entry_type_list) == 3
-            start_date = cspice.utc2et(entry_type_list[1])
-            end_date = cspice.utc2et(entry_type_list[2])
-            if not (start_date < obs.midtime < end_date):
-                continue
-        if (min_radius+margin_km < location < max_radius-margin_km and
-            rms*rms_gain < min_res):
-            feature_list.append(fiducial_feature)
+        num_features = int(np.sum([(x[1] is not None) + (x[2] is not None)
+                                   for x in feature_list]))
+        if num_features >= min_features or phase == 1:
+            break
 
-    logger.debug('Returning %d fiducial features', len(feature_list))
+        blur_list.sort()
+        print blur_list
+        
+        if len(blur_list) < min_features-num_features:
+            break
+        
+        blur = blur_list[min_features-num_features-1]
 
-    return feature_list
+    if blur is not None:
+        blur = blur/rms_gain
+            
+    logger.debug('Returning %d fiducial features, blur %s',
+                 num_features, str(blur))
+
+    return num_features, feature_list, blur
 
 
 # Given an I/F or occultation profile, blur out the areas that aren't
@@ -1030,31 +1001,37 @@ def _shade_antialias(radii, a, shade_above, resolutions):
     
     return shade
     
-def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions):
+def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
+                 feature_list_by_a):
+    # shade_above == True means shade towards larger a
     # The primary shade - the hard edge and shade away from it
     if shade_above:
         shade_sign = 1.
     else:
         shade_sign = -1.
+        
+    # Check to see if there is another feature that's going to be in the way
+    for other_a, other_type in feature_list_by_a:
+        if (shade_sign*(other_a-a) > 0 and 
+            shade_sign*(other_a-a) < radius_width_km):
+            # Change the width of the feature so it doesn't conflict
+            radius_width_km = abs(other_a-a)/2
+            print 'Fixing conflicting feature at', a, 'vs.', other_a, 'new width', radius_width_km
     shade = 1.-shade_sign*(radii-a)/radius_width_km
     shade[shade < 0.] = 0.
     shade[shade > 1.] = 0.
     
     shade_anti = _shade_antialias(radii, a, shade_above, resolutions)
     
-    print np.max(shade+shade_anti)
     return model + shade + shade_anti
 
-def _compute_model_ephemeris(obs, extend_fov, rings_config):
+def _compute_model_ephemeris(obs, feature_list, extend_fov, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
-    
-    features_name = rings_config['fiducial_feature_list']
-    assert features_name == 'french1601'
     
     min_radius = np.min(radii)
     max_radius = np.max(radii)
@@ -1067,29 +1044,27 @@ def _compute_model_ephemeris(obs, extend_fov, rings_config):
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
+        
+    feature_list_by_a = []
+    for entry_type, inner, outer in feature_list:
+        if inner is not None:
+            if entry_type == 'GAP':
+                feature_list_by_a.append((inner[0][1], 'IEG'))
+            else:
+                feature_list_by_a.append((inner[0][1], 'OEG'))
+        if outer is not None:
+            if entry_type == 'GAP':
+                feature_list_by_a.append((outer[0][1], 'IER'))
+            else:
+                feature_list_by_a.append((outer[0][1], 'OER'))
+    feature_list_by_a.sort(key=lambda x: x[0], reverse=True)
 
     # Do gaps first, because gaps might actually have ringlets inside of them.
     # Then go back and add the ringlets, which might fill in the gpas.
     for do_type in ['GAP', 'RINGLET']:
-        for entry_type_str, inner, outer in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
-            entry_type_list = entry_type_str.split('_')
-            entry_type = entry_type_list[0]
+        for entry_type, inner, outer in feature_list:
             if entry_type != do_type:
                 continue
-            if len(entry_type_list) > 1:
-                assert len(entry_type_list) == 3
-                start_date = cspice.utc2et(entry_type_list[1])
-                end_date = cspice.utc2et(entry_type_list[2])
-                if not (start_date < obs.midtime < end_date):
-                    continue
-            if (inner is not None and
-                (entry_type_str, inner[0][1], inner[0][2]) not in 
-                _RINGS_FIDUCIAL_FEATURES[features_name]):
-                inner = None
-            if (outer is not None and
-                (entry_type_str, outer[0][1], outer[0][2]) not in 
-                _RINGS_FIDUCIAL_FEATURES[features_name]):
-                outer = None
             inner_radii = None
             outer_radii = None                     
             if inner is not None and outer is not None:
@@ -1128,14 +1103,14 @@ def _compute_model_ephemeris(obs, extend_fov, rings_config):
                     shade_above = entry_type == 'RINGLET'
                     model = _shade_model(model, inner_radii, inner_a, 
                                          shade_above, radius_width_km, 
-                                         resolutions)
+                                         resolutions, feature_list_by_a)
                     logger.debug('Adding %s a=%9.2f shade_above %d',
                                  entry_type, inner_a, shade_above)
                 if outer_radii is not None:
                     shade_above = entry_type == 'GAP'
                     model = _shade_model(model, outer_radii, outer_a, 
                                          shade_above, radius_width_km, 
-                                         resolutions)
+                                         resolutions, feature_list_by_a)
                     logger.debug('Adding %s a=%9.2f shade_above %d',
                                  entry_type, outer_a, shade_above)
 
@@ -1176,6 +1151,10 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             'curvature_ok'          True if the curvature is sufficient for 
                                     correlation.
             'fiducial_features'     The list of fiducial features in view.
+            'fiducial_blur'         The amount the RMS residual of the features
+                                    had to be reduced in order to get enough.
+                                    1 means nothing was reduced. Otherwise
+                                    a number < 1.
             'fiducial_features_ok'  True if the number of fidcual features
                                     is greater than the threshold.
             'start_time'            The time (s) when rings_create_model
@@ -1211,15 +1190,18 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     else:
         metadata['curvature_ok'] = True     
    
-    fiducial_features = rings_fiducial_features(obs, extend_fov, rings_config)
+    num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
+                                         obs, extend_fov, rings_config)
     metadata['fiducial_features'] = fiducial_features
-    fiducial_features_ok = (len(fiducial_features) >=
+    metadata['fiducial_blur'] = fiducial_blur
+    
+    fiducial_features_ok = (num_features >=
                             rings_config['fiducial_feature_threshold'])
     metadata['fiducial_features_ok'] = fiducial_features_ok
     
     if not fiducial_features_ok:
         logger.info('Insufficient number (%d) of fiducial features', 
-                    len(fiducial_features))
+                    num_features)
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata
@@ -1251,7 +1233,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         radial_index = radial_index.astype('int')
         model = radial_data[radial_index]
     else:
-        model = _compute_model_ephemeris(obs, extend_fov, rings_config)
+        model = _compute_model_ephemeris(obs, fiducial_features,
+                                         extend_fov, rings_config)
     
 #    model = ma.masked_equal(model, 0.)
 #    model = ma.masked_equal(model, 10000.)
@@ -1302,10 +1285,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['end_time'] = time.time()
     return model, metadata
 
-def rings_create_model_from_image(obs, data=None):
+def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     """Create a model for the rings from a radial scan of this image.
-
-    If the image is not entirely filled by the main rings, return None.
     
     Inputs:
         obs                    The Observation.
@@ -1317,38 +1298,29 @@ def rings_create_model_from_image(obs, data=None):
 
     if data is None:
         data = obs.data
-        
-    set_obs_corner_bp(obs)
+    
+    # We really want to use the normal BP, but we use the extended one because
+    # the BP will be computed elsewhere and we will save time by only
+    # computing it once. We can extract the normal radius BP by taking
+    # a subarray of the extended one.
+    set_obs_ext_bp(obs, extend_fov)
 
-    # Check using the corner BP first for performance
-    corner_radii = obs.corner_bp.ring_radius('saturn:ring').vals.astype('float')
-    min_radius = np.min(corner_radii)
-    max_radius = np.max(corner_radii)
-
-    logger.info('Corner radii %.2f to %.2f', min_radius, max_radius)
-
-    if max_radius > RINGS_MAX_RADIUS or min_radius < RINGS_MIN_RADIUS:
-        logger.info('Image is not entirely main rings - aborting')
-        return None
-
-    set_obs_bp(obs)
-
-    bp_radii = obs.bp.ring_radius('saturn:ring').vals.astype('float')
-    min_radius = np.min(bp_radii)
-    max_radius = np.max(bp_radii)
-    if max_radius > RINGS_MAX_RADIUS or min_radius < RINGS_MIN_RADIUS:
-        # In case we missed something earlier
-        logger.info('Image is not entirely main rings - aborting')
-        return None
+    bp_radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    bp_radii = bp_radii[extend_fov[1]:extend_fov[1]+data.shape[0],
+                        extend_fov[0]:extend_fov[0]+data.shape[1]]
+    min_radius = max(np.min(bp_radii), RINGS_MIN_RADIUS)
+    max_radius = min(np.max(bp_radii), RINGS_MAX_RADIUS)
 
     diag = np.sqrt(data.shape[0]*data.shape[1])
     
     radius_resolution = (max_radius-min_radius) / diag
 
     # XXX This will have a problem with wrap-around
-    longitude = obs.bp.ring_longitude('saturn:ring').vals.astype('float')
-    min_longitude = np.min(longitude)
-    max_longitude = np.max(longitude)
+    bp_longitude = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
+    bp_longitude = bp_longitude[extend_fov[1]:extend_fov[1]+data.shape[0],
+                                extend_fov[0]:extend_fov[0]+data.shape[1]]
+    min_longitude = np.min(bp_longitude)
+    max_longitude = np.max(bp_longitude)
     longitude_resolution = (max_longitude-min_longitude) / diag
 
     logger.info('Image radii %.2f to %.2f res %.3f / '+
@@ -1374,12 +1346,12 @@ def rings_create_model_from_image(obs, data=None):
     radii = rings_generate_radii(min_radius, max_radius, 
                                  radius_resolution=radius_resolution)
     
-    max_radius_list = np.max(radii)
-    bp_radii[bp_radii > max_radius_list] = max_radius_list
+    max_radius = np.max(radii)
+    bp_radii[bp_radii > max_radius] = max_radius
 
     interp = sciinterp.interp1d(radii, radial_scan)
-    
     model = interp(bp_radii)
+    model[bp_radii > max_radius] = 0.
     
     return model
 
@@ -1424,6 +1396,10 @@ def _rings_restrict_longitude_radius_to_obs(obs, longitude, radius,
     pair."""
     longitude = np.asarray(longitude)
     radius = np.asarray(radius)
+    if radius.shape == ():
+        new_radius = np.empty(longitude.shape)
+        new_radius[:] = radius
+        radius = new_radius 
     
     offset_u = 0
     offset_v = 0

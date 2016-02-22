@@ -81,8 +81,7 @@ def _correlate2d(image, model, normalize=False, retile=False):
     assert image.shape == model.shape
 
     if DEBUG_CORRELATE_IMGDISP:
-        toplevel = Tkinter.Tk()
-        imdisp = ImageDisp([image,model], parent=toplevel,
+        imdisp = ImageDisp([image,model], 
                            canvas_size=(512,512),
                            allow_enlarge=True, enlarge_limit=10,
                            auto_update=True)

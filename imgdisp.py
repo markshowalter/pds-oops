@@ -1333,7 +1333,7 @@ def draw_circle(img, x0, y0, r, color, thickness=1):
         x0, y0     The middle of the circle.
         r          The radius of the circle.
         color      The scalar (or higher) color to draw.
-        thickness  The thickness (total width) of the line.
+        thickness  The thickness (total width) of the circle.
     """
 
     def _draw_circle(img, x0, y0, r, color, bigpixel):
