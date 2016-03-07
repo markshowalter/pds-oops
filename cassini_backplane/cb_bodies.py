@@ -145,7 +145,7 @@ def bodies_create_model(obs, body_name, inventory,
                            actually trying to make a model.
                                  
     Returns:
-        model, metadata
+        model, metadata, text
         
         metadata is a dictionary containing
 
@@ -188,7 +188,7 @@ def bodies_create_model(obs, body_name, inventory,
         if not always_create_model and not mask_only:
             metadata['latlon_mask'] = None
             metadata['end_time'] = time.time()
-            return None, metadata
+            return None, metadata, None
         
     # Analyze the curvature
             
@@ -281,12 +281,12 @@ def bodies_create_model(obs, body_name, inventory,
 
     if mask_only:
         metadata['end_time'] = time.time()
-        return None, metadata
+        return None, metadata, None
 
     if not np.any(latlon_mask):
         logger.info('No pixels intercepted - aborting')
         metadata['end_time'] = time.time()
-        return None, metadata
+        return None, metadata, None
         
     # Analyze the limb
     
@@ -327,11 +327,11 @@ def bodies_create_model(obs, body_name, inventory,
         logger.info('Limb fails criteria')
         if not always_create_model:
             metadata['end_time'] = time.time()
-            return None, metadata 
+            return None, metadata, None
 
     if not metadata['curvature_ok'] and not always_create_model:
         metadata['end_time'] = time.time()
-        return None, metadata 
+        return None, metadata, None
     
     # Make the actual model
     
@@ -360,7 +360,7 @@ def bodies_create_model(obs, body_name, inventory,
           u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
     
     metadata['end_time'] = time.time()
-    return model, metadata
+    return model, metadata, np.zeros(model.shape, dtype=np.uint8)
 
 
 #==============================================================================

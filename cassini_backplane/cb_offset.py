@@ -5,6 +5,7 @@
 #
 # Exported routines:
 #    master_find_offset
+#    offset_create_overlay_image
 ###############################################################################
 
 import cb_logging
@@ -12,10 +13,14 @@ import logging
 
 import time
 
+import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
+
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.filters as filt
 
+import imgdisp
 import oops
 
 from cb_bodies import *
@@ -199,9 +204,19 @@ def master_find_offset(obs,
             
             'ext_data'         The original obs.data extended by the maximum
                                search size.
+            'stars_overlay'    The 2-D stars overlay (no text).
+            'stars_overlay_text'
+                               The 2-D stars overlay (text only).
+            'bodies_overlay'   The 2-D bodies overlay (no text).
+            'bodies_overlay_text'
+                               The 2-D bodies overlay (text only).
+            'rings_overlay'    The 2-D rings overlay (no text).
+            'rings_overlay_text'
+                               The 2-D rings overlay (text only).
             'overlay'          The visual overlay (if create_overlay is True).
             'ext_overlay'      The visual overlay extended by the maximum
                                search size (if create_overlay is True).
+            
     """
     
                 ##################
@@ -239,15 +254,21 @@ def master_find_offset(obs,
     set_obs_ext_data(obs, extend_fov)
     set_obs_ext_corner_bp(obs, extend_fov)
     
-    bodies_model_list = []            
+    bodies_model_list = []
     rings_model = None
+    rings_overlay_text = None
     final_model = None
     
     if create_overlay:
-        overlay = np.zeros(obs.ext_data.shape + (3,), dtype=np.uint8)
-        star_overlay = None
+        color_overlay = np.zeros(obs.ext_data.shape + (3,), dtype=np.uint8)
+        label_avoid_mask = np.zeros(obs.ext_data.shape, dtype=np.bool)
     else:
-        overlay = None
+        color_overlay = None
+        label_avoid_mask = None
+    stars_overlay = None
+    stars_overlay_text = None
+    bodies_overlay_text = None
+    rings_overlay_text = None
         
     offset = None
     
@@ -283,11 +304,17 @@ def master_find_offset(obs,
     metadata['secondary_corr_ok'] = None
     # Large
     metadata['ext_data'] = obs.ext_data
-    metadata['ext_overlay'] = overlay
+    metadata['ext_overlay'] = color_overlay
     if create_overlay:
-        metadata['overlay'] = unpad_image(overlay, extend_fov)
+        metadata['overlay'] = unpad_image(color_overlay, extend_fov)
     else:
         metadata['overlay'] = None
+    metadata['stars_overlay'] = None
+    metadata['stars_overlay_text'] = None
+    metadata['bodies_overlay'] = None
+    metadata['bodies_overlay_text'] = None
+    metadata['rings_overlay'] = None
+    metadata['rings_overlay_text'] = None
     # Bootstrapping
     metadata['bootstrap_candidate'] = False
     metadata['bootstrap_body'] = None
@@ -376,9 +403,11 @@ def master_find_offset(obs,
     #
 
     star_offset = None
-        
+    stars_metadata = None
+    
     if (not entirely_body and
-        allow_stars and not force_offset and not force_bootstrap_candidate):
+        allow_stars and (not force_offset or create_overlay) and
+        not force_bootstrap_candidate):
         stars_metadata = stars_find_offset(obs,
                                            extend_fov=extend_fov,
                                            stars_config=stars_config)
@@ -391,13 +420,18 @@ def master_find_offset(obs,
                         star_offset[0], star_offset[1],
                         stars_metadata['num_good_stars'])
         if create_overlay:
-            # Make the overlay with no offset because we shift the overlay
-            # later
-            star_overlay = stars_make_good_bad_overlay(obs,
+            # Make the extended overlay with no offset because we shift the 
+            # overlay later
+            stars_overlay, stars_overlay_text = stars_make_good_bad_overlay(
+                              obs,
                               stars_metadata['full_star_list'], (0,0),
                               show_streaks=stars_show_streaks,
                               extend_fov=extend_fov,
+                              label_avoid_mask=label_avoid_mask,
                               stars_config=stars_config)
+            if label_avoid_mask is not None:
+                label_avoid_mask = np.logical_or(label_avoid_mask, 
+                                                 stars_overlay_text)
 
 
                     ###############################
@@ -421,16 +455,21 @@ def master_find_offset(obs,
             mask_only = (entirely_body == body_name and
                          (bodies_cartographic_data is None or
                           body_name not in bodies_cartographic_data))
-            body_model, body_metadata = bodies_create_model(
+            body_model, body_metadata, body_overlay_text = bodies_create_model(
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
                     cartographic_data=bodies_cartographic_data,
                     always_create_model=create_overlay,
+                    label_avoid_mask=label_avoid_mask,
                     bodies_config=bodies_config,
                     mask_only=mask_only)
             bodies_metadata[body_name] = body_metadata
             if body_model is not None:
-                bodies_model_list.append((body_model, body_metadata))
+                bodies_model_list.append((body_model, body_metadata, 
+                                          body_overlay_text))
+            if label_avoid_mask is not None:
+                label_avoid_mask = np.logical_or(label_avoid_mask,
+                                                 body_overlay_text)
 
     if entirely_body:
         if (entirely_body not in FUZZY_BODY_LIST and
@@ -447,11 +486,15 @@ def master_find_offset(obs,
     # MAKE A MODEL FOR THE RINGS IN THE IMAGE
     #
     if allow_rings:
-        rings_model, rings_metadata = rings_create_model(
+        rings_model, rings_metadata, rings_overlay_text = rings_create_model(
                                          obs, extend_fov=extend_fov,
                                          always_create_model=create_overlay,
+                                         label_avoid_mask=label_avoid_mask,
                                          rings_config=rings_config)
         metadata['rings_metadata'] = rings_metadata
+        if label_avoid_mask is not None:
+            label_avoid_mask = np.logical_or(label_avoid_mask,
+                                             rings_overlay_text)
 
     rings_curvature_ok = (metadata['rings_metadata'] is not None and
                           metadata['rings_metadata']['curvature_ok'])
@@ -493,7 +536,8 @@ def master_find_offset(obs,
     bad_body = False  # True if the closest useable body is not a good body
 
     if len(bodies_model_list) > 0:
-        for body_model, body_metadata in bodies_model_list: # Sorted by range
+        # Sorted by range
+        for body_model, body_metadata, body_text in bodies_model_list:
             body_name = body_metadata['body_name']
             if body_name in FUZZY_BODY_LIST:
                 # Fuzzy bodies can't be used for navigation, but can be used
@@ -703,26 +747,94 @@ def master_find_offset(obs,
                 ######################
 
     if create_overlay:
+        ## BODIES ##
         # We recreate the model lists because there are models we might
         # include on the overlay that we didn't use for correlation.
         o_bodies_model_list = [x[0] for x in bodies_model_list]
+        o_bodies_text_list = [x[2] for x in bodies_model_list]
+        label_avoid_mask = np.zeros(obs.data.shape, dtype=np.uint8)
         if len(o_bodies_model_list) > 0:
             bodies_combined = _combine_models(o_bodies_model_list, solid=True,
                                               masked=masked_model)
-            overlay[...,1] = _normalize(bodies_combined) * 255
+            bodies_combined_text = _combine_models(o_bodies_text_list, 
+                                                   solid=True,
+                                                   masked=masked_model)
+            # The rings model is usually 0-1
+            # The rings overlay text is 0-255
+            bodies_overlay = _normalize(bodies_combined) * 255
+            bodies_overlay_text = _normalize(bodies_combined_text) * 255
+            if offset is not None:
+                bodies_overlay = shift_image(bodies_overlay, 
+                                             -int(np.round(offset[0])), 
+                                             -int(np.round(offset[1])))
+                bodies_overlay_text = shift_image(bodies_overlay_text, 
+                                             -int(np.round(offset[0])), 
+                                             -int(np.round(offset[1])))
+            metadata['bodies_overlay'] = unpad_image(bodies_overlay, 
+                                                     extend_fov)
+            metadata['bodies_overlay_text'] = unpad_image(bodies_overlay_text,
+                                                          extend_fov)
+            label_avoid_mask = np.logical_or(label_avoid_mask,
+                                             metadata['bodies_overlay_text'])
+            color_overlay[...,1] = _normalize(
+                              bodies_overlay.astype(np.float) +
+                              bodies_overlay_text.astype(np.float)) * 255
+        
+        ## RINGS ##
         if rings_model is not None:
-            overlay[...,2] = _normalize(rings_model) * 255
-        if star_overlay is not None:
-            star_overlay_color = np.zeros(overlay.shape)
-            star_overlay_color[:,:,0] = star_overlay
-            overlay = np.clip(overlay+star_overlay_color, 0, 255)
+            # The rings model is usually 0-1
+            # The rings overlay text is 0-255
+            rings_overlay = _normalize(rings_model) * 255
+            rings_overlay_text = _normalize(rings_overlay_text) * 255
+            if offset is not None:
+                rings_overlay = shift_image(rings_overlay, 
+                                             -int(np.round(offset[0])), 
+                                             -int(np.round(offset[1])))
+                rings_overlay_text = shift_image(rings_overlay_text, 
+                                             -int(np.round(offset[0])), 
+                                             -int(np.round(offset[1])))
+            metadata['rings_overlay'] = unpad_image(rings_overlay,
+                                                    extend_fov)
+            metadata['rings_overlay_text'] = unpad_image(rings_overlay_text,
+                                                         extend_fov)
+            label_avoid_mask = np.logical_or(label_avoid_mask,
+                                             metadata['rings_overlay_text'])
+            color_overlay[...,2] = _normalize(
+                              rings_overlay.astype(np.float) +
+                              rings_overlay_text.astype(np.float)) * 255
+        
+        ## STARS ##
+        if stars_overlay is not None:
+            # The stars overlay and stars overlay text are both already 0-255.
+            # We don't normalize the stars overlay because it's already set up
+            # exactly how we want it.
+            (new_stars_overlay, 
+             new_stars_overlay_text) = stars_make_good_bad_overlay(
+                              obs,
+                              stars_metadata['full_star_list'], offset,
+                              label_avoid_mask=label_avoid_mask,
+                              stars_config=stars_config)
+            if offset is not None:
+                # We need to shift the original extended overlay, but not the
+                # new non-extended one since it was created with an offset
+                # in place
+                stars_overlay = shift_image(stars_overlay, 
+                                            -int(np.round(offset[0])), 
+                                            -int(np.round(offset[1])))
+                stars_overlay_text = shift_image(stars_overlay_text, 
+                                            -int(np.round(offset[0])), 
+                                            -int(np.round(offset[1])))
+            metadata['stars_overlay'] = new_stars_overlay
+            metadata['stars_overlay_text'] = new_stars_overlay_text
+            label_avoid_mask = np.logical_or(label_avoid_mask,
+                                             new_stars_overlay_text)
+            color_overlay[...,0] = _normalize(
+                               stars_overlay.astype(np.float) +
+                               stars_overlay_text.astype(np.float)) * 255
 
-        if offset is not None:
-            overlay = shift_image(overlay, -int(np.round(offset[0])), -int(np.round(offset[1])))
-    
-    metadata['ext_overlay'] = overlay
-    if overlay is not None:
-        metadata['overlay'] = unpad_image(overlay, extend_fov)
+    metadata['ext_overlay'] = color_overlay
+    if color_overlay is not None:
+        metadata['overlay'] = unpad_image(color_overlay, extend_fov)
 
                 #########################################
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #
@@ -737,6 +849,145 @@ def master_find_offset(obs,
     
     metadata['end_time'] = time.time()
 
-    logger.info('Total elapsed time %d seconds', metadata['end_time']-metadata['start_time'])
+    logger.info('Total elapsed time %d seconds', 
+                metadata['end_time']-metadata['start_time'])
     
     return metadata
+
+def offset_create_overlay_image(obs, metadata,
+                                blackpoint=None, whitepoint=None,
+                                whitepoint_ignore_frac=1., 
+                                gamma=0.5,
+                                stars_blackpoint=None, stars_whitepoint=None,
+                                stars_whitepoint_ignore_frac=1., 
+                                stars_gamma=0.5):
+    img = obs.data
+    stars_overlay = metadata['stars_overlay']
+    stars_overlay_text = metadata['stars_overlay_text']
+    bodies_overlay = metadata['bodies_overlay']
+    bodies_overlay_text = metadata['bodies_overlay_text']
+    rings_overlay = metadata['rings_overlay']
+    rings_overlay_text = metadata['rings_overlay_text']
+    
+    gamma = 0.5
+    
+    # Contrast stretch the main image
+    if blackpoint is None:
+        blackpoint = np.min(img)
+
+    if whitepoint is None:
+        img_sorted = sorted(list(img.flatten()))
+        whitepoint = img_sorted[np.clip(int(len(img_sorted)*
+                                            whitepoint_ignore_frac),
+                                        0, len(img_sorted)-1)]
+    greyscale_img = ImageDisp.scale_image(img,
+                                          blackpoint,
+                                          whitepoint,
+                                          gamma)
+
+    # Contrast stretch the stars
+    if stars_overlay is not None and np.any(stars_overlay == 1):
+        stars_data = img[stars_overlay == 1]
+        if stars_blackpoint is None:
+            stars_blackpoint = np.min(stars_data)
+        if stars_whitepoint is None:
+            stars_sorted = sorted(list(stars_data))
+            stars_whitepoint = stars_sorted[
+                                    np.clip(int(len(stars_sorted)*
+                                                stars_whitepoint_ignore_frac),
+                                            0, len(stars_sorted)-1)]
+        stars_data = ImageDisp.scale_image(stars_data,
+                                           stars_blackpoint,
+                                           stars_whitepoint,
+                                           gamma)
+        greyscale_img[stars_overlay == 1] = stars_data
+        stars_overlay[stars_overlay == 1] = 0
+        
+    mode = 'RGB'
+    combined_data = np.zeros(greyscale_img.shape + (3,), dtype=np.uint8)
+    combined_data[:,:,1] = greyscale_img[:,:]
+    
+    overlay = np.zeros(obs.data.shape, dtype=np.float)
+    
+    if stars_overlay is not None:
+        overlay += stars_overlay
+    if rings_overlay is not None:
+        overlay += rings_overlay
+    if bodies_overlay is not None:
+        overlay += bodies_overlay
+
+    overlay = np.clip(overlay, 0, 255)
+    combined_data[:,:,0] = overlay
+
+    if stars_overlay_text is not None:
+        text_ok = stars_overlay_text != 0
+        combined_data[text_ok, 0] = stars_overlay_text[text_ok]
+        combined_data[text_ok, 1] = stars_overlay_text[text_ok]
+        combined_data[text_ok, 2] = stars_overlay_text[text_ok]
+#    combined_data[bodies_overlay_text != 0, :] = bodies_overlay_text[bodies_overlay_text != 0]
+    if rings_overlay_text is not None:
+        rings_ok = rings_overlay_text != 0
+        combined_data[rings_ok, 0] = rings_overlay_text[rings_ok]
+        combined_data[rings_ok, 1] = rings_overlay_text[rings_ok]
+        combined_data[rings_ok, 2] = rings_overlay_text[rings_ok]
+
+    text_im = Image.frombuffer('RGB', (combined_data.shape[1], 
+                                     combined_data.shape[0]), 
+                               combined_data, 'raw', 'RGB', 0, 1)
+    text_draw = ImageDraw.Draw(text_im)
+
+    data_line1 = '%s %s' % (obs.filename[:13], 
+                                       cspice.et2utc(obs.midtime, 'C', 0))
+    data_line2 = '%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2)
+    data_line3 = ''
+    stars_ok = False
+    if (metadata['stars_metadata'] is not None and
+        metadata['stars_metadata']['offset'] is not None):
+        data_line3 += 'Stars OK'
+        stars_ok = True
+    else:
+        data_line3 += 'Stars FAIL'
+    if metadata['model_offset'] is not None:
+        data_line3 += ' / Model OK'
+    else:
+        data_line3 += ' / Model FAIL'
+    if stars_ok and not metadata['model_overrides_stars']:
+        data_line3 += ' / Stars WIN'
+    else:
+        data_line3 += ' / Model WINS'
+    text_size1 = text_draw.textsize(data_line1)
+    text_size2 = text_draw.textsize(data_line2)
+    text_size3 = text_draw.textsize(data_line3)
+    text_size = (max(text_size1[0],text_size2[0],text_size3[0])+6,
+                 text_size1[1]+text_size2[1]+text_size3[1]+6)
+
+    # Look for the emptiest corner - no text
+    best_count = 1e38
+    best_u = None
+    best_v = None
+    
+    for v in [[0, text_size[1]+1],
+              [combined_data.shape[0]-text_size[1],
+               combined_data.shape[0]]]:
+        for u in [[0, text_size[0]+1],
+                  [combined_data.shape[1]-text_size[0],
+                   combined_data.shape[1]]]:
+            count = np.count_nonzero(combined_data[v[0]:v[1],u[0]:u[1],2])
+            if count < best_count:
+                best_u = u[0]
+                best_v = v[0]
+                best_count = count
+            
+    best_u += 3
+    best_v += 3
+    text_draw.text((best_u,best_v), data_line1, fill=(255,255,255))
+    best_v += text_size1[1]
+    text_draw.text((best_u,best_v), data_line2, fill=(255,255,255))
+    best_v += text_size2[1]
+    text_draw.text((best_u,best_v), data_line3, fill=(255,255,255))
+
+    combined_data = np.array(text_im.getdata()).reshape(combined_data.shape)
+
+    combined_data = np.cast['uint8'](combined_data)
+
+    return combined_data

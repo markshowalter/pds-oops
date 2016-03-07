@@ -35,6 +35,7 @@ import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
+from PIL import Image, ImageDraw, ImageFont
 
 import polymath
 import oops
@@ -71,17 +72,8 @@ _RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS',
 # We have various ways to analyze the rings. In all cases there need to be a
 # certain number of "fiducial features", edges that have predictable orbits.
 #
-# Which list of fiducial features to use is controlled by the
-# 'fiducial_feature_list' parameter in rings_config. The options are:
-#
-#    'french93' - French, R.G. et al. 1993, Icarus, 103, 163-213
-#        "Geometry of the Saturn system from the 3 July 1989 occultation of
-#          28 SGR and Voyager observations"
-#
-#    'french1404' - Features from Dick French 2014
-#        'ringfit_v1.8.Sa025S-RF-V4927.out'
-#
-#    'french1601' - Features from Dick French 2016. These include
+# We use data from Dick French 2016. These include
+#        A Ring edge - El Moutamid, et al. 2015, Icarus, TBD
 #        C Ring features - Nicholson, et al. 2014, Icarus, 241, 373-396
 #            "Noncircular features in Saturn's rings II: The C ring"
 #        Cassini Division features - French, et al. 2016, TBD
@@ -102,11 +94,13 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ###########################################################
     
     # Colombo Gap - #487, #43
-    ('GAP',     ((  1,  77747.89, 0.23,  3.11,  96.90,   22.57346),),  # IEG
+    ('GAP', 'Colombo',
+                ((  1,  77747.89, 0.23,  3.11,  96.90,   22.57346),),  # IEG
                 ((  1,  77926.01, 0.27,  4.89, 280.02,   22.57696),)), # OEG
 
     # Titan Ringlet - #63, #62
-    ('RINGLET', ((  1,  77867.13, 0.62, 17.39, 270.54,   22.57503),    # IER
+    ('RINGLET', 'Titan',
+                ((  1,  77867.13, 0.62, 17.39, 270.54,   22.57503),    # IER
                  (  0,                   3.84,  40.93, 1391.16334),
                  ( -5,                   0.45,  60.87, 1692.06574),
                  ( -2,                   0.77,  30.21, 2109.40889)),
@@ -116,21 +110,25 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  4,                   0.90,  80.30, 1065.62338))),
 
     # Maxwell Gap - #163, #164
-    ('GAP',     ((  1,  87342.77, 0.43,  0.00,   0.00,    0.00000),),  # IEG
+    ('GAP', 'Maxwell',
+                ((  1,  87342.77, 0.43,  0.00,   0.00,    0.00000),),  # IEG
                 ((  1,  87610.12, 0.41,  1.11, 228.54,   14.69150),)), # OEG
 
     # Maxwell Ringlet - #61, #60
-    ('RINGLET', ((  1,  87480.29, 0.23, 18.93,  55.60,   14.69572),),  # IER
+    ('RINGLET', 'Maxwell',
+                ((  1,  87480.29, 0.23, 18.93,  55.60,   14.69572),),  # IER
                 ((  1,  87539.36, 0.16, 58.02,  57.20,   14.69314),    # OER
                  (  2,                   0.19,  73.26,  599.52336),
                  (  4,                   0.29,  16.55,  891.94002))),
 
     # Bond Gap - #111, #110
-    ('GAP',     ((  1,  88686.01, 0.76,  0.00,   0.00,    0.00000),),  # IEG 
+    ('GAP', 'Bond',
+                ((  1,  88686.01, 0.76,  0.00,   0.00,    0.00000),),  # IEG 
                 ((  1,  88723.04, 0.30,  0.00,   0.00,    0.00000),)), # OEG
      
     # Bond Ringlet - #59, #58
-    ('RINGLET', ((  1,  88701.89, 0.28,  0.00,   0.00,    0.00000),    # IER
+    ('RINGLET', 'Bond',
+                ((  1,  88701.89, 0.28,  0.00,   0.00,    0.00000),    # IER
                  (  0,                   0.17,  79.75, 1146.43579),
                  (  3,                   0.16,  88.49,  778.35308)),
                 ((  1,  88719.24, 0.32,  0.00,   0.00,    0.00000),    # OER
@@ -144,7 +142,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # Dawes Ringlet - Not included because the edge is not sharp
 
     # Dawes Gap - #56, #112
-    ('GAP',     ((  1,  90200.38, 0.75,  6.10,  69.24,   13.18027),
+    ('GAP', 'Dawes',
+                ((  1,  90200.38, 0.75,  6.10,  69.24,   13.18027),
                  (  2,                   5.27,  62.92,  572.50536),
                  (  3,                   1.46,  41.67,  758.94278),
                  (  5,                   0.89,  71.02,  908.10954)),
@@ -164,7 +163,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     #############################################
 
     # Huygens Ringlet - #54, #53
-    ('RINGLET', ((  1, 117805.55, 1.30, 27.81, 137.53,    5.02872),
+    ('RINGLET', 'Huygens',
+                ((  1, 117805.55, 1.30, 27.81, 137.53,    5.02872),
                  ( 91,                   0.59, 115.57,   -4.98852),
                  ( 92,                   2.09,  81.56,  381.98744),
                  (-10,                   0.74,  14.73,  831.59967),
@@ -180,7 +180,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  5,                   0.71,  26.40,  606.07903))),
                                
     # Strange Ringlet - #560, #561
-    ('RINGLET', ((  1, 117907.04, 1.63,  7.63, 153.21,    5.00570),
+    ('RINGLET', 'Strange',
+                ((  1, 117907.04, 1.63,  7.63, 153.21,    5.00570),
                  ( 91,                   7.44, 117.20,   -4.97620),
                  (  0,                   2.42,   9.73,  750.48932),
                  (  2,                   3.75, 105.79,  380.25154),
@@ -196,7 +197,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( -1,                   1.14, 352.19, 1505.96783))),
                                
     # Huygens Gap - #20 OEG only
-    ('GAP',     None,
+    ('GAP', 'Huygens',
+                None,
                 ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),
                  ( 91,                   0.44, 245.70,   -4.98425),
                  (  0,                   1.82, 143.78,  750.25165),
@@ -206,7 +208,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( -1,                   0.82,  67.16, 1505.51205))),
                 
     # Herschel Gap - #19, #16
-    ('GAP',     ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),
+    ('GAP', 'Herschel',
+                ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),
                  ( 91,                   0.34, 279.55,   -4.95092),
                  (  2,                   1.34,  95.16,  378.89248),
                  ( 92,                   0.89,  82.69,  381.98160),
@@ -226,7 +229,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( -1,                   0.23, 197.18, 1498.79019))),
                                
     # Herschel Ringlet - #18, #17        
-    ('RINGLET', ((  1, 118234.30, 0.26,  1.49, 172.81,    4.96229),
+    ('RINGLET', 'Herschel',
+                ((  1, 118234.30, 0.26,  1.49, 172.81,    4.96229),
                  ( 91,                   1.49, 274.14,   -4.92970),
                  (  0,                   0.32, 237.88,  747.36440),
                  ( 92,                   0.69,  79.00,  381.98129)),
@@ -239,7 +243,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  5,                   0.22,  54.38,  602.66098))),
 
     # Russell Gap - #123, #13
-    ('GAP',     ((  1, 118589.92, 0.25,  7.60, 236.73,    4.90922),
+    ('GAP', 'Russell',
+                ((  1, 118589.92, 0.25,  7.60, 236.73,    4.90922),
                  (  2,                   0.23, 165.64,  376.94996),
                  ( 92,                   0.51,  80.23,  381.98584),
                  (  3,                   0.25,  92.19,  500.95134)),
@@ -247,28 +252,32 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( 92,                   0.47,  78.01,  381.98525))),
 
     # Jeffreys Gap - #120, #15
-    ('GAP',     ((  1, 118929.63, 0.13,  3.26, 333.51,    4.85753),
+    ('GAP', 'Jeffreys',
+                ((  1, 118929.63, 0.13,  3.26, 333.51,    4.85753),
                  ( 91,                   0.17, 292.09,   -4.82576),
                  ( 92,                   0.44,  75.98,  381.99151)),
                 ((  1, 118966.70, 0.12,  0.08, 114.89,    4.80910),
                  ( 92,                   0.37,  74.90,  381.98629))),
 
     # Kuiper Gap - #119, #118      
-    ('GAP',     ((  1, 119401.67, 0.16,  0.93,  19.55,    4.79845),
+    ('GAP', 'Kuiper',
+                ((  1, 119401.67, 0.16,  0.93,  19.55,    4.79845),
                  ( 91,                   0.18, 226.51,   -4.78025),
                  ( 92,                   0.25,  79.87,  381.98534)),
                 ((  1, 119406.30, 0.13,  0.10, 220.24,    4.75654),
                  ( 92,                   0.29,  79.03,  381.98449))),
 
     # Laplace Gap - #115, #114 
-    ('GAP',     ((  1, 119844.78, 0.26,  3.25, 310.11,    4.72673),
+    ('GAP', 'Laplace',
+                ((  1, 119844.78, 0.26,  3.25, 310.11,    4.72673),
                  ( 91,                   0.25,  10.17,   -4.69233),
                  ( 92,                   0.29,  82.70,  381.98579)),
                 ((  1, 120085.65, 0.10,  1.34, 308.79,    4.71705),
                  ( 92,                   0.22,  76.51,  381.98639))),
                                
     # Laplace Ringlet - #14, #12
-    ('RINGLET', ((  1, 120036.53, 0.20,  1.19, 236.12,   4.71250),
+    ('RINGLET', 'Laplace',
+                ((  1, 120036.53, 0.20,  1.19, 236.12,   4.71250),
                  (  0,                   2.22, 160.05, 730.64946),
                  ( 92,                   0.27,  75.51, 381.98821),
                  ( -4,                   0.13,  19.39, 918.04749),
@@ -282,7 +291,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  6,                   0.12,  16.13, 613.31846))),
     
     # Bessel Gap - #127, #11
-    ('GAP',     ((  1, 120231.17, 0.44,  1.78, 263.16,    4.68450),
+    ('GAP', 'Bessel',
+                ((  1, 120231.17, 0.44,  1.78, 263.16,    4.68450),
                  ( 92,                   0.29,  73.47,  381.97875),
                  (  8,                   0.36,  10.70,  642.50158)),
                 ((  1, 120243.71, 0.23,  0.64, 206.50,    4.68561),
@@ -291,7 +301,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( -1,                   0.14, 302.16, 1462.27593))),
 
     # Barnard Gap - #10, #9
-    ('GAP',     ((  1, 120303.69, 0.43,  0.44, 200.07,    4.68212),
+    ('GAP', 'Barnard',
+                ((  1, 120303.69, 0.43,  0.44, 200.07,    4.68212),
                  (  2,                   0.61,  44.12,  368.82370),
                  ( 92,                   0.25,  67.07,  381.99503),
                  (  3,                   1.31, 108.47,  490.20424),
@@ -317,12 +328,12 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # See below
     
     # 2005 MAY 1 - 2005 AUG 1
-    ('RINGLET_2005-MAY-1_2005-AUG-1',
+    ('RINGLET_2005-MAY-1_2005-AUG-1', 'A Ring',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136767.20, 7.55,  0.00,   0.00,    0.00000),)),
 
     # 2006 JAN 1 - 2009 JULY 1
-    ('RINGLET_2006-JAN-1_2009-JULY-1',
+    ('RINGLET_2006-JAN-1_2009-JULY-1', 'A Ring',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),     
                 ((  1, 136770.09, 1.78,  0.00,   0.00,    0.00000),
                  (  3,                   2.28,   8.31,  403.85329),
@@ -336,7 +347,7 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( 18,                   1.95,   4.62,  570.85163))),
 
     # 2010 JAN 1 - 2013 AUG 1
-    ('RINGLET_2010-JAN-1_2013-AUG-1',
+    ('RINGLET_2010-JAN-1_2013-AUG-1', 'A Ring',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136772.74, 4.25,  0.00,   0.00,    0.00000),
                  (  9,                   6.14,  27.17,  537.45029),
@@ -344,19 +355,19 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
 
     # Fill in the other dates, when the Keeler gap edge is OK but the A ring edge
     # isn't.
-    ('GAP_1990-JAN-1_2005-MAY-1', # Before 2005-MAY-1
+    ('GAP_1990-JAN-1_2005-MAY-1', 'Keeler', # Before 2005-MAY-1
                 None,
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
                                        
-    ('GAP_2005-AUG-1_2006-JAN-1', # Between 2005-AUG-1 and 2006-JAN-1
+    ('GAP_2005-AUG-1_2006-JAN-1', 'Keeler', # Between 2005-AUG-1 and 2006-JAN-1
                 None,
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
-    ('GAP_2009-JULY-1_2010-JAN-1', # Between 2009-JULY-1 and 2010-JAN-1
+    ('GAP_2009-JULY-1_2010-JAN-1', 'Keeler', # Between 2009-JULY-1 and 2010-JAN-1
                 None,
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
-    ('GAP_2013-AUG-1_2030-JAN-1', # After 2013-AUG-1
+    ('GAP_2013-AUG-1_2030-JAN-1', 'Keeler', # After 2013-AUG-1
                 None,
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
 
@@ -370,78 +381,95 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ### C RING ###
             
     # #135 - IEG unpaired
-    ('GAP',     ((  1,  74614.73965, 0.164346, 0.0000000,   0.0000000,   0.0000000),),
+    ('GAP', None,
+                ((  1,  74614.73965, 0.164346, 0.0000000,   0.0000000,   0.0000000),),
                 None),
 
     # #144 - OER paired with #143, uncircular
     ('RINGLET', None,
+                None,
                 ((  1,  75988.65895, 0.142803, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.1345940, 101.5205612,  22.5997842))),
 
     # #40 - OER unpaired
     ('RINGLET', None,
+                None,
                 ((  1,  76261.77387, 0.158014, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.2666899,  97.8944271,  22.5677381))),
 
     # #39 - OER unpaired
     ('RINGLET', None,
+                None,
                 ((  1,  77162.11501, 0.127343, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.5803149,  95.1273754,  22.5786349))),
 
     # #38, #37
-    ('RINGLET', ((  1,  79222.04152, 0.113388, 0.0000000,   0.0000000,   0.0000000),
+    ('RINGLET', None,
+                ((  1,  79222.04152, 0.113388, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.2341692, 287.4580718,  22.5734575)),
                 ((  1,  79262.91082, 0.112969, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.1892659, 284.0750895,  22.5732605))),
 
     # #35, #34
-    ('RINGLET', ((  1, 84751.77410, 0.159019, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 84751.77410, 0.159019, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 84947.29467, 0.137759, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #33, #42
-    ('RINGLET', ((  1, 85661.96178, 0.113055, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 85661.96178, 0.113055, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 85757.24532, 0.176563, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #31 - IER unpaired
-    ('RINGLET', ((  1, 85923.69993, 0.104101, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 85923.69993, 0.104101, 0.0000000,   0.0000000,   0.0000000),),
                 None),
 
     # #30 - IER paired with #29, uncircular
-    ('RINGLET', ((  1, 86373.17361, 0.171814, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 86373.17361, 0.171814, 0.0000000,   0.0000000,   0.0000000),),
                 None),
 
     # #28 - OER unpaired
     ('RINGLET', None,
+                None,
                 ((  1, 88592.73625, 0.115294, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #27, #41
-    ('RINGLET', ((  1, 89190.58600, 0.086866, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 89190.58600, 0.086866, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 89294.05618, 0.181465, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #26, #25
-    ('RINGLET', ((  1, 89789.57831, 0.081971, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 89789.57831, 0.081971, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 89937.78988, 0.141344, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #24, #23
-    ('RINGLET', ((  1, 90406.12658, 0.094128, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', None,
+                ((  1, 90406.12658, 0.094128, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 90613.79856, 0.156829, 0.0000000,   0.0000000,   0.0000000),)),
 
     ### B RING ###
     
     # #77 - OEG unpaired
-    ('GAP',     None,
+    ('GAP', None,
+                None,
                 ((  1, 100024.40676, 0.117471, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #74 - OEG paired with #75, uncircular
-    ('GAP',     None,
+    ('GAP', None,
+                None,
                 ((  1, 101743.40857, 0.110368, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #73 - OER unpaired
     ('RINGLET', None,
+                None,
                 ((  1, 103008.64563, 0.114512, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #71 - OEG paired with #72, uncircular
-    ('GAP',     None,
+    ('GAP', None,
+                None,
                 ((  1, 104082.65168, 0.144307, 0.0000000,   0.0000000,   0.0000000),)),
 
 
@@ -623,15 +651,18 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # but it's better to call the area between the OEG and the A ring OER a
     # ringlet so it gets filled in in the model.
     # From Dec 2013 CMF-V4687
-    ('GAP',     ((  1, 136484.91000, 3.620000, 0.0000000,   0.0000000,   0.0000000),),
+    ('GAP', 'Keeler',
+                ((  1, 136484.91000, 3.620000, 0.0000000,   0.0000000,   0.0000000),),
                 None),
     
     # #4, #3 - Encke IEG/OEG
-    ('GAP',     ((  1, 133423.23793, 0.948856, 0.0000000,   0.0000000,   0.0000000),),
+    ('GAP', 'Encke',
+                ((  1, 133423.23793, 0.948856, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 133744.83759, 0.808255, 0.0000000,   0.0000000,   0.0000000),)),
 
     # #7 - A ring IER
-    ('RINGLET', ((  1, 122050.07651, 1.135272, 0.0000000,   0.0000000,   0.0000000),),
+    ('RINGLET', 'A Ring',
+                ((  1, 122050.07651, 1.135272, 0.0000000,   0.0000000,   0.0000000),),
                 None),
 ]
 
@@ -834,7 +865,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         feature_list = []
         best_blur = None
         for fiducial_feature in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
-            entry_type_str, inner, outer = fiducial_feature
+            entry_type_str, feature_name, inner, outer = fiducial_feature
             entry_type_list = entry_type_str.split('_')
             entry_type = entry_type_list[0]
             if len(entry_type_list) > 1:
@@ -858,16 +889,15 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if ret is not None and ret != 1.:
                     blur_list.append(ret)
             if inner is not None or outer is not None:
-                feature_list.append((entry_type, inner, outer))
+                feature_list.append((entry_type, feature_name, inner, outer))
                 print 'KEEPING', feature_list[-1]
 
-        num_features = int(np.sum([(x[1] is not None) + (x[2] is not None)
+        num_features = int(np.sum([(x[2] is not None) + (x[3] is not None)
                                    for x in feature_list]))
         if num_features >= min_features or phase == 1:
             break
 
         blur_list.sort()
-        print blur_list
         
         if len(blur_list) < min_features-num_features:
             break
@@ -984,7 +1014,7 @@ def _make_ephemeris_radii(obs, descr_list):
                             amp, long_peri*oops.RPD, 
                             rate_peri*oops.RPD/86400.)
 
-    return last_radii.vals.astype('float')
+    return last_radii
 
 def _shade_antialias(radii, a, shade_above, resolutions):
     # The anti-aliasing shade
@@ -1025,9 +1055,12 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
     
     return model + shade + shade_anti
 
-def _compute_model_ephemeris(obs, feature_list, extend_fov, rings_config):
+def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
+    text_ringlet_threshold = rings_config['text_ringlet_gap_threshold']
+    text_threshold = rings_config['text_threshold']
+    
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
@@ -1044,48 +1077,76 @@ def _compute_model_ephemeris(obs, feature_list, extend_fov, rings_config):
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
+    model_text = np.zeros(model.shape, dtype=np.uint8)
+    text_im = Image.frombuffer('L', (model_text.shape[1], 
+                                     model_text.shape[0]), 
+                               model_text, 'raw', 'L', 0, 1)
+    text_draw = ImageDraw.Draw(text_im)
+
+    # Create an array of distances from the center pixel - always try to put
+    # text labels as close to the center as possible to minimize the chance
+    # of going off the edge.
+    axis1 = np.tile(np.arange(float(model.shape[1]))-model.shape[1]//2,
+                    model.shape[0]).reshape(model.shape)
+    axis2 = np.repeat(np.arange(float(model.shape[0]))-model.shape[0]//2,
+                      model.shape[1]).reshape(model.shape)
+    dist_from_center = axis1**2+axis2**2
+    # Don't do anything too close to the top or bottom edges because text
+    # has height
+    dist_from_center[:5,:] = 1e38
+    dist_from_center[-5:,:] = 1e38
         
     feature_list_by_a = []
-    for entry_type, inner, outer in feature_list:
+    for entry_type, feature_name, inner, outer in feature_list:
         if inner is not None:
-            if entry_type == 'GAP':
-                feature_list_by_a.append((inner[0][1], 'IEG'))
-            else:
-                feature_list_by_a.append((inner[0][1], 'OEG'))
+            feature_list_by_a.append((inner[0][1], 
+                                      'IEG' if entry_type == 'GAP' else 'IER'))
         if outer is not None:
-            if entry_type == 'GAP':
-                feature_list_by_a.append((outer[0][1], 'IER'))
-            else:
-                feature_list_by_a.append((outer[0][1], 'OER'))
+            feature_list_by_a.append((outer[0][1], 
+                                      'OEG' if entry_type == 'GAP' else 'OER'))
     feature_list_by_a.sort(key=lambda x: x[0], reverse=True)
 
     # Do gaps first, because gaps might actually have ringlets inside of them.
-    # Then go back and add the ringlets, which might fill in the gpas.
+    # Then go back and add the ringlets, which might fill in the gaps.
     for do_type in ['GAP', 'RINGLET']:
-        for entry_type, inner, outer in feature_list:
+        for entry_type, feature_name, inner, outer in feature_list:
             if entry_type != do_type:
                 continue
             inner_radii = None
-            outer_radii = None                     
-            if inner is not None and outer is not None:
+            inner_radii_bp = None
+            outer_radii = None  
+            outer_radii_bp = None
+            text_name_list = []
+            intersect_list = []
+            if (inner is not None and outer is not None and
+                entry_type == 'RINGLET'):
+                # If we have a full ringlet, find both edges even if one
+                # of them is off the image so we can fill it in solid
+                # later
                 inner_a = inner[0][1]
                 outer_a = outer[0][1]
                 if (min_radius < inner_a < max_radius or
                     min_radius < outer_a < max_radius):
-                    inner_radii = _make_ephemeris_radii(obs, inner)
-                    outer_radii = _make_ephemeris_radii(obs, outer)
+                    inner_radii_bp = _make_ephemeris_radii(obs, inner)
+                    outer_radii_bp = _make_ephemeris_radii(obs, outer)
             else:
                 if inner is not None:
                     inner_a = inner[0][1]
                     if min_radius < inner_a < max_radius:
-                        inner_radii = _make_ephemeris_radii(obs, inner)
+                        inner_radii_bp = _make_ephemeris_radii(obs, inner)
                 if outer is not None:
                     outer_a = outer[0][1]
                     if min_radius < outer_a < max_radius:
-                        outer_radii = _make_ephemeris_radii(obs, outer)
+                        outer_radii_bp = _make_ephemeris_radii(obs, outer)
+            if inner_radii_bp is not None:
+                inner_radii = inner_radii_bp.vals.astype('float')
+            if outer_radii_bp is not None:
+                outer_radii = outer_radii_bp.vals.astype('float')
             if (inner_radii is not None and outer_radii is not None and
                 entry_type == 'RINGLET'):
                 # We have both edges for a ringlet - just make it solid
+                logger.debug('Adding RINGLET a=%.2f to %.2f', inner_a, 
+                             outer_a)
                 inner_above = inner_radii >= inner_a
                 outer_below = outer_radii <= outer_a
                 intersect = np.logical_and(inner_above, outer_below)
@@ -1096,25 +1157,152 @@ def _compute_model_ephemeris(obs, feature_list, extend_fov, rings_config):
                 shade = _shade_antialias(outer_radii, outer_a, True,
                                          resolutions)
                 model += shade
-                logger.debug('Adding RINGLET a=%9.2f to %9.2f', inner_a, 
-                             outer_a)
+                # If the ringlet is wide enough that you can really see it in
+                # the image, then it's worth labeling
+                if (outer_a-inner_a)/min_res >= text_ringlet_threshold:
+                    # Somewhere it's at least 3 pixels wide and can probably be
+                    # seen
+                    if feature_name and feature_name.upper() == 'A RING':
+                        # We need to fake this one out - it's really the Keeler
+                        # OEG and the A Ring outer edge
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              inner_radii_bp.key,
+                                              inner_a).vals.astype('bool'))
+                        text_name_list.append('Keeler OEG')
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              outer_radii_bp.key,
+                                              outer_a).vals.astype('bool'))
+                        text_name_list.append('A Ring Outer Edge')                        
+                    else:
+                        intersect_list.append(intersect)
+                        if feature_name:
+                            text_name_list.append(feature_name + ' Ringlet')
+                        else:
+                            text_name_list.append('Ringlet a=%.2f-%.2f' % 
+                                                  (inner_a, outer_a))
             else:
+                named_full_gap = False
+                if (inner_radii is not None and outer_radii is not None and
+                    entry_type == 'GAP'):
+                    # Go ahead and name the full gap here even though we're going
+                    # to shade the edges separately later
+                    if (outer_a-inner_a)/min_res >= text_ringlet_threshold:
+                        # Somewhere it's at least 3 pixels wide and can probably be
+                        # seen
+                        inner_above = inner_radii >= inner_a
+                        outer_below = outer_radii <= outer_a
+                        intersect_list.append(np.logical_and(inner_above, 
+                                                             outer_below))
+                        if feature_name:
+                            text_name_list.append(feature_name + ' Gap')
+                        else:
+                            text_name_list.append('Gap a=%.2f-%.2f' % (inner_a, 
+                                                                       outer_a))
+                        named_full_gap = True
+                    # Fall through to...
                 if inner_radii is not None:
+                    # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
+                    logger.debug('Adding %s a=%.2f shade_above %d',
+                                 entry_type, inner_a, shade_above)
                     model = _shade_model(model, inner_radii, inner_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
-                    logger.debug('Adding %s a=%9.2f shade_above %d',
-                                 entry_type, inner_a, shade_above)
+                    if not named_full_gap:
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              inner_radii_bp.key,
+                                              inner_a).vals.astype('bool'))
+                        feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
+                                                  else 'IEG')
+                        if feature_name:
+                            text_name_list.append(feature_name + ' ' +
+                                                  feature_name_sfx) 
+                        else:
+                            text_name_list.append(feature_name_sfx +
+                                                  (' a=%.2f' % inner_a))                     
                 if outer_radii is not None:
+                    # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
+                    logger.debug('Adding %s a=%.2f shade_above %d',
+                                 entry_type, inner_a, shade_above)
                     model = _shade_model(model, outer_radii, outer_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
-                    logger.debug('Adding %s a=%9.2f shade_above %d',
-                                 entry_type, outer_a, shade_above)
+                    if not named_full_gap:
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              outer_radii_bp.key,
+                                              outer_a).vals.astype('bool'))
+                        feature_name_sfx = ('OER' if entry_type == 'RINGLET' 
+                                                  else 'OEG')
+                        if feature_name:
+                            text_name_list.append(feature_name + ' ' +
+                                                  feature_name_sfx) 
+                        else:
+                            text_name_list.append(feature_name_sfx +
+                                                  (' a=%.2f' % inner_a))                     
 
-    return model
+            # Now find a good place for each label that doesn't overlap other
+            # labels and doesn't overlap text from previous model steps
+            for text_name, intersect in zip(text_name_list, intersect_list):
+                text_size = text_draw.textsize(text_name+'->')
+                dist = dist_from_center.copy()
+                dist[np.logical_not(intersect)] = 1e38
+                first_u = None
+                first_v = None
+                first_text = None
+                while np.any(dist != 1e38):
+                    # Find the closest good pixel to the image center
+                    v,u = np.unravel_index(np.argmin(dist), dist.shape)
+                    raw_v, raw_u = v,u
+                    if (text_size[1]/2 <= v <
+                        model_text.shape[0]-text_size[1]/2):
+                        v -= text_size[1]/2
+                        if u > model_text.shape[1]/2:
+                            u = u-text_size[0]
+                            text = text_name + '->'
+                        else:
+                            text = '<-' + text_name
+                        if first_u is None:
+                            first_u = u
+                            first_v = v
+                            first_text = text
+                        model_text = (np.array(text_im.getdata()).
+                                      reshape(model_text.shape))
+                        # Check for conflicts with existing labels
+                        if (not np.any(
+                          model_text[max(v-3,0):
+                                     min(v+text_size[1]+3, model_text.shape[0]),
+                                     max(u-3,0):
+                                     min(u+text_size[0]+3, model_text.shape[1])])
+                            and
+                          (label_avoid_mask is None or
+                           not np.any(
+                          label_avoid_mask[
+                                   max(v-3,0):
+                                   min(v+text_size[1]+3, model_text.shape[0]),
+                                   max(u-3,0):
+                                   min(u+text_size[0]+3, model_text.shape[1])]))):
+                            break
+                    # We're overlapping with existing text! Or V is too close
+                    # to the edge.
+                    dist[max(raw_v-3,0):
+                         min(raw_v+3,model_text.shape[0]),
+                         max(raw_u-3,0):
+                         min(raw_u+3,model_text.shape[1])] = 1e38
+                    u = None
+                    
+                if u is None:
+                    # We give up - just use the first one we found
+                    u = first_u
+                    v = first_v
+                    text = first_text
+                
+                if u is not None:
+                    text_draw.text((u,v), text, fill=255)
+
+    model_text = np.array(text_im.getdata()).reshape(model_text.shape)
+
+    return model, model_text
 
 #===============================================================================
 # 
@@ -1123,7 +1311,9 @@ def _compute_model_ephemeris(obs, feature_list, extend_fov, rings_config):
 #===============================================================================
 
 def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
-                       include_body_shadows=False, rings_config=None):
+                       include_body_shadows=False,
+                       label_avoid_mask=None,
+                       rings_config=None):
     """Create a model for the rings.
 
     The rings model is created by interpolating from the Voyager I/F
@@ -1142,6 +1332,9 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                enough fiducial features.
         include_body_shadows   True to include the shadows of bodies near 
                                equinox. Saturn's shadow is always incldued.
+        label_avoid_mask       A mask giving places where text labels should
+                               not be placed (i.e. labels from another
+                               model are already there). None if no mask.
         rings_config           Configuration parameters. None uses the default.
 
     Returns:
@@ -1186,7 +1379,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         logger.info('Too little curvature')
         if not always_create_model:
             metadata['end_time'] = time.time()
-            return None, metadata
+            return None, metadata, None
     else:
         metadata['curvature_ok'] = True     
    
@@ -1204,7 +1397,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                     num_features)
         if not always_create_model:
             metadata['end_time'] = time.time()
-            return None, metadata
+            return None, metadata, None
     
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
@@ -1217,7 +1410,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
             logger.info('No main rings in image - aborting')
             metadata['end_time'] = time.time()
-            return None, metadata
+            return None, metadata, None
     
         radii[radii < RINGS_MIN_RADIUS] = 0
         radii[radii > RINGS_MAX_RADIUS] = 0
@@ -1232,9 +1425,11 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
         radial_index = radial_index.astype('int')
         model = radial_data[radial_index]
+        model_text = np.zeros(model.shape, dtype=np.uint8)
     else:
-        model = _compute_model_ephemeris(obs, fiducial_features,
-                                         extend_fov, rings_config)
+        model, model_text = _compute_model_ephemeris(obs, fiducial_features,
+                                                     label_avoid_mask,
+                                                     extend_fov, rings_config)
     
 #    model = ma.masked_equal(model, 0.)
 #    model = ma.masked_equal(model, 10000.)
@@ -1243,7 +1438,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     if not np.any(model):
         logger.info('Model is empty - aborting')
         metadata['end_time'] = time.time()
-        return None, metadata
+        return None, metadata, None
     
     shadow_body_list = []
     
@@ -1255,7 +1450,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         if not np.any(model):
             logger.info('Rings completely shadowed by SATURN - aborting')
             metadata['end_time'] = time.time()
-            return None, metadata
+            return None, metadata, None
         logger.info('Rings partially shadowed by SATURN')
 
     # XXX Equinox only
@@ -1272,7 +1467,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                     logger.info('Rings completely shadowed by %s - aborting', 
                                 body_name)
                     metadata['end_time'] = time.time()
-                    return None, metadata
+                    return None, metadata, None
                 logger.info('Rings partially shadowed by %s', body_name)
     
     metadata['shadow_bodies'] = shadow_body_list
@@ -1280,10 +1475,10 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     if not np.any(model):
         logger.info('Rings are entirely shadowed - returning null model')
         metadata['end_time'] = time.time()
-        return None, metadata
+        return None, metadata, None
     
     metadata['end_time'] = time.time()
-    return model, metadata
+    return model, metadata, model_text
 
 def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     """Create a model for the rings from a radial scan of this image.
@@ -1753,22 +1948,22 @@ def rings_reproject(
                                                                  obs.midtime))        
         rad_bins_act = (rad_bins * radius_resolution + radius_inner +
                         rad_bins_offset)
-        logger.debug('Radius offset range %8.2f %8.2f',
+        logger.debug('Radius offset range %.2f %.2f',
                      np.min(rad_bins_offset),
                      np.max(rad_bins_offset))
     else:
         rad_bins_act = rad_bins * radius_resolution + radius_inner
 
-    logger.info('Radius range %8.2f %8.2f', np.min(bp_radius), 
+    logger.info('Radius range %.2f %.2f', np.min(bp_radius), 
                  np.max(bp_radius))
-    logger.debug('Radius bin range %8.2f %8.2f', np.min(rad_bins_act), 
+    logger.debug('Radius bin range %.2f %.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))
-    logger.debug('Longitude bin range %6.2f %6.2f', 
+    logger.debug('Longitude bin range %.2f %.2f', 
                  np.min(long_bins_act)*oops.DPR,
                  np.max(long_bins_act)*oops.DPR)
     logger.debug('Number of longitude bins %d', longitude_pixels)
     if not image_only:
-        logger.info('Resolution range %7.2f %7.2f', np.min(bp_resolution),
+        logger.info('Resolution range %.2f %.2f', np.min(bp_resolution),
                      np.max(bp_resolution))
     logger.debug('Data range %f %f', np.min(data), np.max(data))
 

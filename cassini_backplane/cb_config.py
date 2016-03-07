@@ -229,11 +229,18 @@ RINGS_DEFAULT_CONFIG = {
     # When manufacturing a model from an ephemeris list, each feature is
     # approximately this many pixels wide.
     'fiducial_ephemeris_width': 30,
-    
-    # 
+     
     # There must be at least this number of pixels of curvature present for
     # rings to be used for correlation.
     'curvature_threshold': 5,
+    
+    # When making the text overlay, only label a full ringlet or gap if it's
+    # at least this many pixels wide somewhere in the image.
+    'text_ringlet_gap_threshold': 2,
+    
+    # When making the text overlay, only label a non-full ringlet or gap
+    # if...
+    'text_threshold': 0, # XXX
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {

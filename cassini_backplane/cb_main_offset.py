@@ -9,7 +9,6 @@ import logging
 
 import argparse
 import cProfile, pstats, StringIO
-import csv
 from datetime import datetime
 import os
 import subprocess
@@ -28,6 +27,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
+#    command_line_str = '--has-png-file --force-offset'
 #     command_line_str = '--first-image-num 1487299402 --last-image-num 1487302209 --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1481738274 --last-image-num 1496491595 --force-offset --image-console-level none --max-subprocesses 4'
 #     command_line_str = '--first-image-num 1637518901 --last-image-num 1665998079 --image-console-level none --max-subprocesses 4'
@@ -42,13 +42,20 @@ if len(command_list) == 0:
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Smear
 #    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results'
 #    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # rings closeup
-#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results --rings-only' # Colombo->Huygens closeup
 #    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+
+    # Has some overlapping stars and one star with vertical labeling in label text
+    # Star streaks visible and not quite the right offset based on ring model
 #    command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+    
+    # Trickiness with label placement
 #    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+    
+    # Trickiness with label placement
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # A ring edge
+    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
@@ -57,8 +64,9 @@ if len(command_list) == 0:
 #    command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Bad star match
 #    command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring anti-alias
 #    command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # Good star match
-#    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring
-    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring
+#    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring - tests A ring special case for PNG
+#    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results --offset-xy "-30,36"' # Star streaks through the rings but stars in wrong place
+#    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results --stars-only' # High res A ring edge - only works with blurring
     
     command_list = command_line_str.split()
 
@@ -68,20 +76,6 @@ parser = argparse.ArgumentParser(
     description='Cassini Backplane Main Interface for Offsets',
     epilog='''Default behavior is to perform an offset pass on all images
               without associated offset files''')
-
-def validate_image_name(name):
-    valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
-    if valid:
-        try:
-            _ = int(name[1:11])
-            _ = int(name[12])
-        except ValueError:
-            valid = False
-    if not valid:
-        raise argparse.ArgumentTypeError(
-             name+
-             ' is not a valid image name - format must be [NW]dddddddddd_d')
-    return name
 
 ###XXXX####
 # --image-logfile is incompatible with --max-subprocesses > 0
@@ -124,31 +118,6 @@ parser.add_argument(
 parser.add_argument(
     '--max-subprocesses', type=int, default=0, metavar='NUM',
     help='The maximum number jobs to perform in parallel')
-
-# Arguments about selecting the images to process
-parser.add_argument(
-    '--first-image-num', type=int, default='1', metavar='IMAGE_NUM',
-    help='The starting image number')
-parser.add_argument(
-    '--last-image-num', type=int, default='9999999999', metavar='IMAGE_NUM',
-    help='The ending image number')
-nacwac_group = parser.add_mutually_exclusive_group()
-nacwac_group.add_argument(
-    '--nac-only', action='store_true', default=False,
-    help='Only process NAC images')
-nacwac_group.add_argument(
-    '--wac-only', action='store_true', default=False,
-    help='Only process WAC images')
-parser.add_argument(
-    'image_name', action='append', nargs='*', type=validate_image_name,
-    help='Specific image names to process')
-parser.add_argument(
-    '--image-full-path', action='append',
-    help='The full path for an image')
-parser.add_argument(
-    '--image-pds-csv', action='append',
-    help=''''A CSV file downloaded from PDS that contains filespecs of images
-to process''')
 
 # Arguments about the offset process
 parser.add_argument(
@@ -201,6 +170,7 @@ parser.add_argument(
     '--no-allow-saturn', dest='allow_saturn', action='store_false',
     help='Do not include saturn in navigation')
 
+file_add_selection_arguments(parser)
 
 arguments = parser.parse_args(command_list)
 
@@ -386,7 +356,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     image_logger = logging.getLogger('cb')
     
     try:   
-        obs = read_iss_file(image_path)
+        obs = file_read_iss_file(image_path)
     except:
         main_logger.exception('File reading failed - %s', image_path)
         image_logger.exception('File reading failed - %s', image_path)
@@ -453,6 +423,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             image_logger.info('Profile results:\n%s', s.getvalue())
         return True
 
+    png_image = offset_create_overlay_image(obs, metadata)
+    file_write_png_from_image(image_path, png_image)
+    
     if arguments.display_offset_results:
         display_offset_data(obs, metadata, canvas_size=None)
 
@@ -500,7 +473,7 @@ offset_xy = None
 
 if arguments.offset_xy:
     x, y = arguments.offset_xy.split(',')
-    offset_xy = (float(x), float(y))
+    offset_xy = (float(x.replace('"','')), float(y.replace('"','')))
     
 if arguments.stars_only:
     arguments.allow_rings = False
@@ -518,41 +491,7 @@ if arguments.saturn_only:
     arguments.allow_stars = False
     arguments.allow_rings = False
     arguments.allow_moons = False
-    
-if arguments.image_pds_csv:
-    for filename in arguments.image_pds_csv:
-        with open(filename, 'r') as csvfile:
-            csvreader = csv.reader(csvfile)
-            header = csvreader.next()
-            for colnum in xrange(len(header)):
-                if header[colnum] == 'primaryfilespec':
-                    break
-            else:
-                main_logger.error('Badly formatted CSV file %s', filename)
-                sys.exit(-1)
-            if arguments.image_name is None:
-                arguments.image_name = []
-                arguments.image_name.append([])
-            for row in csvreader:
-                filespec = row[colnum]
-                filespec = filespec.replace('.IMG', '').replace('_CALIB', '')
-                _, filespec = os.path.split(filespec)
-                arguments.image_name[0].append(filespec)
-
-restrict_camera = 'NW'
-if arguments.nac_only:
-    restrict_camera = 'N'
-if arguments.wac_only:
-    restrict_camera = 'W'
-
-restrict_image_list = None
-if arguments.image_name is not None and arguments.image_name != [[]]:
-    restrict_image_list = arguments.image_name[0]
-
-first_image_number = arguments.first_image_num
-last_image_number = arguments.last_image_num
-
-    
+        
 start_time = time.time()
 num_files_processed = 0
 num_files_skipped = 0
@@ -569,38 +508,21 @@ main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
 main_logger.info('Offset XY:    %s', str(offset_xy))
 main_logger.info('')
 
-if arguments.image_full_path:
-    for image_path in arguments.image_full_path:
-        process_offset_one_image(
-                     image_path, 
-                     allow_stars=arguments.allow_stars, 
-                     allow_rings=arguments.allow_rings, 
-                     allow_moons=arguments.allow_moons, 
-                     allow_saturn=arguments.allow_saturn,
-                     offset_xy=offset_xy)
-    
-if first_image_number <= last_image_number:
-    main_logger.info('*** Image #s %010d - %010d / Camera %s',
-                     first_image_number, last_image_number,
-                     restrict_camera)
-    main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
-    if restrict_image_list is not None:
-        main_logger.info('*** Images restricted to list:')
-        for filename in restrict_image_list:
-            main_logger.info('        %s', filename)
-    for image_path in yield_image_filenames(
-            first_image_number, last_image_number,
-            camera=restrict_camera, restrict_list=restrict_image_list):
-        if process_offset_one_image(
-                        image_path,
-                        allow_stars=arguments.allow_stars, 
-                        allow_rings=arguments.allow_rings, 
-                        allow_moons=arguments.allow_moons, 
-                        allow_saturn=arguments.allow_saturn,
-                        offset_xy=offset_xy):
-            num_files_processed += 1
-        else:
-            num_files_skipped += 1
+main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
+
+file_log_arguments(arguments, main_logger.info)
+
+for image_path in file_yield_image_filenames_from_arguments(arguments):
+    if process_offset_one_image(
+                    image_path,
+                    allow_stars=arguments.allow_stars, 
+                    allow_rings=arguments.allow_rings, 
+                    allow_moons=arguments.allow_moons, 
+                    allow_saturn=arguments.allow_saturn,
+                    offset_xy=offset_xy):
+        num_files_processed += 1
+    else:
+        num_files_skipped += 1
 
 wait_for_all()
 

@@ -81,7 +81,13 @@ IMAGE_LIST_BY_PHASE = [
     'COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG', # VIO
     'COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG', # VIO
     'COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG', # VIO
-
+    'COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG', # RED
+    'COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG', # RED
+    'COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG', # RED
+    'COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG', # RED
+    'COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG', # RED
+    'COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG', # RED
+    
     # 18               
     'COISS_2068/data/1680805782_1681997642/W1681908315_1_CALIB.IMG', # VIO
     'COISS_2068/data/1680805782_1681997642/W1681910478_1_CALIB.IMG', # BL1
@@ -249,91 +255,91 @@ IMAGE_LIST_BY_PHASE = [
     'COISS_2024/data/1532136934_1532184428/W1532184214_1_CALIB.IMG', # MT2
     'COISS_2024/data/1532136934_1532184428/W1532183891_1_CALIB.IMG', # MT3
                            
-    # 125
-    'COISS_2015/data/1503416732_1503874914/W1503421986_2_CALIB.IMG', # VIO
-    'COISS_2015/data/1503416732_1503874914/W1503422118_2_CALIB.IMG', # BL1
-    'COISS_2015/data/1503416732_1503874914/W1503422052_2_CALIB.IMG', # GRN
-    'COISS_2015/data/1503416732_1503874914/W1503422085_2_CALIB.IMG', # RED
-                           
-    # 130
-    'COISS_2055/data/1622711732_1623166344/W1622977122_1_CALIB.IMG', # VIO
-    'COISS_2055/data/1622711732_1623166344/W1622977155_1_CALIB.IMG', # BL1
-    'COISS_2055/data/1622711732_1623166344/W1622977188_1_CALIB.IMG', # GRN
-    'COISS_2055/data/1622711732_1623166344/W1622977221_1_CALIB.IMG', # RED
-    'COISS_2055/data/1622711732_1623166344/W1622977738_1_CALIB.IMG', # CB2
-    'COISS_2055/data/1622711732_1623166344/W1622977497_1_CALIB.IMG', # CB3
-    'COISS_2055/data/1622711732_1623166344/W1622977705_1_CALIB.IMG', # MT2
-    'COISS_2055/data/1622711732_1623166344/W1622977567_1_CALIB.IMG', # MT3
-                           
-    # 135
-    'COISS_2060/data/1643317802_1643406946/W1643375992_1_CALIB.IMG', # VIO
-    'COISS_2060/data/1643317802_1643406946/W1643376025_1_CALIB.IMG', # BL1
-    'COISS_2060/data/1643317802_1643406946/W1643376058_1_CALIB.IMG', # GRN
-    'COISS_2060/data/1643317802_1643406946/W1643376091_1_CALIB.IMG', # RED
-    'COISS_2060/data/1643317802_1643406946/W1643376539_1_CALIB.IMG', # CB2
-    'COISS_2060/data/1643317802_1643406946/W1643376327_1_CALIB.IMG', # CB3
-    'COISS_2060/data/1643317802_1643406946/W1643376506_1_CALIB.IMG', # MT2
-    'COISS_2060/data/1643317802_1643406946/W1643376375_1_CALIB.IMG', # MT3
-                           
-    # 140
-    'COISS_2076/data/1727255245_1727449737/W1727330741_1_CALIB.IMG', # VIO
-    'COISS_2076/data/1727255245_1727449737/W1727330774_1_CALIB.IMG', # BL1
-    'COISS_2076/data/1727255245_1727449737/W1727330807_1_CALIB.IMG', # GRN
-    'COISS_2076/data/1727255245_1727449737/W1727330840_1_CALIB.IMG', # RED
-    'COISS_2076/data/1727255245_1727449737/W1727332645_1_CALIB.IMG', # CB2
-    'COISS_2076/data/1727255245_1727449737/W1727332801_1_CALIB.IMG', # CB3
-    'COISS_2076/data/1727255245_1727449737/W1727332572_1_CALIB.IMG', # MT2
-    'COISS_2076/data/1727255245_1727449737/W1727332734_1_CALIB.IMG', # MT3
-                           
-    # 145
-    'COISS_2062/data/1652952601_1653081456/W1652985001_1_CALIB.IMG', # VIO
-    'COISS_2062/data/1652952601_1653081456/W1652985034_1_CALIB.IMG', # BL1
-    'COISS_2062/data/1652952601_1653081456/W1652985067_1_CALIB.IMG', # GRN
-    'COISS_2062/data/1652952601_1653081456/W1652985100_1_CALIB.IMG', # RED
-    'COISS_2062/data/1652952601_1653081456/W1652985344_1_CALIB.IMG', # CB3
-    'COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG', # MT3
-                           
-    # 149
-    'COISS_2076/data/1721802517_1721894741/W1721822901_1_CALIB.IMG', # CLEAR
-    'COISS_2076/data/1721802517_1721894741/W1721822934_1_CALIB.IMG', # VIO
-    'COISS_2076/data/1721802517_1721894741/W1721822967_1_CALIB.IMG', # BL1
-    'COISS_2076/data/1721802517_1721894741/W1721823000_1_CALIB.IMG', # GRN
-    'COISS_2076/data/1721802517_1721894741/W1721823033_1_CALIB.IMG', # RED
-    'COISS_2076/data/1721802517_1721894741/W1721823066_1_CALIB.IMG', # IR1
-    'COISS_2076/data/1721802517_1721894741/W1721823382_1_CALIB.IMG', # IR2
-    'COISS_2076/data/1721802517_1721894741/W1721823099_1_CALIB.IMG', # IR3
-    'COISS_2076/data/1721802517_1721894741/W1721823316_1_CALIB.IMG', # CB2
-    'COISS_2076/data/1721802517_1721894741/W1721823147_1_CALIB.IMG', # CB3
-    'COISS_2076/data/1721802517_1721894741/W1721823349_1_CALIB.IMG', # MT2
-    'COISS_2076/data/1721802517_1721894741/W1721823283_1_CALIB.IMG', # MT3
-                           
-    # 155
-    'COISS_2074/data/1717673485_1717756625/W1717682790_1_CALIB.IMG', # VIO
-    'COISS_2074/data/1717673485_1717756625/W1717688223_1_CALIB.IMG', # BL1
-    'COISS_2074/data/1717673485_1717756625/W1717682856_1_CALIB.IMG', # GRN
-    'COISS_2074/data/1717673485_1717756625/W1717688289_1_CALIB.IMG', # RED
-    'COISS_2074/data/1717673485_1717756625/W1717688370_1_CALIB.IMG', # MT3
-                           
-    # 158
-    'COISS_2009/data/1487140530_1487182149/W1487166992_2_CALIB.IMG', # CLEAR
-    'COISS_2009/data/1487140530_1487182149/W1487167364_2_CALIB.IMG', # VIO
-    'COISS_2009/data/1487140530_1487182149/W1487167243_2_CALIB.IMG', # BL1
-    'COISS_2009/data/1487140530_1487182149/W1487167154_2_CALIB.IMG', # GRN
-    'COISS_2009/data/1487140530_1487182149/W1487167033_2_CALIB.IMG', # RED
-        
-    # 164
-    'COISS_2074/data/1716194058_1716328931/W1716307950_1_CALIB.IMG', # VIO
-    'COISS_2074/data/1716194058_1716328931/W1716307983_1_CALIB.IMG', # BL1
-    'COISS_2074/data/1716194058_1716328931/W1716308016_1_CALIB.IMG', # GRN
-    'COISS_2074/data/1716194058_1716328931/W1716308049_1_CALIB.IMG', # RED
-                           
-    # 166
-    'COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG', # CLEAR
-    'COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG', # VIO
-    'COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG', # BL1
-    'COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG', # GRN
-    'COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG', # RED
-    'COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG', # MT2
+#    # 125
+#    'COISS_2015/data/1503416732_1503874914/W1503421986_2_CALIB.IMG', # VIO
+#    'COISS_2015/data/1503416732_1503874914/W1503422118_2_CALIB.IMG', # BL1
+#    'COISS_2015/data/1503416732_1503874914/W1503422052_2_CALIB.IMG', # GRN
+#    'COISS_2015/data/1503416732_1503874914/W1503422085_2_CALIB.IMG', # RED
+#                           
+#    # 130
+#    'COISS_2055/data/1622711732_1623166344/W1622977122_1_CALIB.IMG', # VIO
+#    'COISS_2055/data/1622711732_1623166344/W1622977155_1_CALIB.IMG', # BL1
+#    'COISS_2055/data/1622711732_1623166344/W1622977188_1_CALIB.IMG', # GRN
+#    'COISS_2055/data/1622711732_1623166344/W1622977221_1_CALIB.IMG', # RED
+#    'COISS_2055/data/1622711732_1623166344/W1622977738_1_CALIB.IMG', # CB2
+#    'COISS_2055/data/1622711732_1623166344/W1622977497_1_CALIB.IMG', # CB3
+#    'COISS_2055/data/1622711732_1623166344/W1622977705_1_CALIB.IMG', # MT2
+#    'COISS_2055/data/1622711732_1623166344/W1622977567_1_CALIB.IMG', # MT3
+#                           
+#    # 135
+#    'COISS_2060/data/1643317802_1643406946/W1643375992_1_CALIB.IMG', # VIO
+#    'COISS_2060/data/1643317802_1643406946/W1643376025_1_CALIB.IMG', # BL1
+#    'COISS_2060/data/1643317802_1643406946/W1643376058_1_CALIB.IMG', # GRN
+#    'COISS_2060/data/1643317802_1643406946/W1643376091_1_CALIB.IMG', # RED
+#    'COISS_2060/data/1643317802_1643406946/W1643376539_1_CALIB.IMG', # CB2
+#    'COISS_2060/data/1643317802_1643406946/W1643376327_1_CALIB.IMG', # CB3
+#    'COISS_2060/data/1643317802_1643406946/W1643376506_1_CALIB.IMG', # MT2
+#    'COISS_2060/data/1643317802_1643406946/W1643376375_1_CALIB.IMG', # MT3
+#                           
+#    # 140
+#    'COISS_2076/data/1727255245_1727449737/W1727330741_1_CALIB.IMG', # VIO
+#    'COISS_2076/data/1727255245_1727449737/W1727330774_1_CALIB.IMG', # BL1
+#    'COISS_2076/data/1727255245_1727449737/W1727330807_1_CALIB.IMG', # GRN
+#    'COISS_2076/data/1727255245_1727449737/W1727330840_1_CALIB.IMG', # RED
+#    'COISS_2076/data/1727255245_1727449737/W1727332645_1_CALIB.IMG', # CB2
+#    'COISS_2076/data/1727255245_1727449737/W1727332801_1_CALIB.IMG', # CB3
+#    'COISS_2076/data/1727255245_1727449737/W1727332572_1_CALIB.IMG', # MT2
+#    'COISS_2076/data/1727255245_1727449737/W1727332734_1_CALIB.IMG', # MT3
+#                           
+#    # 145
+#    'COISS_2062/data/1652952601_1653081456/W1652985001_1_CALIB.IMG', # VIO
+#    'COISS_2062/data/1652952601_1653081456/W1652985034_1_CALIB.IMG', # BL1
+#    'COISS_2062/data/1652952601_1653081456/W1652985067_1_CALIB.IMG', # GRN
+#    'COISS_2062/data/1652952601_1653081456/W1652985100_1_CALIB.IMG', # RED
+#    'COISS_2062/data/1652952601_1653081456/W1652985344_1_CALIB.IMG', # CB3
+#    'COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG', # MT3
+#                           
+#    # 149
+#    'COISS_2076/data/1721802517_1721894741/W1721822901_1_CALIB.IMG', # CLEAR
+#    'COISS_2076/data/1721802517_1721894741/W1721822934_1_CALIB.IMG', # VIO
+#    'COISS_2076/data/1721802517_1721894741/W1721822967_1_CALIB.IMG', # BL1
+#    'COISS_2076/data/1721802517_1721894741/W1721823000_1_CALIB.IMG', # GRN
+#    'COISS_2076/data/1721802517_1721894741/W1721823033_1_CALIB.IMG', # RED
+#    'COISS_2076/data/1721802517_1721894741/W1721823066_1_CALIB.IMG', # IR1
+#    'COISS_2076/data/1721802517_1721894741/W1721823382_1_CALIB.IMG', # IR2
+#    'COISS_2076/data/1721802517_1721894741/W1721823099_1_CALIB.IMG', # IR3
+#    'COISS_2076/data/1721802517_1721894741/W1721823316_1_CALIB.IMG', # CB2
+#    'COISS_2076/data/1721802517_1721894741/W1721823147_1_CALIB.IMG', # CB3
+#    'COISS_2076/data/1721802517_1721894741/W1721823349_1_CALIB.IMG', # MT2
+#    'COISS_2076/data/1721802517_1721894741/W1721823283_1_CALIB.IMG', # MT3
+#                           
+#    # 155
+#    'COISS_2074/data/1717673485_1717756625/W1717682790_1_CALIB.IMG', # VIO
+#    'COISS_2074/data/1717673485_1717756625/W1717688223_1_CALIB.IMG', # BL1
+#    'COISS_2074/data/1717673485_1717756625/W1717682856_1_CALIB.IMG', # GRN
+#    'COISS_2074/data/1717673485_1717756625/W1717688289_1_CALIB.IMG', # RED
+#    'COISS_2074/data/1717673485_1717756625/W1717688370_1_CALIB.IMG', # MT3
+#                           
+#    # 158
+#    'COISS_2009/data/1487140530_1487182149/W1487166992_2_CALIB.IMG', # CLEAR
+#    'COISS_2009/data/1487140530_1487182149/W1487167364_2_CALIB.IMG', # VIO
+#    'COISS_2009/data/1487140530_1487182149/W1487167243_2_CALIB.IMG', # BL1
+#    'COISS_2009/data/1487140530_1487182149/W1487167154_2_CALIB.IMG', # GRN
+#    'COISS_2009/data/1487140530_1487182149/W1487167033_2_CALIB.IMG', # RED
+#        
+#    # 164
+#    'COISS_2074/data/1716194058_1716328931/W1716307950_1_CALIB.IMG', # VIO
+#    'COISS_2074/data/1716194058_1716328931/W1716307983_1_CALIB.IMG', # BL1
+#    'COISS_2074/data/1716194058_1716328931/W1716308016_1_CALIB.IMG', # GRN
+#    'COISS_2074/data/1716194058_1716328931/W1716308049_1_CALIB.IMG', # RED
+#                           
+#    # 166
+#    'COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG', # CLEAR
+#    'COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG', # VIO
+#    'COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG', # BL1
+#    'COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG', # GRN
+#    'COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG', # RED
+#    'COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG', # MT2
 ]
 
 
@@ -359,7 +365,79 @@ FILTER_COLOR = {
 #
 #===============================================================================
 
-def find_offset_one_image(filename, save=True, display=False, verbose=True):
+def shift_image(image, offset_u, offset_v):
+    """Shift an image by an offset.
+    
+    Pad the new area with zero and throw away the data moved off the edge."""
+    if offset_u == 0 and offset_v == 0:
+        return image
+    
+    image = np.roll(image, -offset_u, 1)
+    image = np.roll(image, -offset_v, 0)
+
+    if offset_u != 0:    
+        if offset_u < 0:
+            image[:,:-offset_u] = 0
+        else:
+            image[:,-offset_u:] = 0
+    if offset_v != 0:
+        if offset_v < 0:
+            image[:-offset_v,:] = 0
+        else:
+            image[-offset_v:,:] = 0
+    
+    return image
+
+def make_bins(full_incidence, incidence_res, full_emission, emission_res):
+    i_bins = (full_incidence / incidence_res).astype('int')
+    e_bins = (full_emission / emission_res).astype('int')
+
+    num_incidence_bins = int(np.ceil(360. / incidence_res))
+    num_emission_bins = int(np.ceil(1. / emission_res))
+    
+    bins = []
+    num_bins = 0
+    for i in xrange(num_incidence_bins):
+        bins.append([])
+        for j in xrange(num_emission_bins):
+            bins[-1].append([])
+            num_bins += 1
+        
+    return i_bins, e_bins, bins
+    
+def bin_one_image(i_bins, e_bins, data, full_mask, bins, u_offset, v_offset, verbose=False):
+    bins = copy.deepcopy(bins)
+    num_incidence_bins = len(bins)
+    num_emission_bins = len(bins[0])
+
+    full_mask = shift_image(full_mask, u_offset, v_offset)
+    full_data = data[full_mask].flatten()
+
+    if full_data.shape != i_bins.shape:
+        if verbose:
+            print 'Offset shifts off edge'
+            return 1e38, 0
+        
+    if verbose:
+        print 'Populating bins'
+            
+    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
+        bins[i_bin][e_bin].append(datum)
+    
+    if verbose:
+        print 'Computing standard deviations'
+    
+    std_list = []
+    for i in xrange(num_incidence_bins):
+        for j in xrange(num_emission_bins):
+            if len(bins[i][j]) > 1:
+                std_list.append(np.std(bins[i][j]))
+    
+    rms = np.sqrt(np.sum(np.array(std_list)**2))
+    
+    return rms, len(std_list)
+    
+def find_offset_one_image(filename, save=True, display=True, verbose=True):
     print 'Finding offset for', filename
 
     full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
@@ -370,91 +448,95 @@ def find_offset_one_image(filename, save=True, display=False, verbose=True):
     best_rms = 1e38
     best_overlay = None
     orig_overlay = None
+
+    bp = oops.Backplane(obs)
     
-    for u_offset in xrange(-4,5):
-        for v_offset in xrange(-4,5):
+    if verbose:
+        print 'Computing backplanes'
+    
+    bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE') * oops.DPR
+    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE').sin()# * oops.DPR
+    bp_incidence.vals[bp_incidence.mask] = 0.
+    bp_emission.vals[bp_incidence.mask] = 0.
+    
+#    plt.imshow(bp_incidence.vals)
+#    plt.figure()
+#    plt.imshow(bp_emission.vals)
+#    plt.show()
+    
+    full_mask = np.logical_not(bp_incidence.mask)
+    full_mask[bp_emission.vals < 0.85] = 0
+    full_mask[:5,:] = 0
+    full_mask[-5:,:] = 0
+    full_mask[:,:5] = 0
+    full_mask[:,-5:] = 0
+            
+    full_incidence = bp_incidence.vals[full_mask].flatten()
+    full_emission  = bp_emission.vals[full_mask].flatten()
+
+    area = np.sum(full_mask)
+    diameter = np.sqrt(area / oops.PI) * 2
+    
+    i_res = 360. / diameter
+    e_res = 1. / diameter
+    
+    print 'Choosing i_res', i_res, 'e_res', e_res
+
+    i_bins, e_bins, bins = make_bins(full_incidence, i_res,
+                                     full_emission, e_res)
+    
+    if False:
+        # Find the optimal resolutions
+    
+        if verbose:
+            print 'Finding optimal resolutions'
+    
+        best_i_res = None
+        best_e_res = None
+        best_num_bins = 0
+        
+        for i_res in np.arange(0.3, 5., 0.3):
+            for e_res in np.arange(0.002, 0.05, 0.002):
+                rms, num_bins = bin_one_image(full_incidence, i_res, 
+                                              full_emission, e_res,
+                                              obs.data, full_mask, 0, 0,
+                                              verbose=True)
+                print i_res, e_res, num_bins
+                if num_bins > best_num_bins:
+                    best_num_bins = num_bins
+                    best_i_res = i_res
+                    best_e_res = e_res
+        
+        print 'BEST', best_i_res, best_e_res
+        assert False
+
+    
+    limit = 20
+    
+    for u_offset in xrange(-limit,limit+1):
+        for v_offset in xrange(-limit,limit+1):
             if verbose:
                 print 'Trying offset', u_offset, v_offset
-            obs.fov = oops.fov.OffsetFOV(obs.fov, 
-                                         uv_offset=(u_offset,v_offset))
-        
-            bp = oops.Backplane(obs)
-            
-            if verbose:
-                print 'Computing backplanes'
-            
-            phase = bp.phase_angle('TITAN+ATMOSPHERE')
-            incidence = bp.incidence_angle('TITAN+ATMOSPHERE')
-            emission = bp.emission_angle('TITAN+ATMOSPHERE')
     
-            full_mask = np.logical_not(phase.mask)
-            full_mask[:5,:] = 0
-            full_mask[-5:,:] = 0
-            full_mask[:,:5] = 0
-            full_mask[:,-5:] = 0
-            
-            full_phase     = phase.vals[full_mask].flatten()
-            full_incidence = incidence.vals[full_mask].flatten()
-            full_emission  = emission.vals[full_mask].flatten()
-            full_data      = obs.data[full_mask].flatten()
-    
-            full_emission = np.cos(full_emission)
-            
-            obs.fov = orig_fov
-
-            incidence_bin_res = 1.
-            num_incidence_bins = int(np.ceil(360. / incidence_bin_res))
-
-#            emission_bin_res = 1.
-#            num_emission_bins = int(np.ceil(180. / emission_bin_res))
-
-            emission_bin_res = 0.1
-            num_emission_bins = int(np.ceil(1. / emission_bin_res))
+            rms, num_bins = bin_one_image(i_bins, e_bins, obs.data, full_mask,
+                                          bins, u_offset, v_offset, 
+                                          verbose=True)
             
             if verbose:
-                print 'Making bins'
+                print 'GOOD BINS', num_bins, 'RMS STD', rms
             
-            bins = []
-            num_bins = 0
-            for i in xrange(num_incidence_bins):
-                bins.append([])
-                for j in xrange(num_emission_bins):
-                    bins[-1].append([])
-                    num_bins += 1
-                    
-            for i in xrange(full_incidence.shape[0]):
-                i_bin = int(full_incidence[i] * oops.DPR / incidence_bin_res)
-                e_bin = int(full_emission[i]  / emission_bin_res)
-                bins[i_bin][e_bin].append(full_data[i])
-            
-            if verbose:
-                print 'Computing standard deviations'
-            
-            std_list = []
-            for i in xrange(num_incidence_bins):
-                for j in xrange(num_emission_bins):
-                    if len(bins[i][j]) > 1:
-                        std_list.append(np.std(bins[i][j]))
-            
-            rms = np.sqrt(np.sum(np.array(std_list)**2))
-            
-            if verbose:
-                print 'BINS', num_bins, 'GOOD BINS', len(std_list), 'RMS std', rms
-            
-            overlay = np.zeros(obs.data.shape+(3,))
-            overlay[:,:,0] = full_mask
-
             if rms < best_rms:
                 best_rms = rms
                 best_offset = (u_offset, v_offset)
-                best_overlay = overlay
 
-            if u_offset == 0 and v_offset == 0:
-                orig_overlay = overlay
-                
     print 'FINAL RESULT', best_offset, best_rms
 
     if display:
+        orig_overlay = np.zeros(obs.data.shape+(3,))
+        orig_overlay[:,:,0] = full_mask
+        best_overlay = np.zeros(obs.data.shape+(3,))
+        best_overlay[:,:,0] = shift_image(full_mask, best_offset[0], best_offset[1])
+
         im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
                                canvas_size=None,
                                title=filename, allow_enlarge=True,
@@ -1489,16 +1571,35 @@ surface = titan.surface
 titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
 oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
 
+# 16 - VIO
 #find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG')
 
-#backplane_one_image('COISS_2057/data/1629783492_1630072138/W1629929416_1_CALIB.IMG', save=False)
-backplane_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG', display=True)#, offset=(-1,-4), display=True)#offset=(-1,-2))#display=True, save=False)
+#backplane_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG', display=True)#, offset=(-1,-4), display=True)#offset=(-1,-2))#display=True, save=False)
 #backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG', offset=(1,-3))#display=True, save=False)
 #backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG', offset=(1,-2))#display=True, save=False)
 #backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG', offset=(0,-1))#display=True, save=False)
+
+# 16 - RED
+find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
+
+# 166 - VIO
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG')
+
+#backplane_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG', offset=(-3,-4), display=True)
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG', offset=())
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
+
 
 # Reprocess all the data to make new backplanes
 #backplane_all_images(force=False)
@@ -1509,7 +1610,7 @@ read_backplanes()
 #test_interpolation(13, 18, 26, 'VIO')
 #test_interpolation(140, 145, 149, 'BL1')
 
-show_plots_multiple_phases(phases=[16.], filters=['VIO'])
+show_plots_multiple_phases(phases=[16.], filters=['RED'])
 
 #show_plots_multiple(phases=[13,18,26], filters=['VIO'])#['RED','GRN', 'BL1', 'VIO'])
 #show_plots_multiple(phases=[140,145,149], filters=['BL1'])#['RED','GRN', 'BL1', 'VIO'])
