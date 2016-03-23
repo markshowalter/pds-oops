@@ -42,7 +42,9 @@ if len(command_list) == 0:
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Smear
 #    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results'
 #    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # rings closeup
-#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results --rings-only' # Colombo->Huygens closeup
+
+#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+    
 #    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
     # Has some overlapping stars and one star with vertical labeling in label text
@@ -55,7 +57,7 @@ if len(command_list) == 0:
     # Trickiness with label placement
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
@@ -67,6 +69,14 @@ if len(command_list) == 0:
 #    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring - tests A ring special case for PNG
 #    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results --offset-xy "-30,36"' # Star streaks through the rings but stars in wrong place
 #    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results --stars-only' # High res A ring edge - only works with blurring
+
+#    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results' # Rhea and Dione next to each other
+#    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
+#    command_line_str = 'N1511728708_2 --force-offset --image-console-level debug --display-offset-results' # Rhea whole image
+    
+#    command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+    
+    command_line_str = '--volume COISS_2024 --force-offset --image-console-level debug --image-logfile-level debug --profile --max-subprocesses 2'
     
     command_list = command_line_str.split()
 
@@ -181,73 +191,6 @@ arguments = parser.parse_args(command_list)
 #
 ###############################################################################
 
-def offset_result_str(image_path):
-    metadata = file_read_offset_metadata(image_path)
-    filename = file_clean_name(image_path)
-    
-    ret = filename + ' - '
-    if metadata is None:
-        ret += 'No offset file written'
-        return ret
-
-    if 'error' in metadata:
-        ret += 'ERROR: '
-        error = metadata['error']
-        if error.startswith('SPICE(NOFRAMECONNECT)'):
-            ret += 'SPICE KERNEL MISSING DATA AT ' + error[34:53]
-        else:
-            ret += error 
-        return ret
-    
-    offset = metadata['offset']
-    if offset is None:
-        offset_str = '  N/A  '
-    else:
-        offset_str = '%3d,%3d' % tuple(offset)
-    star_offset_str = '  N/A  '
-    if metadata['stars_metadata'] is not None:
-        star_offset = metadata['stars_metadata']['offset']
-        if star_offset is not None:
-            star_offset_str = '%3d,%3d' % tuple(star_offset)
-    model_offset = metadata['model_offset']
-    if model_offset is None:
-        model_offset_str = '  N/A  '
-    else:
-        model_offset_str = '%3d,%3d' % tuple(model_offset)
-    filter1 = metadata['filter1']
-    filter2 = metadata['filter2']
-    the_size = '%dx%d' % tuple(metadata['image_shape'])
-    the_size = '%9s' % the_size
-    the_time = cspice.et2utc(metadata['midtime'], 'C', 0)
-    single_body_str = None
-    if metadata['body_only']:
-        single_body_str = 'Filled with ' + metadata['body_only']
-    if metadata['rings_only']:
-        single_body_str = 'Filled with rings'
-    bootstrap_str = None
-    if metadata['bootstrap_candidate']:
-        bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
-        
-    ret += the_time + ' ' + ('%4s'%filter1) + '+' + ('%4s'%filter2) + ' '
-    ret += the_size
-    ret += ' Final ' + offset_str
-    if metadata['used_objects_type'] == 'stars':
-        ret += '  STAR ' + star_offset_str
-    else:
-        ret += '  Star ' + star_offset_str
-    if metadata['used_objects_type'] == 'model':
-        ret += '  MODEL ' + model_offset_str
-    else:
-        ret += '  Model ' + model_offset_str
-    if bootstrap_str:
-        ret += ' ' + bootstrap_str
-    if bootstrap_str and single_body_str:
-        ret += ' '
-    if single_body_str:
-        ret += ' ' + single_body_str
-        
-    return ret
-    
 def collect_cmd_line(image_path):
     ret = []
     ret += ['--is-subprocess']
@@ -282,7 +225,10 @@ def run_and_maybe_wait(args, image_path):
             said_waiting = True
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
-                results = offset_result_str(SUBPROCESS_LIST[i][1])
+                old_image_path = SUBPROCESS_LIST[i][1]
+                metadata = file_read_offset_metadata(old_image_path)
+                filename = file_clean_name(old_image_path)
+                results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 break
@@ -389,7 +335,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.profile and argument.is_subprocess:
+        if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
             sortby = 'cumulative'
@@ -429,7 +375,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     if arguments.display_offset_results:
         display_offset_data(obs, metadata, canvas_size=None)
 
-    results = offset_result_str(image_path)
+    metadata = file_read_offset_metadata(image_path)
+    filename = file_clean_name(image_path)
+    results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)
 
     if arguments.profile and arguments.is_subprocess:
@@ -506,11 +454,10 @@ main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
 main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
 main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
 main_logger.info('Offset XY:    %s', str(offset_xy))
+main_logger.info('Subprocesses: %d', arguments.max_subprocesses)
 main_logger.info('')
-
-main_logger.info('*** %d subprocesses', arguments.max_subprocesses)
-
 file_log_arguments(arguments, main_logger.info)
+main_logger.info('')
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
     if process_offset_one_image(

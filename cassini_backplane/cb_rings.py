@@ -723,12 +723,6 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
         logger.debug('No main rings in image - returning bad curvature')
         return False
 
-    if max_longitude - min_longitude > np.pi/2.:
-        # XXX This does not handle the wrap-around case! XXX
-        # Seeing 90+ degrees of the ring - definitely enough curvature!
-        logger.debug('More than 90 degrees visible - returning curvature OK')
-        return True
-
     min_radius = max(min_radius, RINGS_MIN_RADIUS)
     max_radius = min(max_radius, RINGS_MAX_RADIUS)
     
@@ -821,7 +815,6 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
     if not min_radius < a < max_radius:
         return None
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
-    print 'RMS', rms, 'COMP', rms*rms_gain/blur, 'MAX RES', max_res
     if rms*rms_gain/blur > max_res:
         return (rms*rms_gain/blur)/max_res # Additional blurring needed
     return 1. # OK as is
@@ -890,7 +883,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                     blur_list.append(ret)
             if inner is not None or outer is not None:
                 feature_list.append((entry_type, feature_name, inner, outer))
-                print 'KEEPING', feature_list[-1]
+                if inner:
+                    logger.debug('Keeping inner feature %s %.2f', entry_type, inner[0][1])
+                if outer:
+                    logger.debug('Keeping outer feature %s %.2f', entry_type, outer[0][1])
 
         num_features = int(np.sum([(x[2] is not None) + (x[3] is not None)
                                    for x in feature_list]))
@@ -1035,6 +1031,8 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
                  feature_list_by_a):
     # shade_above == True means shade towards larger a
     # The primary shade - the hard edge and shade away from it
+    logger = logging.getLogger(_LOGGING_NAME+'._shade_model')
+
     if shade_above:
         shade_sign = 1.
     else:
@@ -1046,7 +1044,9 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
             shade_sign*(other_a-a) < radius_width_km):
             # Change the width of the feature so it doesn't conflict
             radius_width_km = abs(other_a-a)/2
-            print 'Fixing conflicting feature at', a, 'vs.', other_a, 'new width', radius_width_km
+            logger.debug(
+                 'Fixing conflicting feature at %.2f vs. %.2f, new width %.2f', 
+                 a, other_a, radius_width_km)
     shade = 1.-shade_sign*(radii-a)/radius_width_km
     shade[shade < 0.] = 0.
     shade[shade > 1.] = 0.
@@ -1055,7 +1055,8 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
     
     return model + shade + shade_anti
 
-def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, rings_config):
+def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, 
+                             rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
     text_ringlet_threshold = rings_config['text_ringlet_gap_threshold']
@@ -1077,11 +1078,16 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, ri
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
-    model_text = np.zeros(model.shape, dtype=np.uint8)
+    model_text = np.zeros(model.shape, dtype=np.bool)
     text_im = Image.frombuffer('L', (model_text.shape[1], 
                                      model_text.shape[0]), 
                                model_text, 'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
+    
+    if label_avoid_mask is not None:
+        label_avoid_mask = label_avoid_mask.copy()
+    else:
+        label_avoid_mask = np.zeros(model.shape, dtype=np.bool)
 
     # Create an array of distances from the center pixel - always try to put
     # text labels as close to the center as possible to minimize the chance
@@ -1224,7 +1230,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, ri
                     # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
                     logger.debug('Adding %s a=%.2f shade_above %d',
-                                 entry_type, inner_a, shade_above)
+                                 entry_type, outer_a, shade_above)
                     model = _shade_model(model, outer_radii, outer_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
@@ -1266,22 +1272,15 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, ri
                             first_u = u
                             first_v = v
                             first_text = text
-                        model_text = (np.array(text_im.getdata()).
-                                      reshape(model_text.shape))
                         # Check for conflicts with existing labels
                         if (not np.any(
-                          model_text[max(v-3,0):
-                                     min(v+text_size[1]+3, model_text.shape[0]),
-                                     max(u-3,0):
-                                     min(u+text_size[0]+3, model_text.shape[1])])
-                            and
-                          (label_avoid_mask is None or
-                           not np.any(
                           label_avoid_mask[
                                    max(v-3,0):
-                                   min(v+text_size[1]+3, model_text.shape[0]),
+                                   min(v+text_size[1]+3, 
+                                       label_avoid_mask.shape[0]),
                                    max(u-3,0):
-                                   min(u+text_size[0]+3, model_text.shape[1])]))):
+                                   min(u+text_size[0]+3, 
+                                       label_avoid_mask.shape[1])])):
                             break
                     # We're overlapping with existing text! Or V is too close
                     # to the edge.
@@ -1298,7 +1297,9 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, ri
                     text = first_text
                 
                 if u is not None:
-                    text_draw.text((u,v), text, fill=255)
+                    text_draw.text((u,v), text, fill=1)
+                    label_avoid_mask[v:v+text_size[1],
+                                     u:u+text_size[0]] = True
 
     model_text = np.array(text_im.getdata()).reshape(model_text.shape)
 
@@ -1311,7 +1312,6 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, ri
 #===============================================================================
 
 def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
-                       include_body_shadows=False,
                        label_avoid_mask=None,
                        rings_config=None):
     """Create a model for the rings.
@@ -1330,8 +1330,6 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         always_create_model    True to always return a model even if the 
                                curvature is insufficient or there aren't
                                enough fiducial features.
-        include_body_shadows   True to include the shadows of bodies near 
-                               equinox. Saturn's shadow is always incldued.
         label_avoid_mask       A mask giving places where text labels should
                                not be placed (i.e. labels from another
                                model are already there). None if no mask.
@@ -1343,6 +1341,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             'shadow_bodies'         The list of Bodies that shadow the rings.
             'curvature_ok'          True if the curvature is sufficient for 
                                     correlation.
+            'emission_ok'           True if the emission angle is sufficient 
+                                    for correlation.
             'fiducial_features'     The list of fiducial features in view.
             'fiducial_blur'         The amount the RMS residual of the features
                                     had to be reduced in order to get enough.
@@ -1368,11 +1368,37 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata = {}
     metadata['shadow_bodies'] = []
     metadata['curvature_ok'] = False
+    metadata['emission_ok'] = False
     metadata['fiducial_features'] = []
     metadata['fiducial_features_ok'] = False
+    metadata['fiducial_blur'] = None
     metadata['start_time'] = start_time
     
     set_obs_ext_bp(obs, extend_fov)
+
+    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+
+    min_radius = np.min(radii)
+    max_radius = np.max(radii)
+        
+    logger.info('Radii %.2f to %.2f', min_radius, max_radius)
+        
+    if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
+        logger.info('No main rings in image - aborting')
+        metadata['end_time'] = time.time()
+        return None, metadata, None
+    
+    emission = obs.ext_bp.emission_angle('saturn:ring').vals.astype('float')
+    good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
+                               radii <= RINGS_MAX_RADIUS)
+    min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
+    if min_emission < rings_config['emission_threshold']:
+        logger.info('Minimum emission angle %.2f from 90 too close to ring '+
+                    'plane - aborting', min_emission)
+        return None, metadata, None
+
+    logger.debug('Minimum emission angle %.2f from 90 OK', min_emission)
+    metadata['emission_ok'] = True
 
     if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
                                       rings_config=rings_config):
@@ -1402,16 +1428,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
         radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
-        min_radius = np.min(radii)
-        max_radius = np.max(radii)
+        radii = radii.copy()
         
-        logger.info('Radii %.2f to %.2f', min_radius, max_radius)
-        
-        if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
-            logger.info('No main rings in image - aborting')
-            metadata['end_time'] = time.time()
-            return None, metadata, None
-    
         radii[radii < RINGS_MIN_RADIUS] = 0
         radii[radii > RINGS_MAX_RADIUS] = 0
         
@@ -1442,21 +1460,19 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     
     shadow_body_list = []
     
-    saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
-                                                   'saturn').vals
-    if np.any(saturn_shadow):
-        shadow_body_list.append('SATURN')
-        model[saturn_shadow] = 0
-        if not np.any(model):
-            logger.info('Rings completely shadowed by SATURN - aborting')
-            metadata['end_time'] = time.time()
-            return None, metadata, None
-        logger.info('Rings partially shadowed by SATURN')
+    if rings_config['remove_saturn_shadow']:
+        saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
+                                                       'saturn').vals
+        if np.any(saturn_shadow):
+            shadow_body_list.append('SATURN')
+            model[saturn_shadow] = 0
+            if not np.any(model):
+                logger.info('Rings completely shadowed by SATURN - aborting')
+                metadata['end_time'] = time.time()
+                return None, metadata, None
+            logger.info('Rings partially shadowed by SATURN')
 
-    # XXX Equinox only
-    # XXX There must be a way to make this more efficient in the case
-    # when a moon isn't in a position to cast a shadow
-    if include_body_shadows:
+    if rings_config['remove_body_shadows']:
         for body_name in _RINGS_SHADOW_BODY_LIST:
             shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
                                                     body_name).vals

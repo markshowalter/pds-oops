@@ -42,7 +42,7 @@ def _normalize(data, masked=False):
             return ma.zeros(data.shape, dtype=np.float32)
         else:
             return np.zeros(data.shape, dtype=np.float32)
-    new_data = (data-data_min) / (data_max-data_min)
+    new_data = (data-data_min) / float(data_max-data_min)
     if masked:
         new_data[ma.filled(data, 1.) == 0.] = 0.
     else:
@@ -63,6 +63,12 @@ def _combine_models(model_list, solid=False, masked=False):
             new_model += _normalize(model, masked=masked)
 
     return _normalize(new_model, masked=masked)
+
+def _combine_text(text_list):
+    ret = text_list[0]
+    for text in text_list[1:]:
+        ret = np.logical_or(ret, text)
+    return ret
 
 def _model_filter(image, gaussian_pre_blur, median_boxsize, 
                   gaussian_median_blur, masked=False):
@@ -576,8 +582,8 @@ def master_find_offset(obs,
 
         if (rings_model is None and 
             len(bodies_model_list) < offset_config['num_bodies_threshold'] and
-            float(np.count_nonzero(final_model)) / final_model.size <
-                offset_config['bodies_cov_threshold']):
+            np.count_nonzero(final_model) < 
+              offset_config['bodies_cov_threshold']):
             logger.info('Too few moons, no rings, model has too little '+
                         'coverage')
             model_offset = None
@@ -669,10 +675,9 @@ def master_find_offset(obs,
             # pixels and parts of the model are not right along the edge.
             cov_threshold = offset_config['model_cov_threshold']
             edge_pixels = offset_config['model_edge_pixels']
-            if ((float(np.count_nonzero(shifted_model)) /
-                 shifted_model.size < cov_threshold) or
-                not np.any(shifted_model[edge_pixels:-edge_pixels+1,
-                                         edge_pixels:-edge_pixels+1])):
+            if (np.count_nonzero(shifted_model[edge_pixels:-edge_pixels+1,
+                                               edge_pixels:-edge_pixels+1]) <
+                cov_threshold):
                 logger.info('Final shifted model has too little coverage - '+
                             'Offset rejected')
                 model_offset = None
@@ -752,17 +757,12 @@ def master_find_offset(obs,
         # include on the overlay that we didn't use for correlation.
         o_bodies_model_list = [x[0] for x in bodies_model_list]
         o_bodies_text_list = [x[2] for x in bodies_model_list]
-        label_avoid_mask = np.zeros(obs.data.shape, dtype=np.uint8)
+        label_avoid_mask = np.zeros(obs.data.shape, dtype=np.bool)
         if len(o_bodies_model_list) > 0:
             bodies_combined = _combine_models(o_bodies_model_list, solid=True,
                                               masked=masked_model)
-            bodies_combined_text = _combine_models(o_bodies_text_list, 
-                                                   solid=True,
-                                                   masked=masked_model)
-            # The rings model is usually 0-1
-            # The rings overlay text is 0-255
             bodies_overlay = _normalize(bodies_combined) * 255
-            bodies_overlay_text = _normalize(bodies_combined_text) * 255
+            bodies_overlay_text = _combine_text(o_bodies_text_list)
             if offset is not None:
                 bodies_overlay = shift_image(bodies_overlay, 
                                              -int(np.round(offset[0])), 
@@ -776,16 +776,15 @@ def master_find_offset(obs,
                                                           extend_fov)
             label_avoid_mask = np.logical_or(label_avoid_mask,
                                              metadata['bodies_overlay_text'])
-            color_overlay[...,1] = _normalize(
-                              bodies_overlay.astype(np.float) +
-                              bodies_overlay_text.astype(np.float)) * 255
+            color_overlay[...,1] = np.clip(bodies_overlay+
+                                           bodies_overlay_text*255,
+                                           0, 255)
         
         ## RINGS ##
         if rings_model is not None:
             # The rings model is usually 0-1
-            # The rings overlay text is 0-255
+            # The rings overlay text is Bool
             rings_overlay = _normalize(rings_model) * 255
-            rings_overlay_text = _normalize(rings_overlay_text) * 255
             if offset is not None:
                 rings_overlay = shift_image(rings_overlay, 
                                              -int(np.round(offset[0])), 
@@ -799,15 +798,15 @@ def master_find_offset(obs,
                                                          extend_fov)
             label_avoid_mask = np.logical_or(label_avoid_mask,
                                              metadata['rings_overlay_text'])
-            color_overlay[...,2] = _normalize(
-                              rings_overlay.astype(np.float) +
-                              rings_overlay_text.astype(np.float)) * 255
+            color_overlay[...,2] = np.clip(rings_overlay+
+                                           rings_overlay_text*255,
+                                           0, 255)
         
         ## STARS ##
         if stars_overlay is not None:
-            # The stars overlay and stars overlay text are both already 0-255.
-            # We don't normalize the stars overlay because it's already set up
-            # exactly how we want it.
+            # The stars overlay is already 0-255. We don't normalize the stars
+            # overlay because it's already set up exactly how we want it.
+            # However, we do need to normalize the text, which is a Bool.
             (new_stars_overlay, 
              new_stars_overlay_text) = stars_make_good_bad_overlay(
                               obs,
@@ -827,10 +826,10 @@ def master_find_offset(obs,
             metadata['stars_overlay'] = new_stars_overlay
             metadata['stars_overlay_text'] = new_stars_overlay_text
             label_avoid_mask = np.logical_or(label_avoid_mask,
-                                             new_stars_overlay_text)
-            color_overlay[...,0] = _normalize(
-                               stars_overlay.astype(np.float) +
-                               stars_overlay_text.astype(np.float)) * 255
+                                             metadata['stars_overlay_text'])
+            color_overlay[...,0] = np.clip(stars_overlay+
+                                           stars_overlay_text*255,
+                                           0, 255)
 
     metadata['ext_overlay'] = color_overlay
     if color_overlay is not None:
@@ -862,6 +861,9 @@ def offset_create_overlay_image(obs, metadata,
                                 stars_whitepoint_ignore_frac=1., 
                                 stars_gamma=0.5):
     img = obs.data
+    offset = metadata['offset']
+    if offset is None:
+        offset = (0,0)
     stars_overlay = metadata['stars_overlay']
     stars_overlay_text = metadata['stars_overlay_text']
     bodies_overlay = metadata['bodies_overlay']
@@ -885,23 +887,31 @@ def offset_create_overlay_image(obs, metadata,
                                           whitepoint,
                                           gamma)
 
-    # Contrast stretch the stars
-    if stars_overlay is not None and np.any(stars_overlay == 1):
-        stars_data = img[stars_overlay == 1]
-        if stars_blackpoint is None:
-            stars_blackpoint = np.min(stars_data)
-        if stars_whitepoint is None:
-            stars_sorted = sorted(list(stars_data))
-            stars_whitepoint = stars_sorted[
-                                    np.clip(int(len(stars_sorted)*
-                                                stars_whitepoint_ignore_frac),
-                                            0, len(stars_sorted)-1)]
-        stars_data = ImageDisp.scale_image(stars_data,
-                                           stars_blackpoint,
-                                           stars_whitepoint,
-                                           gamma)
-        greyscale_img[stars_overlay == 1] = stars_data
-        stars_overlay[stars_overlay == 1] = 0
+    stars_metadata = metadata['stars_metadata']
+    if stars_metadata is not None:
+        star_list = stars_metadata['full_star_list']
+        if star_list is not None:
+            for star in star_list:
+                width = star.overlay_box_width
+                if width == 0 or star.conflicts:
+                    continue
+                width -= 1
+                u_idx = int(star.u+offset[0])
+                v_idx = int(star.v+offset[1])
+                stars_data = greyscale_img[max(v_idx-width,0):
+                                           min(v_idx+width+1,img.shape[0]),
+                                           max(u_idx-width,0):
+                                           min(u_idx+width+1,img.shape[1])]
+                stars_bp = stars_blackpoint
+                stars_wp = stars_whitepoint
+                if stars_blackpoint is None:
+                    stars_bp = np.min(stars_data)
+                if stars_whitepoint is None:
+                    stars_wp = np.max(stars_data)
+                stars_data[:,:] = ImageDisp.scale_image(stars_data,
+                                                        stars_bp,
+                                                        stars_wp,
+                                                        stars_gamma)
         
     mode = 'RGB'
     combined_data = np.zeros(greyscale_img.shape + (3,), dtype=np.uint8)
@@ -921,56 +931,74 @@ def offset_create_overlay_image(obs, metadata,
 
     if stars_overlay_text is not None:
         text_ok = stars_overlay_text != 0
-        combined_data[text_ok, 0] = stars_overlay_text[text_ok]
-        combined_data[text_ok, 1] = stars_overlay_text[text_ok]
-        combined_data[text_ok, 2] = stars_overlay_text[text_ok]
-#    combined_data[bodies_overlay_text != 0, :] = bodies_overlay_text[bodies_overlay_text != 0]
+        combined_data[text_ok, 0] = stars_overlay_text[text_ok] * 255 # Bool
+        combined_data[text_ok, 1] = stars_overlay_text[text_ok] * 255
+        combined_data[text_ok, 2] = stars_overlay_text[text_ok] * 255
     if rings_overlay_text is not None:
         rings_ok = rings_overlay_text != 0
-        combined_data[rings_ok, 0] = rings_overlay_text[rings_ok]
-        combined_data[rings_ok, 1] = rings_overlay_text[rings_ok]
-        combined_data[rings_ok, 2] = rings_overlay_text[rings_ok]
+        combined_data[rings_ok, 0] = rings_overlay_text[rings_ok] * 255 # Bool
+        combined_data[rings_ok, 1] = rings_overlay_text[rings_ok] * 255
+        combined_data[rings_ok, 2] = rings_overlay_text[rings_ok] * 255
+    if bodies_overlay_text is not None:
+        bodies_ok = bodies_overlay_text != 0
+        combined_data[bodies_ok, 0] = bodies_overlay_text[bodies_ok] * 255 # Bool
+        combined_data[bodies_ok, 1] = bodies_overlay_text[bodies_ok] * 255
+        combined_data[bodies_ok, 2] = bodies_overlay_text[bodies_ok] * 255
 
     text_im = Image.frombuffer('RGB', (combined_data.shape[1], 
                                      combined_data.shape[0]), 
                                combined_data, 'raw', 'RGB', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
 
-    data_line1 = '%s %s' % (obs.filename[:13], 
-                                       cspice.et2utc(obs.midtime, 'C', 0))
-    data_line2 = '%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2)
-    data_line3 = ''
+    data_lines = []
+    data_lines.append('%s %s' % (obs.filename[:13], 
+                                 cspice.et2utc(obs.midtime, 'C', 0)))
+    data_lines.append('%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2))
+    data_line = ''
     stars_ok = False
+    model_ok = False
     if (metadata['stars_metadata'] is not None and
         metadata['stars_metadata']['offset'] is not None):
-        data_line3 += 'Stars OK'
+        data_line += 'Stars OK'
         stars_ok = True
     else:
-        data_line3 += 'Stars FAIL'
+        data_line += 'Stars FAIL'
     if metadata['model_offset'] is not None:
-        data_line3 += ' / Model OK'
+        model_ok = True
+        data_line += ' / Model OK'
     else:
-        data_line3 += ' / Model FAIL'
-    if stars_ok and not metadata['model_overrides_stars']:
-        data_line3 += ' / Stars WIN'
-    else:
-        data_line3 += ' / Model WINS'
-    text_size1 = text_draw.textsize(data_line1)
-    text_size2 = text_draw.textsize(data_line2)
-    text_size3 = text_draw.textsize(data_line3)
-    text_size = (max(text_size1[0],text_size2[0],text_size3[0])+6,
-                 text_size1[1]+text_size2[1]+text_size3[1]+6)
+        data_line += ' / Model FAIL'
+    if stars_ok and model_ok:
+        if metadata['model_overrides_stars']:
+            data_line += ' / Model WINS'
+        else:
+            data_line += ' / Stars WIN'
+    data_lines.append(data_line)
+
+    if metadata['bootstrap_candidate']:
+        data_line = 'Bootstrap Cand ' + metadata['bootstrap_body']
+        data_lines.append(data_line)
+    
+    text_size_h_list = []
+    text_size_v_list = []
+    for data_line in data_lines:
+        text_size = text_draw.textsize(data_line)
+        text_size_h_list.append(text_size[0])
+        text_size_v_list.append(text_size[1])
+
+    text_size_h = np.max(text_size_h_list)+6
+    text_size_v = np.sum(text_size_v_list)+6       
 
     # Look for the emptiest corner - no text
     best_count = 1e38
     best_u = None
     best_v = None
     
-    for v in [[0, text_size[1]+1],
-              [combined_data.shape[0]-text_size[1],
+    for v in [[0, text_size_v+1],
+              [combined_data.shape[0]-text_size_v,
                combined_data.shape[0]]]:
-        for u in [[0, text_size[0]+1],
-                  [combined_data.shape[1]-text_size[0],
+        for u in [[0, text_size_h+1],
+                  [combined_data.shape[1]-text_size_h,
                    combined_data.shape[1]]]:
             count = np.count_nonzero(combined_data[v[0]:v[1],u[0]:u[1],2])
             if count < best_count:
@@ -980,14 +1008,78 @@ def offset_create_overlay_image(obs, metadata,
             
     best_u += 3
     best_v += 3
-    text_draw.text((best_u,best_v), data_line1, fill=(255,255,255))
-    best_v += text_size1[1]
-    text_draw.text((best_u,best_v), data_line2, fill=(255,255,255))
-    best_v += text_size2[1]
-    text_draw.text((best_u,best_v), data_line3, fill=(255,255,255))
+    
+    for data_line, v_inc in zip(data_lines, text_size_v_list):
+        text_draw.text((best_u,best_v), data_line, fill=(255,255,255))
+        best_v += v_inc
 
     combined_data = np.array(text_im.getdata()).reshape(combined_data.shape)
 
     combined_data = np.cast['uint8'](combined_data)
 
     return combined_data
+
+def offset_result_str(metadata):
+    ret = ''
+    if metadata is None:
+        ret += 'No offset file written'
+        return ret
+
+    if 'error' in metadata:
+        ret += 'ERROR: '
+        error = metadata['error']
+        if error.startswith('SPICE(NOFRAMECONNECT)'):
+            ret += 'SPICE KERNEL MISSING DATA AT ' + error[34:53]
+        else:
+            ret += error 
+        return ret
+    
+    offset = metadata['offset']
+    if offset is None:
+        offset_str = '  N/A  '
+    else:
+        offset_str = '%3d,%3d' % tuple(offset)
+    star_offset_str = '  N/A  '
+    if metadata['stars_metadata'] is not None:
+        star_offset = metadata['stars_metadata']['offset']
+        if star_offset is not None:
+            star_offset_str = '%3d,%3d' % tuple(star_offset)
+    model_offset = metadata['model_offset']
+    if model_offset is None:
+        model_offset_str = '  N/A  '
+    else:
+        model_offset_str = '%3d,%3d' % tuple(model_offset)
+    filter1 = metadata['filter1']
+    filter2 = metadata['filter2']
+    the_size = '%dx%d' % tuple(metadata['image_shape'])
+    the_size = '%9s' % the_size
+    the_time = cspice.et2utc(metadata['midtime'], 'C', 0)
+    single_body_str = None
+    if metadata['body_only']:
+        single_body_str = 'Filled with ' + metadata['body_only']
+    if metadata['rings_only']:
+        single_body_str = 'Filled with rings'
+    bootstrap_str = None
+    if metadata['bootstrap_candidate']:
+        bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
+        
+    ret += the_time + ' ' + ('%-4s'%filter1) + '+' + ('%-5s'%filter2) + ' '
+    ret += the_size
+    ret += ' Final ' + offset_str
+    if metadata['used_objects_type'] == 'stars':
+        ret += '  STAR ' + star_offset_str
+    else:
+        ret += '  Star ' + star_offset_str
+    if metadata['used_objects_type'] == 'model':
+        ret += '  MODEL ' + model_offset_str
+    else:
+        ret += '  Model ' + model_offset_str
+    if bootstrap_str:
+        ret += ' ' + bootstrap_str
+    if bootstrap_str and single_body_str:
+        ret += ' '
+    if single_body_str:
+        ret += ' ' + single_body_str
+        
+    return ret
+    

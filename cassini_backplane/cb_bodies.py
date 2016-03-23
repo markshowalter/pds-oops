@@ -28,7 +28,7 @@ import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import scipy.ndimage.filters as filt
 import matplotlib.pyplot as plt
-import PIL.Image
+from PIL import Image, ImageDraw, ImageFont
 
 import oops
 import polymath
@@ -118,10 +118,121 @@ def _bodies_create_cartographic(bp, body_data):
 
     return model
 
+def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
+                       bodies_config):
+    if label_avoid_mask is None:
+        label_avoid_mask = np.zeros(model.shape, dtype=np.bool)
+    else:
+        label_avoid_mask = label_avoid_mask.copy()
+    large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
+
+    model_text = np.zeros(model.shape, dtype=np.bool)
+    text_im = Image.frombuffer('L', (model_text.shape[1], 
+                                     model_text.shape[0]), 
+                               model_text, 'raw', 'L', 0, 1)
+    text_draw = ImageDraw.Draw(text_im)
+
+    dict_entry = large_body_dict[body_name]
+    body_u = dict_entry['center_uv'][0]+extend_fov[0]
+    body_v = dict_entry['center_uv'][1]+extend_fov[1]
+
+    # Create an array of distances from the center pixel - always try to put
+    # text labels as close to the center as possible to minimize the chance
+    # of going off the edge. But give preference to labeling bodies 
+    # horizontally to make the labels prettier.
+    axis1 = np.tile(np.arange(float(model.shape[1]))-body_u,
+                    model.shape[0]).reshape(model.shape)
+    axis2 = np.repeat(np.arange(float(model.shape[0]))-body_v,
+                      model.shape[1]).reshape(model.shape)
+    dist_from_center = axis1**2+5*axis2**2
+    # Don't do anything too close to the top or bottom edges because text
+    # has height
+    dist_from_center[:5,:] = 1e38
+    dist_from_center[-5:,:] = 1e38
+
+    # Mask out the areas where bodies are sitting so we don't draw text over
+    # them
+    for name in large_body_dict:
+        dict_entry = large_body_dict[name]
+        u = dict_entry['center_uv'][0]+extend_fov[0]
+        v = dict_entry['center_uv'][1]+extend_fov[1]
+        u_size = dict_entry['u_pixel_size']
+        v_size = dict_entry['v_pixel_size']
+        bb_area = u_size * v_size
+        if bb_area < bodies_config['text_min_area']:
+            continue
+
+        axis1 = np.tile(np.arange(float(model.shape[1]))-u,
+                        model.shape[0]).reshape(model.shape)
+        axis2 = np.repeat(np.arange(float(model.shape[0]))-v,
+                          model.shape[1]).reshape(model.shape)
+
+        dist_body = (axis1/u_size)**2+(axis2/v_size)**2
+        dist_from_center[dist_body <= 1.] = 1e38
+        
+    # Give us a few pixels margin from the edge of a moon
+    dist_from_center = filt.maximum_filter(dist_from_center, 3)
+
+    # Now find a good place for each label that doesn't overlap text from 
+    # previous model steps or actual moon data
+    text_name = body_name.capitalize()
+    text_size = text_draw.textsize(text_name+'->')
+    first_u = None
+    first_v = None
+    first_text = None
+    while np.any(dist_from_center != 1e38):
+        # Find the closest good pixel to the image center
+        v,u = np.unravel_index(np.argmin(dist_from_center), 
+                               dist_from_center.shape)
+        raw_v, raw_u = v,u
+        if (text_size[1]/2 <= v <
+            model_text.shape[0]-text_size[1]/2):
+            v -= text_size[1]/2
+            if ((u < body_u and u > extend_fov[0]+text_size[0]) or
+                (u >= body_u and 
+                 u+text_size[0] > model_text.shape[1]-extend_fov[0])):
+                u = u-text_size[0]
+                text = text_name + '->'
+            else:
+                text = '<-' + text_name
+            if first_u is None:
+                first_u = u
+                first_v = v
+                first_text = text
+            if (not np.any(
+              label_avoid_mask[
+                       max(v-3,0):
+                       min(v+text_size[1]+3, model_text.shape[0]),
+                       max(u-3,0):
+                       min(u+text_size[0]+3, model_text.shape[1])])):
+                break
+        # We're overlapping with existing text! Or V is too close
+        # to the edge.
+        dist_from_center[max(raw_v-3,0):
+                         min(raw_v+3,model_text.shape[0]),
+                         max(raw_u-3,0):
+                         min(raw_u+3,model_text.shape[1])] = 1e38
+        u = None
+    
+    if u is None:
+        # We give up - just use the first one we found
+        u = first_u
+        v = first_v
+        text = first_text
+    
+    if u is not None:
+        text_draw.text((u,v), text, fill=1)
+
+    model_text = np.array(text_im.getdata()).reshape(model_text.shape)
+    
+    return model_text
+
+
 def bodies_create_model(obs, body_name, inventory,
                         extend_fov=(0,0),
                         cartographic_data={},
                         always_create_model=False,
+                        label_avoid_mask=None,
                         bodies_config=None,
                         mask_only=False):
     """Create a model for a body.
@@ -140,6 +251,9 @@ def bodies_create_model(obs, body_name, inventory,
         always_create_model    True to always return a model even if the 
                            body is too small or the curvature or limb is bad.
                            This is overriden by mask_only.
+        label_avoid_mask   A mask giving places where text labels should
+                           not be placed (i.e. labels from another
+                           model are already there). None if no mask.
         bodies_config      Configuration parameters.
         mask_only          Only compute the latlon mask and don't spent time
                            actually trying to make a model.
@@ -219,11 +333,16 @@ def bodies_create_model(obs, body_name, inventory,
                           curvature_threshold_pix)
     height_threshold = max(height * curvature_threshold_frac,
                            curvature_threshold_pix)
-    
-    if ((u_center-extend_fov[0] >= width_threshold and
-         obs.data.shape[1]-1-extend_fov[0]-u_center >= width_threshold) and
-        (v_center-extend_fov[1] >= height_threshold and
-         obs.data.shape[0]-1-extend_fov[1]-v_center >= height_threshold)):
+    # Slightly more than half of the body must be visible in each of the
+    # horizontal and vertical directions
+    if (((u_center-width_threshold > extend_fov[0] and # Body is to left 
+          u_center+width/2 < obs.data.shape[1]-1-extend_fov[0]) or
+         (u_center+width_threshold < obs.data.shape[1]-1-extend_fov[0] and
+          u_center-width/2 > extend_fov[0])) and # Body is to right
+        ((v_center-height_threshold > extend_fov[1] and  # Body is at top
+          v_center+height/2 < obs.data.shape[0]-1-extend_fov[1]) or
+         (v_center+height_threshold < obs.data.shape[0]-1-extend_fov[1] and
+          v_center-height/2 > extend_fov[1]))): # Body is at bottom
         metadata['curvature_ok'] = True
     
     u_min -= BODIES_POSITION_SLOP
@@ -283,10 +402,12 @@ def bodies_create_model(obs, body_name, inventory,
         metadata['end_time'] = time.time()
         return None, metadata, None
 
-    if not np.any(latlon_mask):
-        logger.info('No pixels intercepted - aborting')
-        metadata['end_time'] = time.time()
-        return None, metadata, None
+# We want to always create the model now since there could be a slight
+# glow. Also we want to create the text labels.
+#    if not np.any(latlon_mask) and not always_create_model:
+#        logger.info('No pixels intercepted - aborting')
+#        metadata['end_time'] = time.time()
+#        return None, metadata, None
         
     # Analyze the limb
     
@@ -337,6 +458,7 @@ def bodies_create_model(obs, body_name, inventory,
     
     if bodies_config['use_lambert']:
         restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
+        restr_model += 0.01 # Make a slight glow even past the terminator
         restr_model[restr_body_mask_inv] = 0.
     else:
         restr_model = restr_body_mask.astype('float')
@@ -359,8 +481,11 @@ def bodies_create_model(obs, body_name, inventory,
     model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
           u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
     
+    model_text = _bodies_make_label(obs, body_name, model, label_avoid_mask,
+                                    extend_fov, bodies_config)
+    
     metadata['end_time'] = time.time()
-    return model, metadata, np.zeros(model.shape, dtype=np.uint8)
+    return model, metadata, model_text
 
 
 #==============================================================================
@@ -674,7 +799,7 @@ def bodies_reproject(
     # Actual longitude (rad)
     lon_bins_act = lon_bins * longitude_resolution
 
-    logger.info('Offset U,V %d,%d  Lat/Lon Type %s  Lon Direction %s', 
+    logger.info('Offset U,V %d,%d  Lat/Lon Type %s / Lon Direction %s', 
                  offset_u, offset_v, latlon_type, lon_direction)
     if empty_mask:
         logger.info('Empty body mask')
@@ -1156,7 +1281,7 @@ def _bodies_read_iss_map(body_name):
 def _bodies_read_schenk_jpg(body_name):
     body_data = {}
     img_filename = os.path.join(SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
-    img = PIL.Image.open(img_filename)
+    img = Image.open(img_filename)
     nx, ny = img.size
     body_data['line_first_pixel'] = 0
     body_data['line_last_pixel'] = ny-1

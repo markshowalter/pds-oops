@@ -86,6 +86,9 @@ def file_add_selection_arguments(parser):
         'image_name', action='append', nargs='*', type=_validate_image_name,
         help='Specific image names to process')
     parser.add_argument(
+        '--volume', action='append',
+        help='An entire volume')
+    parser.add_argument(
         '--image-full-path', action='append',
         help='The full path for an image')
     parser.add_argument(
@@ -110,24 +113,32 @@ def file_log_arguments(arguments, log):
         log('*** Images explicitly from full paths:')
         for image_path in arguments.image_full_path:
             log('        %s', image_path)
-    else:
-        log('*** Image #s %010d - %010d / NAC only %s / WAC only %s',
-            arguments.first_image_num,
-            arguments.last_image_num,
-            arguments.nac_only, arguments.wac_only)
-        if arguments.image_name is not None:
-            log('*** Images restricted to list:')
-            for filename in arguments.image_name:
-                log('        %s', filename)
-        if arguments.image_pds_csv:
-            log('*** Images restricted to those from PDS CSV %s',
-                arguments.image_pds_csv)
+    log('*** Image #s %010d - %010d',
+        arguments.first_image_num,
+        arguments.last_image_num)
+    log('*** NAC only:                %s', arguments.nac_only)
+    log('*** WAC only:                %s', arguments.wac_only)
+    log('*** Already has offset file: %s', arguments.has_offset_file)
+    log('*** Has no offset file:      %s', arguments.has_no_offset_file)
+    log('*** Already has PNG file:    %s', arguments.has_png_file)
+    log('*** Has no PNG file:         %s', arguments.has_no_png_file)
+    if (arguments.image_name is not None and arguments.image_name != [] and
+        arguments.image_name[0] != []):
+        log('*** Images restricted to list:')
+        for filename in arguments.image_name[0]:
+            log('        %s', filename)
+    if arguments.volume is not None and arguments.volume != []:
+        log('*** Images restricted to volume:')
+        for filename in arguments.volume:
+            log('        %s', filename)
+    if arguments.image_pds_csv:
+        log('*** Images restricted to those from PDS CSV %s',
+            arguments.image_pds_csv)
 
 def file_yield_image_filenames_from_arguments(arguments):
     if arguments.image_full_path:
         for image_path in arguments.image_full_path:
             yield image_path
-        return
     
     restrict_image_list = []
     if arguments.image_name is not None and arguments.image_name != [[]]:
@@ -159,13 +170,15 @@ def file_yield_image_filenames_from_arguments(arguments):
         restrict_camera = 'N'
     if arguments.wac_only:
         restrict_camera = 'W'
-    
+
     first_image_number = arguments.first_image_num
     last_image_number = arguments.last_image_num
-
+    volume = arguments.volume
+    
     for image_path in file_yield_image_filenames(
                 first_image_number, 
                 last_image_number,
+                volume,
                 restrict_camera,
                 restrict_image_list,
                 force_has_offset_file=arguments.has_offset_file,
@@ -174,7 +187,8 @@ def file_yield_image_filenames_from_arguments(arguments):
                 force_has_no_png_file=arguments.has_no_png_file):
         yield image_path
 
-def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999, 
+def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
+                               volume=None, 
                                camera='NW', restrict_list=None,
                                force_has_offset_file=False,
                                force_has_no_offset_file=False,
@@ -202,6 +216,18 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
     for search_dir in sorted(os.listdir(search_root)):
         search_fulldir = file_clean_join(search_root, search_dir)
         coiss_fulldir = file_clean_join(image_root, search_dir)
+        if volume:
+            found_vol_spec = False
+            good_vol_spec = False
+            for vol in volume:
+                if vol.find('/') != -1:
+                    continue
+                found_vol_spec = True
+                if search_dir == vol:
+                    good_vol_spec = True
+                    break
+            if found_vol_spec and not good_vol_spec:
+                continue
         if (not os.path.isdir(search_fulldir) or
             not os.path.isdir(coiss_fulldir)):
             continue
@@ -211,6 +237,18 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
         for range_dir in sorted(os.listdir(search_fulldir)):
             if len(range_dir) != 21 or range_dir[10] != '_':
                 continue
+            if volume:
+                found_full_spec = False
+                good_full_spec = False
+                for vol in volume:
+                    if vol.find('/') == -1:
+                        continue
+                    found_full_spec = True
+                    if search_dir+'/'+range_dir == vol:
+                        good_full_spec = True
+                        break
+                if found_full_spec and not good_full_spec:
+                    continue
             range1 = int(range_dir[:10])
             range2 = int(range_dir[11:])
             if range1 > img_end_num:

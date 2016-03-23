@@ -118,6 +118,8 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
         star.conflicts = None
         star.temperature_faked = False
         star.integrated_dn = 0.
+        star.overlay_box_width = 0
+        star.overlay_box_thickness = 0
         if star.temperature is None:
             star.temperature_faked = True
             star.temperature = SCLASS_TO_SURFACE_TEMP[default_star_class]
@@ -395,7 +397,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                        dtype=np.uint8)
     text = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                      obs.data.shape[1]+extend_fov[0]*2),
-                    dtype=np.uint8)
+                    dtype=np.bool)
     text_im = Image.frombuffer('L', (text.shape[1], text.shape[0]), text,
                                'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
@@ -443,12 +445,15 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
         # X to X+0.9999 is the same pixel
         u_idx = int(star.u+offset_u+extend_fov[0])
         v_idx = int(star.v+offset_v+extend_fov[1])
-    
+        star.overlay_box_width = 0
+        star.overlay_box_thickness = 0
         if (not star.is_bright_enough or not star.is_dim_enough or
             star.conflicts):
             width = 3
             if (width < u_idx < overlay.shape[1]-width and
                 width < v_idx < overlay.shape[0]-width):
+                star.overlay_box_width = width
+                star.overlay_box_thickness = 1
                 draw_circle(overlay, u_idx, v_idx, width, 255)
         else:
             if star.integrated_dn == 0:
@@ -458,13 +463,12 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             thickness = 1
             if star.photometry_confidence > stars_config['min_confidence']:
                 thickness = 3
-            # Magic code for contrast stretching
             if (width+thickness-1 <= u_idx < 
                 overlay.shape[1]-width-thickness+1 and
                 width+thickness-1 <= v_idx < 
                 overlay.shape[0]-width-thickness+1):
-                overlay[v_idx-width+1:v_idx+width,
-                        u_idx-width+1:u_idx+width] = 1
+                star.overlay_box_width = width
+                star.overlay_box_thickness = thickness
                 draw_rect(overlay, u_idx, v_idx, 
                           width, width, 255, thickness)
     
@@ -476,17 +480,11 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
         u_idx = int(star.u+offset_u+extend_fov[0])
         v_idx = int(star.v+offset_v+extend_fov[1])
     
-        if (not star.is_bright_enough or not star.is_dim_enough or
-            star.conflicts):
-            width = 3
-        else:
-            if star.integrated_dn == 0:
-                width = 3
-            else:
-                width = star.photometry_box_size // 2 + 1
-        thickness = 1
-        if star.photometry_confidence > stars_config['min_confidence']:
-            thickness = 3
+        width = star.overlay_box_width
+        thickness = star.overlay_box_thickness
+        if width == 0:
+            continue
+
         width += thickness-1
         if (not width <= u_idx < overlay.shape[1]-width or
             not width <= v_idx < overlay.shape[0]-width):
@@ -547,7 +545,6 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
         preferred_v = None
         text = np.array(text_im.getdata()).reshape(text.shape)
         for u, v in locations:
-            print star.unique_number, u, v
             if (not np.any(
                text[
                        max(v-3,0):
@@ -565,7 +562,6 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                     # Give precedence to earlier choices - they're prettier
                     good_u = u
                     good_v = v
-                    print 'GOOD!'
                 # But we'd really rather the text not overlap with the squares
                 # either, if possible
                 if (preferred_u is None and not np.any(
@@ -575,7 +571,6 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                            min(u+text_size[0]+3, overlay.shape[1])])):
                     preferred_u = u
                     preferred_v = v
-                    print 'PREFER!'
                     break
         
         if preferred_u is not None:
@@ -584,9 +579,9 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             
         if good_u is not None:
             text_draw.text((good_u,good_v), star_str1, 
-                           fill=255)
+                           fill=1)
             text_draw.text((good_u,good_v+text_size[1]), star_str2, 
-                           fill=255)
+                           fill=1)
     
     text = np.array(text_im.getdata()).reshape(text.shape)
     
@@ -1492,6 +1487,9 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     if offset is not None:
         offset_x = offset[0]
         offset_y = offset[1]
+
+    for star in star_list:
+        _stars_mark_conflicts(obs, star, (offset_x, offset_y), stars_config)
         
     logger.info('Final star list after offset:')
     for star in star_list:

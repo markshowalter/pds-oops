@@ -170,14 +170,14 @@ STARS_DEFAULT_CONFIG = {
 BODIES_DEFAULT_CONFIG = {
     # The minimum number of pixels in the bounding box surrounding the body
     # in order to bother with it.
-    'min_bounding_box_area': 4,
+    'min_bounding_box_area': 16,
     
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
     # correlation.
     # Set both 'curvature_threshold_frac' and 'curvature_threshold_pixels' to
     # eliminate the check for curvature and mark all bodies as OK. 
-    'curvature_threshold_frac': 0.1,
+    'curvature_threshold_frac': 0.02,
     
     # The number of pixels of the width/height of a body that must be visible
     # on either side of the center in order for the curvature to be sufficient
@@ -190,7 +190,7 @@ BODIES_DEFAULT_CONFIG = {
     # terminator.
     # Set to oops.TWOPI to eliminate the check for limbs and mark
     # all bodies as OK.
-    'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
+    'limb_incidence_threshold': 180*oops.RPD, # XXX 87. * oops.RPD, # cos = 0.05
     
     # Whether or not Lambert shading should be used, as opposed to just a
     # solid unshaded shape, when a cartographic reprojection is not
@@ -205,6 +205,9 @@ BODIES_DEFAULT_CONFIG = {
     # The latlon coordinate type and direction for the metadata latlon mask.
     'mask_latlon_type': 'centric',
     'mask_lon_direction': 'east',
+    
+    # A body has to take up at least this many pixels in order to be labeled.
+    'text_min_area': 9,
 }
 
 RINGS_DEFAULT_CONFIG = {
@@ -234,6 +237,10 @@ RINGS_DEFAULT_CONFIG = {
     # rings to be used for correlation.
     'curvature_threshold': 5,
     
+    # The minimum ring emission angle in the image must be at least this
+    # many degrees away from 90 for rings to be used for correlation.
+    'emission_threshold': 5., 
+    
     # When making the text overlay, only label a full ringlet or gap if it's
     # at least this many pixels wide somewhere in the image.
     'text_ringlet_gap_threshold': 2,
@@ -241,6 +248,12 @@ RINGS_DEFAULT_CONFIG = {
     # When making the text overlay, only label a non-full ringlet or gap
     # if...
     'text_threshold': 0, # XXX
+    
+    # Remove the shadow of Saturn from the model
+    'remove_saturn_shadow': False,
+    
+    # Remove the shadow of other bodies from the model
+    'remove_body_shadows': False
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
@@ -299,14 +312,9 @@ OFFSET_DEFAULT_CONFIG = {
     #^^^
     
     #vvv
-    # If the total model covers at least this fraction of the image, then we 
-    # might trust it.
-    'model_cov_threshold': 0.0005,
-    
-    # AND
-    
-    # If the total model has any contents further than this distance from an 
-    # edge, then we might trust it.
+    # If the total model covers at least this number of pixels the given
+    # distance from an edge, then we might trust it.
+    'model_cov_threshold': 25,
     'model_edge_pixels': 5,
     #^^^
     
