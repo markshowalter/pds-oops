@@ -492,7 +492,6 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     emission_ok = 'N/A'
             
     if rings_metadata and 'emission_ok' in rings_metadata:
-        print rings_metadata['emission_ok']
         curvature_ok = str(rings_metadata['emission_ok'])
         
     label = tk.Label(addon_control_frame, text='Emission OK:', 
@@ -502,6 +501,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
         
+    gridrow += 1
 
     if show_rings:
         label = tk.Label(addon_control_frame, text='Ring Long:', 

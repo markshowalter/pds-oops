@@ -219,17 +219,25 @@ class Star(object):
         """Unique catalog number"""
 
     def __str__(self):
-        ret = 'UNIQUE ID %d' % (self.unique_number)
+        ret = 'UNIQUE ID %d |' % (self.unique_number)
         
+        ret += ' RA %.7f' % (self.ra)
+        if self.ra_sigma is not None:
+            ret += ' [+/- %.7f]' % (self.ra_sigma)
+            
         ra_deg = self.ra*DPR/15 # In hours
         hh = int(ra_deg)
         mm = int((ra_deg-hh)*60)
         ss = (ra_deg-hh-mm/60.)*3600
-        ret += ' | RA %02dh%02dm%05.3fs' % (hh,mm,ss)
-
+        ret += ' (%02dh%02dm%05.3fs' % (hh,mm,ss)
         if self.ra_sigma is not None:
             ret += ' +/- %.4fs' % (self.ra_sigma*DPR*3600)
+        ret += ')'
 
+        ret += ' | DEC %.7f' % (self.dec)
+        if self.dec_sigma is not None:
+            ret += ' [+/- %.7f]' % (self.dec_sigma)
+            
         dec_deg = self.dec*DPR # In degrees
         neg = '+'
         if dec_deg < 0.:
@@ -238,11 +246,12 @@ class Star(object):
         dd = int(dec_deg)
         mm = int((dec_deg-dd)*60)
         ss = (dec_deg-dd-mm/60.)*3600
-        ret += ' | DEC %s%03dd%02dm%05.3fs' % (neg,dd,mm,ss)
+        ret += ' (%s%03dd%02dm%05.3fs' % (neg,dd,mm,ss)
         
         if self.dec_sigma is not None:
             ret += ' +/- %.4fs' % (self.dec_sigma*DPR*3600)
-            
+        ret += ')'
+        
         ret += '\n'
         
         if self.vmag is not None:

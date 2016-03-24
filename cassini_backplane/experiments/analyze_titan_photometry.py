@@ -441,7 +441,7 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
     print 'Finding offset for', filename
 
     full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
-    obs = read_iss_file(full_filename)
+    obs = file_read_iss_file(full_filename)
     orig_fov = obs.fov
 
     best_offset = None

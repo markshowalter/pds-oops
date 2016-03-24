@@ -99,64 +99,64 @@ class UCAC4Star(Star):
 
         ret += 'OBJTYPE ' + OBJ_TYPE_STRINGS[self.obj_type] + ' | '
         if self.vmag_model is None:
-            ret += 'APER VMAG NONE'
+            ret += 'APER VMAG None'
         else:
             ret += 'APER VMAG %6.3f' % self.vmag_model
         ret += ' | '
         
         if self.temperature is None:
-            ret += 'TEMP NONE'
+            ret += 'TEMP None'
         else:
             ret += 'TEMP %5d' % (self.temperature)
         ret += ' | SCLASS %2s' % (self.spectral_class)
         ret += '\n'
 
-        ret += 'DBL STAR FLAG '
+        ret += 'DBL STAR FLAG='
         ret += DOUBLE_STAR_FLAG_STRINGS[self.double_star_flag]
-        ret += ' TYPE '
+        ret += ' TYPE='
         ret += DOUBLE_STAR_TYPE_STRINGS[self.double_star_type]
         ret += ' | GALAXY '
         if self.galaxy_match:
-            ret += 'YES'
+            ret += 'Yes'
         else:
-            ret += 'NO'
+            ret += 'No'
         ret += ' | EXT SOURCE '
         if self.extended_source:
-            ret += 'YES'
+            ret += 'Yes'
         else:
-            ret += 'NO'
+            ret += 'No'
         ret += '\n'
         
         ret += 'APASS '
         if self.apass_mag_b is None:
-            ret += 'B NONE '
+            ret += 'B None '
         else:
             ret += 'B %6.3f +/- %6.3f ' % (self.apass_mag_b,
                                            self.apass_mag_b_sigma)
         if self.apass_mag_v is None:
-            ret += 'V NONE '
+            ret += 'V None '
         else:
             ret += 'V %6.3f +/- %6.3f ' % (self.apass_mag_v,
                                            self.apass_mag_v_sigma)
         if self.apass_mag_g is None:
-            ret += 'G NONE '
+            ret += 'G None '
         else:
             ret += 'G %6.3f +/- %6.3f ' % (self.apass_mag_g,
                                            self.apass_mag_g_sigma)
         if self.apass_mag_r is None:
-            ret += 'R NONE '
+            ret += 'R None '
         else:
             ret += 'R %6.3f +/- %6.3f ' % (self.apass_mag_r,
                                            self.apass_mag_r_sigma)
         if self.apass_mag_i is None:
-            ret += 'I NONE'
+            ret += 'I None'
         else:
             ret += 'I %6.3f +/- %6.3f' % (self.apass_mag_i,
                                            self.apass_mag_i_sigma)
         ret += '\n'
         
         if self.johnson_mag_b is None or self.johnson_mag_v is None:
-            ret += 'JOHNSON B NONE V NONE'
+            ret += 'JOHNSON B None V None'
         else:
             ret += 'JOHNSON B %6.3f V %6.3f' % (self.johnson_mag_b,
                                                 self.johnson_mag_v)

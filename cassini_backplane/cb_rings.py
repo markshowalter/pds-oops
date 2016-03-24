@@ -801,6 +801,8 @@ def _find_resolutions_by_a(obs, extend_fov, a):
     v = v.astype('int')
     feature_res = resolutions[v,u]
     
+    if len(feature_res) == 0:
+        return None, None
     min_res = np.min(feature_res)
     max_res = np.max(feature_res)
     
@@ -815,6 +817,8 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
     if not min_radius < a < max_radius:
         return None
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
+    if min_res is None:
+        return None # Something went wrong and we couldn't find a resolution
     if rms*rms_gain/blur > max_res:
         return (rms*rms_gain/blur)/max_res # Additional blurring needed
     return 1. # OK as is
@@ -1256,6 +1260,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 first_u = None
                 first_v = None
                 first_text = None
+                u = None
+                v = None
                 while np.any(dist != 1e38):
                     # Find the closest good pixel to the image center
                     v,u = np.unravel_index(np.argmin(dist), dist.shape)

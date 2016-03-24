@@ -339,13 +339,22 @@ def _results_path(img_path, file_type, root=RESULTS_ROOT, make_dirs=False):
     assert os.path.exists(root)
     root = file_clean_join(root, file_type)
     if make_dirs and not os.path.exists(root):
-        os.mkdir(root)
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
     part_dir3 = file_clean_join(root, dir3)
     if make_dirs and not os.path.exists(part_dir3):
-        os.mkdir(part_dir3)
+        try:
+            os.mkdir(part_dir3)
+        except OSError:
+            pass
     part_dir1 = file_clean_join(part_dir3, dir1)
     if make_dirs and not os.path.exists(part_dir1):
-        os.mkdir(part_dir1)
+        try:
+            os.mkdir(part_dir1)
+        except OSError:
+            pass
     return file_clean_join(part_dir1, filename)
 
 def file_img_to_log_path(img_path, bootstrap=False, make_dirs=True):
@@ -434,10 +443,16 @@ def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
         return None
     root = file_clean_join(root, 'mosaics')
     if make_dirs and not os.path.exists(root):
-        os.mkdir(root)
+        try:
+            os.mkdir(root)
+        except OSError:
+            pass
     root = file_clean_join(root, metadata['body_name'])
     if make_dirs and not os.path.exists(root):
-        os.mkdir(root)
+        try:
+            os.mkdir(root)
+        except OSError:
+            pass
     sorted_img_list = sorted(metadata['path_list'])
     _, first_filename = os.path.split(sorted_img_list[0])
     _, last_filename = os.path.split(sorted_img_list[-1])
