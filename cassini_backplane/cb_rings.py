@@ -750,7 +750,9 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
             best_longitudes = new_longitudes
             best_len = len(new_longitudes)
     
-    assert best_len > 0    
+    if best_len == 0:
+        logger.debug('No valid longitudes - returning bad curvature')
+        return False    
     
     logger.debug('Optimal radius %.2f longitude range %.2f to %.2f',
                  best_radius, best_longitudes[0]*oops.DPR,
@@ -871,6 +873,9 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 end_date = cspice.utc2et(entry_type_list[2])
                 if not (start_date < obs.midtime < end_date):
                     continue
+            name2 = feature_name
+            if name2 is None:
+                name2 = 'UNNAMED'
             if inner is not None:
                 ret = _fiducial_is_ok(obs, inner, min_radius, max_radius, 
                                       rms_gain, blur, extend_fov)
@@ -888,9 +893,11 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             if inner is not None or outer is not None:
                 feature_list.append((entry_type, feature_name, inner, outer))
                 if inner:
-                    logger.debug('Keeping inner feature %s %.2f', entry_type, inner[0][1])
+                    logger.debug('Keeping inner feature %s %s %.2f', 
+                                 name2, entry_type, inner[0][1])
                 if outer:
-                    logger.debug('Keeping outer feature %s %.2f', entry_type, outer[0][1])
+                    logger.debug('Keeping outer feature %s %s %.2f', 
+                                 name2, entry_type, outer[0][1])
 
         num_features = int(np.sum([(x[2] is not None) + (x[3] is not None)
                                    for x in feature_list]))
@@ -1016,7 +1023,7 @@ def _make_ephemeris_radii(obs, descr_list):
 
     return last_radii
 
-def _shade_antialias(radii, a, shade_above, resolutions):
+def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
     # The anti-aliasing shade
     # If we're shading the main object above, then the anti-aliasing
     # is shaded below!
@@ -1028,6 +1035,7 @@ def _shade_antialias(radii, a, shade_above, resolutions):
     shade = 1.-shade_sign*(radii-a)/resolutions
     shade[shade < 0.] = 0.
     shade[shade > 1.] = 0.
+    shade *= max
     
     return shade
     
@@ -1120,6 +1128,9 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
     # Then go back and add the ringlets, which might fill in the gaps.
     for do_type in ['GAP', 'RINGLET']:
         for entry_type, feature_name, inner, outer in feature_list:
+            name2 = feature_name
+            if name2 is None:
+                name2 = 'UNNAMED'
             if entry_type != do_type:
                 continue
             inner_radii = None
@@ -1152,23 +1163,32 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 inner_radii = inner_radii_bp.vals.astype('float')
             if outer_radii_bp is not None:
                 outer_radii = outer_radii_bp.vals.astype('float')
-            if (inner_radii is not None and outer_radii is not None and
-                entry_type == 'RINGLET'):
-                # We have both edges for a ringlet - just make it solid
-                logger.debug('Adding RINGLET a=%.2f to %.2f', inner_a, 
-                             outer_a)
+            if inner_radii is not None and outer_radii is not None:
+                # We have both edges for a ringlet or gap - just make it solid
+                logger.debug('Adding %s %s a=%.2f to %.2f', 
+                             name2, entry_type, inner_a, outer_a)
                 inner_above = inner_radii >= inner_a
                 outer_below = outer_radii <= outer_a
                 intersect = np.logical_and(inner_above, outer_below)
-                model[intersect] += 1.
-                shade = _shade_antialias(inner_radii, inner_a, False,
-                                         resolutions)
-                model += shade
-                shade = _shade_antialias(outer_radii, outer_a, True,
-                                         resolutions)
-                model += shade
-                # If the ringlet is wide enough that you can really see it in
-                # the image, then it's worth labeling
+                if entry_type == 'GAP':
+                    model[intersect] = 0.
+                else:
+                    model[intersect] += 1.
+                shade_dir = entry_type == 'GAP'
+                shade = _shade_antialias(inner_radii, inner_a, shade_dir,
+                                         resolutions, max=0.5)
+                if entry_type == 'GAP':
+                    model -= shade
+                else:
+                    model += shade
+                shade = _shade_antialias(outer_radii, outer_a, not shade_dir,
+                                         resolutions, max=0.5)
+                if entry_type == 'GAP':
+                    model -= shade
+                else:
+                    model += shade
+                # If the ringlet or gap is wide enough that you can really see 
+                # it in the image, then it's worth labeling
                 if (outer_a-inner_a)/min_res >= text_ringlet_threshold:
                     # Somewhere it's at least 3 pixels wide and can probably be
                     # seen
@@ -1186,10 +1206,11 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                     else:
                         intersect_list.append(intersect)
                         if feature_name:
-                            text_name_list.append(feature_name + ' Ringlet')
+                            text_name_list.append(feature_name + ' ' + 
+                                                  entry_type.capitalize())
                         else:
-                            text_name_list.append('Ringlet a=%.2f-%.2f' % 
-                                                  (inner_a, outer_a))
+                            text_name_list.append('a=%.2f-%.2f %s' % 
+                                                  (inner_a, outer_a, entry_type.capitalize()))
             else:
                 named_full_gap = False
                 if (inner_radii is not None and outer_radii is not None and
@@ -1206,15 +1227,15 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                         if feature_name:
                             text_name_list.append(feature_name + ' Gap')
                         else:
-                            text_name_list.append('Gap a=%.2f-%.2f' % (inner_a, 
+                            text_name_list.append('a=%.2f-%.2f Gap' % (inner_a, 
                                                                        outer_a))
                         named_full_gap = True
                     # Fall through to...
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
-                    logger.debug('Adding %s a=%.2f shade_above %d',
-                                 entry_type, inner_a, shade_above)
+                    logger.debug('Adding %s %s a=%.2f shade_above %d',
+                                 name2, entry_type, inner_a, shade_above)
                     model = _shade_model(model, inner_radii, inner_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
@@ -1228,13 +1249,13 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                             text_name_list.append(feature_name + ' ' +
                                                   feature_name_sfx) 
                         else:
-                            text_name_list.append(feature_name_sfx +
-                                                  (' a=%.2f' % inner_a))                     
+                            text_name_list.append(('a=%.2f' % inner_a) + ' ' +
+                                                  feature_name_sfx)                     
                 if outer_radii is not None:
                     # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
-                    logger.debug('Adding %s a=%.2f shade_above %d',
-                                 entry_type, outer_a, shade_above)
+                    logger.debug('Adding %s %s a=%.2f shade_above %d',
+                                 name2, entry_type, outer_a, shade_above)
                     model = _shade_model(model, outer_radii, outer_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
@@ -1248,8 +1269,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                             text_name_list.append(feature_name + ' ' +
                                                   feature_name_sfx) 
                         else:
-                            text_name_list.append(feature_name_sfx +
-                                                  (' a=%.2f' % inner_a))                     
+                            text_name_list.append(('a=%.2f' % outer_a) + ' '+
+                                                  feature_name_sfx)                     
 
             # Now find a good place for each label that doesn't overlap other
             # labels and doesn't overlap text from previous model steps

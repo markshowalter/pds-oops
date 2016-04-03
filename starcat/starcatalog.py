@@ -2,6 +2,7 @@
 # starcat/starcatalog.py
 ################################################################################
 
+import inspect
 import numpy as np
 
 DPR = 180/np.pi
@@ -272,7 +273,16 @@ class Star(object):
         ret += '\n'
         
         return ret
-                     
+    
+    def to_dict(self):
+        attribs = inspect.getmembers(self, lambda a:not(inspect.isroutine(a)))
+        attribs = [a for a in attribs if not(a[0].startswith('__') and a[0].endswith('__'))]
+        return dict(attribs)
+
+    def from_dict(self, d):
+        for key in d.keys():
+            setattr(self, key, d[key])
+        
     def ra_dec_with_pm(self, tdb):
         """Return the star's RA and DEC adjusted for proper motion.
         

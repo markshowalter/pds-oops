@@ -76,11 +76,9 @@ if len(command_list) == 0:
     
 #    command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
     
-    command_line_str = '--volume COISS_2024 --force-offset --image-console-level debug --image-logfile-level debug --profile --max-subprocesses 2'
+    command_line_str = 'N1454729699_1 --force-offset --image-console-level debug'
     
     command_list = command_line_str.split()
-
-## XXX Check restrict image list is included in first->last range 
 
 parser = argparse.ArgumentParser(
     description='Cassini Backplane Main Interface for Offsets',
@@ -244,11 +242,14 @@ def wait_for_all():
     while len(SUBPROCESS_LIST) > 0:
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
-                results = offset_result_str(SUBPROCESS_LIST[i][1])
+                old_image_path = SUBPROCESS_LIST[i][1]
+                metadata = file_read_offset_metadata(old_image_path)
+                filename = file_clean_name(old_image_path)
+                results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 break
-
+        time.sleep(1)
 
 ###############################################################################
 #
@@ -259,11 +260,10 @@ def wait_for_all():
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
                              offset_xy=None):
-    offset_path = file_img_to_offset_path(image_path)
-    if os.path.exists(offset_path):
+    offset_metadata = file_read_offset_metadata(image_path, overlay=False)
+    if offset_metadata is not None:
         if not force_offset:
             if redo_offset_error:
-                offset_metadata = file_read_offset_metadata(image_path)
                 if 'error' not in offset_metadata:
                     main_logger.debug(
                         'Skipping %s - offset file exists and metadata OK', 
@@ -359,7 +359,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         except:
             main_logger.exception('Error offset file writing failed - %s', image_path)
         cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.profile and argument.is_subprocess:
+        if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
             sortby = 'cumulative'

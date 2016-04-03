@@ -1,7 +1,7 @@
 ###############################################################################
 # cb_main_bootstrap.py
 #
-# The main top-level driver for all of CB.
+# The main top-level driver for choosing and executing bootstraps.
 ###############################################################################
 
 from cb_logging import *
@@ -29,34 +29,16 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-#    command_line_str = '--first-image-num 1487299402 --last-image-num 1487302209'
-    
+    command_line_str = '--has-offset-file --verbose --volume COISS_2024'
+
     command_list = command_line_str.split()
 
-## XXX Check restrict image list is included in first->last range 
-
 parser = argparse.ArgumentParser(
-    description='Cassini Backplane Main Interface',
-    epilog='''Default behavior is to perform an offset pass on all images
-              without associated offset files followed by a bootstrap pass
-              on all images''')
+    description='Cassini Backplane Main Interface for Statistics',
+    epilog='''Default behavior is to collect statistics on all images
+              with associated offset files''')
 
-def validate_image_name(name):
-    valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
-    if valid:
-        try:
-            _ = int(name[1:11])
-            _ = int(name[12])
-        except ValueError:
-            valid = False
-    if not valid:
-        raise argparse.ArgumentTypeError(
-             name+
-             ' is not a valid image name - format must be [NW]dddddddddd_d')
-    return name
-
-###XXXX####
-# --image-logfile is incompatible with --max-subprocesses > 0
+file_add_selection_arguments(parser)
 
 # Arguments about logging
 parser.add_argument(
@@ -89,38 +71,11 @@ parser.add_argument(
     '--profile', action='store_true', 
     help='Do performance profiling')
 
-# Arguments about selecting the images to process
-parser.add_argument(
-    '--first-image-num', type=int, default='1', metavar='IMAGE_NUM',
-    help='The starting image number')
-parser.add_argument(
-    '--last-image-num', type=int, default='9999999999', metavar='IMAGE_NUM',
-    help='The ending image number')
-nacwac_group = parser.add_mutually_exclusive_group()
-nacwac_group.add_argument(
-    '--nac-only', action='store_true', default=False,
-    help='Only process NAC images')
-nacwac_group.add_argument(
-    '--wac-only', action='store_true', default=False,
-    help='Only process WAC images')
-parser.add_argument(
-    'image_name', action='append', nargs='*', type=validate_image_name,
-    help='Specific image names to process')
-parser.add_argument(
-    '--image-full-path', action='append',
-    help='The full path for an image')
-parser.add_argument(
-    '--image-pds-csv', action='append',
-    help=''''A CSV file downloaded from PDS that contains filespecs of images
-to process''')
 
 # Arguments about the bootstrap process
-parser.add_argument(
-    '--bootstrap', dest='bootstrap', action='store_true', default=True,
-    help='Perform a bootstrap pass (default)')
-parser.add_argument(
-    '--no-bootstrap', dest='bootstrap', action='store_false',
-    help='Don\'t perform a bootstrap pass')
+# parser.add_argument(
+#     '--bootstrap', dest='bootstrap', action='store_true', default=True,
+#     help='Perform a bootstrap pass (default)')
 
 
 arguments = parser.parse_args(command_list)
@@ -130,7 +85,7 @@ arguments = parser.parse_args(command_list)
 # 
 #===============================================================================
 
-if arguments.profile and arguments.max_subprocesses == 0:
+if arguments.profile:
     # Only do image offset profiling if we're going to do the actual work in 
     # this process
     pr = cProfile.Profile()
@@ -143,72 +98,123 @@ main_logger, image_logger = log_setup_main_logging(
 
 image_logfile_level = log_decode_level(arguments.image_logfile_level)
     
-if arguments.image_pds_csv:
-    for filename in arguments.image_pds_csv:
-        with open(filename, 'r') as csvfile:
-            csvreader = csv.reader(csvfile)
-            header = csvreader.next()
-            for colnum in xrange(len(header)):
-                if header[colnum] == 'primaryfilespec':
-                    break
-            else:
-                main_logger.error('Badly formatted CSV file %s', filename)
-                sys.exit(-1)
-            if arguments.image_name is None:
-                arguments.image_name = []
-                arguments.image_name.append([])
-            for row in csvreader:
-                filespec = row[colnum]
-                filespec = filespec.replace('.IMG', '').replace('_CALIB', '')
-                _, filespec = os.path.split(filespec)
-                arguments.image_name[0].append(filespec)
+# if bootstrap_config is None:
+bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
+        
 
-restrict_camera = 'NW'
-if arguments.nac_only:
-    restrict_camera = 'N'
-if arguments.wac_only:
-    restrict_camera = 'W'
 
-restrict_image_list = None
-if arguments.image_name is not None and arguments.image_name != [[]]:
-    restrict_image_list = arguments.image_name[0]
 
-first_image_number = arguments.first_image_num
-last_image_number = arguments.last_image_num
-
-    
 ###############################################################################
 #
-# PERFORM BOOTSTAPPING
+# BUILD DATABASE OF BOOTSTRAP FILES
 #
 ###############################################################################
 
-def process_bootstrap_one_image(image_path, image_logfile_level):
-    if image_path is None:
-        bootstrap_add_file(None, None,
-                           image_logfile_level=image_logfile_level, 
-                           log_root='cb_main_bootstrap',
-                           redo_bootstrapped=True)
-        return
+def _bootstrap_time_expired(body_name, metadata, bootstrap_config):
+    known_time = None
+    candidate_time = None
+    # KNOWN and CANDIDATE lists are pre-sorted
+    if (body_name in _BOOTSTRAP_INIT_KNOWNS and
+        len(_BOOTSTRAP_INIT_KNOWNS[body_name]) > 0):
+        known_time = _BOOTSTRAP_INIT_KNOWNS[body_name][0][1]['midtime'] 
+    if (body_name in _BOOTSTRAP_CANDIDATES and
+        len(_BOOTSTRAP_CANDIDATES[body_name]) > 0):
+        candidate_time = _BOOTSTRAP_CANDIDATES[body_name][0][1]['midtime'] 
     
+    if known_time is None and candidate_time is None:
+        return False
+    
+    if known_time is None:
+        min_time = candidate_time
+    elif candidate_time is None:
+        min_time = known_time
+    else:
+        min_time = min(known_time, candidate_time)
+    time_diff = metadata['midtime'] - min_time
+    allowed_diff = (bootstrap_config['body_list'][body_name][0] * 
+                    bootstrap_config['orbit_frac'])
+
+    return time_diff > allowed_diff
+    
+
+def check_add_one_image(image_path):
+    """XXX DOCUMENT THIS"""
     image_filename = file_clean_name(image_path)
-    
-    offset_path = file_img_to_offset_path(image_path)
-    if not os.path.exists(offset_path):
+
+    metadata = file_read_offset_metadata(image_path, overlay=False)
+
+    if metadata is None:
         main_logger.debug('%s - No offset file', image_filename)
         return
-
-    metadata = file_read_offset_metadata(image_path)
 
     if 'error' in metadata:
         main_logger.info('%s - Skipping due to offset file error', image_filename)
         return
          
-    bootstrap_add_file(image_path, metadata, 
-                       image_logfile_level=image_logfile_level, 
-                       log_root='cb_main_bootstrap',
-                       redo_bootstrapped=True)
+#     if metadata is None:
+#         # End of the file list - force everything to process
+#         for body_name in _BOOTSTRAP_CANDIDATES:
+#             _bootstrap_process_one_body(body_name, 
+#                                         image_logfile_level,
+#                                         bootstrap_config, **kwargs)
+#         return
 
+    body_name = metadata['bootstrap_body']
+    if body_name is None:
+        # No bootstrap body
+        return
+
+    if body_name not in bootstrap_config['body_list']:
+        # Bootstrap body isn't one we handle
+        return
+    
+    image_filename = file_clean_name(image_path)
+    already_bootstrapped = ('bootstrapped' in metadata and 
+                            metadata['bootstrapped'])
+
+    if _bootstrap_time_expired(body_name, metadata, bootstrap_config):
+        _bootstrap_process_one_body(body_name,
+                                    image_logfile_level,
+                                    bootstrap_config)
+
+    if (metadata is not None and metadata['offset'] is not None and
+        not already_bootstrapped):
+        if metadata['filter1'] != 'CL1' or metadata['filter2'] != 'CL2':
+            logger.info('%s - %s - Known offset for %s but not clear filter', 
+                        image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
+                        body_name)
+            return
+        if body_name not in _BOOTSTRAP_INIT_KNOWNS:
+            _BOOTSTRAP_INIT_KNOWNS[body_name] = []
+        _BOOTSTRAP_INIT_KNOWNS[body_name].append((image_path,metadata))
+        _BOOTSTRAP_INIT_KNOWNS[body_name].sort(key=lambda x: 
+                                               abs(x[1]['midtime']))
+        logger.info('%s - %s - Known offset for %s', 
+                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
+                    body_name)
+    elif (metadata['bootstrap_candidate'] or 
+          (already_bootstrapped and redo_bootstrapped)):
+        if body_name not in _BOOTSTRAP_CANDIDATES:
+            _BOOTSTRAP_CANDIDATES[body_name] = []
+        _BOOTSTRAP_CANDIDATES[body_name].append((image_path,metadata))
+        _BOOTSTRAP_CANDIDATES[body_name].sort(key=lambda x: 
+                                                    abs(x[1]['midtime']))
+        logger.info('%s - %s - Candidate for %s', 
+                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
+                    body_name)
+    else:
+        logger.info('%s - %s - No offset and not a candidate', 
+                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0))
+
+
+def register_one_image(image_path, image_logfile_level):
+#     if image_path is None:
+#         bootstrap_add_file(None, None,
+#                            image_logfile_level=image_logfile_level, 
+#                            log_root='cb_main_bootstrap',
+#                            redo_bootstrapped=True)
+#         return
+    
 
 start_time = time.time()
 
@@ -216,28 +222,13 @@ if arguments.profile:
     pr = cProfile.Profile()
     pr.enable()
 
-main_logger.info('')
-main_logger.info('********************************')
-main_logger.info('*** BEGINNING BOOTSTRAP PASS ***')
-main_logger.info('********************************')
+main_logger.info('***********************************************')
+main_logger.info('*** BEGINNING BUILD BOOTSTRAP DATABASE PASS ***')
+main_logger.info('***********************************************')
 main_logger.info('')
 
-if arguments.image_full_path:
-    for image_path in arguments.image_full_path:
-        process_bootstrap_one_image(image_path)
-    
-if first_image_number <= last_image_number:
-    main_logger.info('*** Image #s %010d - %010d / Camera %s',
-                     first_image_number, last_image_number,
-                     restrict_camera)
-    if restrict_image_list is not None:
-        main_logger.info('*** Images restricted to list:')
-        for filename in restrict_image_list:
-            main_logger.info('        %s', filename)
-    for image_path in yield_image_filenames(
-            first_image_number, last_image_number,
-            camera=restrict_camera, restrict_list=restrict_image_list):
-        process_bootstrap_one_image(image_path, image_logfile_level)
+for image_path in file_yield_image_filenames_from_arguments(arguments):
+    check_add_one_image(image_path)
 
 process_bootstrap_one_image(None, image_logfile_level)
 

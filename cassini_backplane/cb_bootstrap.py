@@ -253,32 +253,6 @@ def _bootstrap_make_initial_mosaic(body_name, bootstrap_config):
         # indicate that the bootstrapping was at least attempted.
         logger.info('No valid known-offset images - mosaic is blank')
     
-def _bootstrap_time_expired(body_name, metadata, bootstrap_config):
-    known_time = None
-    candidate_time = None
-    # KNOWN and CANDIDATE lists are pre-sorted
-    if (body_name in _BOOTSTRAP_INIT_KNOWNS and
-        len(_BOOTSTRAP_INIT_KNOWNS[body_name]) > 0):
-        known_time = _BOOTSTRAP_INIT_KNOWNS[body_name][0][1]['midtime'] 
-    if (body_name in _BOOTSTRAP_CANDIDATES and
-        len(_BOOTSTRAP_CANDIDATES[body_name]) > 0):
-        candidate_time = _BOOTSTRAP_CANDIDATES[body_name][0][1]['midtime'] 
-    
-    if known_time is None and candidate_time is None:
-        return False
-    
-    if known_time is None:
-        min_time = candidate_time
-    elif candidate_time is None:
-        min_time = known_time
-    else:
-        min_time = min(known_time, candidate_time)
-    time_diff = metadata['midtime'] - min_time
-    allowed_diff = (bootstrap_config['body_list'][body_name][0] * 
-                    bootstrap_config['orbit_frac'])
-
-    return time_diff > allowed_diff
-    
 def _bootstrap_sort_candidates(body_name):
     logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_sort_candidates')
 
@@ -353,71 +327,3 @@ def _bootstrap_process_one_body(body_name,
     _BOOTSTRAP_CANDIDATES[body_name] = []
     del _BOOTSTRAP_MOSAICS[body_name]
     
-def bootstrap_add_file(image_path, metadata, log_root='cb', 
-                       image_logfile_level=None,
-                       bootstrap_config=None,
-                       redo_bootstrapped=False, **kwargs):
-    """XXX DOCUMENT THIS"""
-    global _LOGGING_NAME
-    _LOGGING_NAME = log_root + '.' + _LOGGING_MODULE_NAME
-    
-    logger = logging.getLogger(_LOGGING_NAME+'.bootstrap_add_file')
-
-    if bootstrap_config is None:
-        bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
-        
-    if metadata is None:
-        # End of the file list - force everything to process
-        for body_name in _BOOTSTRAP_CANDIDATES:
-            _bootstrap_process_one_body(body_name, 
-                                        image_logfile_level,
-                                        bootstrap_config, **kwargs)
-        return
-        
-    body_name = metadata['bootstrap_body']
-    if body_name is None:
-        # No bootstrap body
-        return
-
-    if body_name not in bootstrap_config['body_list']:
-        # Bootstrap body isn't one we handle
-        return
-    
-    image_filename = file_clean_name(image_path)
-    already_bootstrapped = ('bootstrapped' in metadata and 
-                            metadata['bootstrapped'])
-
-    if _bootstrap_time_expired(body_name, metadata, bootstrap_config):
-        _bootstrap_process_one_body(body_name,
-                                    image_logfile_level,
-                                    bootstrap_config)
-
-    if (metadata is not None and metadata['offset'] is not None and
-        not already_bootstrapped):
-        if metadata['filter1'] != 'CL1' or metadata['filter2'] != 'CL2':
-            logger.info('%s - %s - Known offset for %s but not clear filter', 
-                        image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
-                        body_name)
-            return
-        if body_name not in _BOOTSTRAP_INIT_KNOWNS:
-            _BOOTSTRAP_INIT_KNOWNS[body_name] = []
-        _BOOTSTRAP_INIT_KNOWNS[body_name].append((image_path,metadata))
-        _BOOTSTRAP_INIT_KNOWNS[body_name].sort(key=lambda x: 
-                                               abs(x[1]['midtime']))
-        logger.info('%s - %s - Known offset for %s', 
-                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
-                    body_name)
-    elif (metadata['bootstrap_candidate'] or 
-          (already_bootstrapped and redo_bootstrapped)):
-        if body_name not in _BOOTSTRAP_CANDIDATES:
-            _BOOTSTRAP_CANDIDATES[body_name] = []
-        _BOOTSTRAP_CANDIDATES[body_name].append((image_path,metadata))
-        _BOOTSTRAP_CANDIDATES[body_name].sort(key=lambda x: 
-                                                    abs(x[1]['midtime']))
-        logger.info('%s - %s - Candidate for %s', 
-                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0),
-                    body_name)
-    else:
-        logger.info('%s - %s - No offset and not a candidate', 
-                    image_filename, cspice.et2utc(metadata['midtime'], 'C', 0))
-

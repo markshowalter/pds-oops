@@ -12,8 +12,6 @@
 #    file_clean_name
 #    file_read_iss_file
 #    file_img_to_log_path
-#    file_img_to_offset_path
-#    file_offset_to_img_path
 #    file_read_offset_metadata
 #    file_write_offset_metadata
 #    file_img_to_png_file
@@ -27,15 +25,19 @@ import cb_logging
 import logging
 
 import argparse
+import copy
 import csv
 import numpy as np
 import msgpack
 import msgpack_numpy
 import os.path
+import zlib
 from PIL import Image
 
 import oops
 import oops.inst.cassini.iss as iss
+
+import starcat
 
 from cb_config import *
 
@@ -278,11 +280,11 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                 if not os.path.isfile(img_path):
                     continue
                 if force_has_offset_file and not searching_offset:
-                    offset_path = file_img_to_offset_path(img_path)
+                    offset_path = _file_img_to_offset_path(img_path)
                     if not os.path.isfile(offset_path):
                         continue
                 if force_has_no_offset_file:
-                    offset_path = file_img_to_offset_path(img_path)
+                    offset_path = _file_img_to_offset_path(img_path)
                     if os.path.isfile(offset_path):
                         continue
                 if force_has_png_file and not searching_png:
@@ -364,12 +366,12 @@ def file_img_to_log_path(img_path, bootstrap=False, make_dirs=True):
     fn += '.log'
     return fn
 
-def file_img_to_offset_path(img_path, make_dirs=False):
+def _file_img_to_offset_path(img_path, make_dirs=False):
     fn = _results_path(img_path, 'offsets', make_dirs=make_dirs)
     fn += '-OFFSET.dat'
     return fn
 
-def file_offset_to_img_path(offset_path):
+def _file_offset_to_img_path(offset_path):
     rdir, filename = os.path.split(offset_path)
     rdir, dir1 = os.path.split(rdir)
     rdir, dir2 = os.path.split(rdir)
@@ -382,8 +384,29 @@ def file_offset_to_img_path(offset_path):
         
     return img_path
 
-def file_read_offset_metadata(img_path):
-    offset_path = file_img_to_offset_path(img_path, make_dirs=False)
+def _file_img_to_overlay_path(img_path, make_dirs=False):
+    fn = _results_path(img_path, 'overlays', make_dirs=make_dirs)
+    fn += '-OVERLAY.dat'
+    return fn
+
+def _compress_bool(a):
+    if a is None:
+        return None
+    flat = a.flatten()
+    assert (flat.shape[0] % 8) == 0
+
+    res = zlib.compress(flat.data)
+    return (a.shape, res)
+
+def _uncompress_bool(comp):
+    if comp is None:
+        return None
+    shape, flat = comp
+    res = np.frombuffer(zlib.decompress(flat), dtype='bool')
+    return res
+
+def file_read_offset_metadata(img_path, overlay=True):
+    offset_path = _file_img_to_offset_path(img_path, make_dirs=False)
     
     if not os.path.exists(offset_path):
         return None
@@ -393,34 +416,97 @@ def file_read_offset_metadata(img_path):
                                object_hook=msgpack_numpy.decode)
     offset_fp.close()
 
+    # UCAC4Star class can't be directly serialized by msgpack
+    if ('stars_metadata' in metadata and 
+        metadata['stars_metadata'] is not None):
+        if 'full_star_list' in metadata['stars_metadata']:
+            new_list = []
+            for star in metadata['stars_metadata']['full_star_list']:
+                new_star = starcat.UCAC4Star()
+                new_star.from_dict(star)
+                new_list.append(new_star)
+            metadata['stars_metadata']['full_star_list'] = new_list
+
+    # Uncompress all body latlon_masks
+    if 'bodies_metadata' in metadata:
+        bodies_metadata = metadata['bodies_metadata']
+        for key in bodies_metadata:
+            mask = bodies_metadata[key]['latlon_mask']
+            mask = _uncompress_bool(mask)
+            bodies_metadata[key]['latlon_mask'] = mask
+            
+    if overlay:
+        overlay_path = _file_img_to_overlay_path(img_path, make_dirs=False)
+        overlay_fp = open(overlay_path, 'rb')
+        metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
+                                           object_hook=msgpack_numpy.decode)
+        overlay_fp.close()
+        # Uncompress all boolean text overlay arrays
+        for field in ['stars_overlay_text', 'bodies_overlay_text',
+                      'rings_overlay_text']:
+            if field in metadata:
+                metadata_overlay[field] = _uncompress_bool(
+                                                   metadata_overlay[field])
+        metadata.update(metadata_overlay)
+
     return metadata
 
-def file_write_offset_metadata(img_path, metadata):
+def file_write_offset_metadata(img_path, metadata, overlay=True):
     """Write offset file for img_filename."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
 
-    offset_path = file_img_to_offset_path(img_path, make_dirs=True)
-
+    offset_path = _file_img_to_offset_path(img_path, make_dirs=True)
     logger.debug('Writing offset file %s', offset_path)
     
-    new_metadata = metadata.copy()
-    if 'ext_data' in new_metadata:
-        del new_metadata['ext_data']
-    if 'ext_overlay' in new_metadata:
-        del new_metadata['ext_overlay']
-    # XXX ONLY UNTIL OFFSET WRITING IS FIXED TO HANDLE STARS
-    if ('stars_metadata' in new_metadata and 
-        new_metadata['stars_metadata'] is not None):
-        if 'full_star_list' in new_metadata['stars_metadata']:
-            new_metadata['stars_metadata'] = \
-                    new_metadata['stars_metadata'].copy()
-            del new_metadata['stars_metadata']['full_star_list']
+    metadata = copy.deepcopy(metadata)
+    if 'ext_data' in metadata:
+        del metadata['ext_data']
+    if 'ext_overlay' in metadata:
+        del metadata['ext_overlay']
+        
+    metadata_overlay = {}
+    for field in ['overlay', 'stars_overlay', 'bodies_overlay',
+                  'rings_overlay']:
+        if field in metadata:
+            metadata_overlay[field] = metadata[field]
+            del metadata[field]
+    # Compress all boolean text overlay arrays
+    for field in ['stars_overlay_text', 'bodies_overlay_text',
+                  'rings_overlay_text']:
+        if field in metadata:
+            metadata_overlay[field] = _compress_bool(metadata[field])
+            del metadata[field]
+    
+    # UCAC4Star class can't be directly serialized by msgpack
+    if ('stars_metadata' in metadata and 
+        metadata['stars_metadata'] is not None):
+        if 'full_star_list' in metadata['stars_metadata']:
+            new_list = []
+            for star in metadata['stars_metadata']['full_star_list']:
+                new_star = star.to_dict()
+                new_list.append(new_star)
+            metadata['stars_metadata']['full_star_list'] = new_list
+
+    # Compress all body latlon_masks
+    if 'bodies_metadata' in metadata:
+        bodies_metadata = metadata['bodies_metadata']
+        for key in bodies_metadata:
+            mask = bodies_metadata[key]['latlon_mask']
+            mask = _compress_bool(mask)
+            bodies_metadata[key]['latlon_mask'] = mask
             
     offset_fp = open(offset_path, 'wb')
-    offset_fp.write(msgpack.packb(new_metadata, 
+    offset_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     offset_fp.close()
-    
+
+    if overlay:
+        overlay_path = _file_img_to_overlay_path(img_path, make_dirs=True)
+        overlay_fp = open(overlay_path, 'wb')
+        overlay_fp.write(msgpack.packb(metadata_overlay, 
+                                       default=msgpack_numpy.encode))    
+        overlay_fp.close()
+
     return offset_path
 
 def file_img_to_png_path(img_path, make_dirs=False):

@@ -170,7 +170,11 @@ STARS_DEFAULT_CONFIG = {
 BODIES_DEFAULT_CONFIG = {
     # The minimum number of pixels in the bounding box surrounding the body
     # in order to bother with it.
-    'min_bounding_box_area': 16,
+    'min_bounding_box_area': 3*3,
+
+    # The minimum number of pixels in the bounding box surrounding the body
+    # in order to compute the latlon mask for bootstrapping.
+    'min_latlon_mask_area': 10*10,
     
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
@@ -207,7 +211,7 @@ BODIES_DEFAULT_CONFIG = {
     'mask_lon_direction': 'east',
     
     # A body has to take up at least this many pixels in order to be labeled.
-    'text_min_area': 9,
+    'min_text_area': 0.5,
 }
 
 RINGS_DEFAULT_CONFIG = {

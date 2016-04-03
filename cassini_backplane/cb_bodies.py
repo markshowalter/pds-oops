@@ -120,19 +120,25 @@ def _bodies_create_cartographic(bp, body_data):
 
 def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                        bodies_config):
+    large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
+    dict_entry = large_body_dict[body_name]
+
+    u_size = dict_entry['u_pixel_size']
+    v_size = dict_entry['v_pixel_size']
+    bb_area = u_size * v_size
+    if bb_area < bodies_config['min_text_area']:
+        return None
+
     if label_avoid_mask is None:
         label_avoid_mask = np.zeros(model.shape, dtype=np.bool)
     else:
         label_avoid_mask = label_avoid_mask.copy()
-    large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
-
     model_text = np.zeros(model.shape, dtype=np.bool)
     text_im = Image.frombuffer('L', (model_text.shape[1], 
                                      model_text.shape[0]), 
                                model_text, 'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
 
-    dict_entry = large_body_dict[body_name]
     body_u = dict_entry['center_uv'][0]+extend_fov[0]
     body_v = dict_entry['center_uv'][1]+extend_fov[1]
 
@@ -144,7 +150,8 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                     model.shape[0]).reshape(model.shape)
     axis2 = np.repeat(np.arange(float(model.shape[0]))-body_v,
                       model.shape[1]).reshape(model.shape)
-    dist_from_center = axis1**2+5*axis2**2
+    dist_from_center = axis1**2+5*axis2**2    
+
     # Don't do anything too close to the top or bottom edges because text
     # has height
     dist_from_center[:5,:] = 1e38
@@ -156,11 +163,8 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         dict_entry = large_body_dict[name]
         u = dict_entry['center_uv'][0]+extend_fov[0]
         v = dict_entry['center_uv'][1]+extend_fov[1]
-        u_size = dict_entry['u_pixel_size']
-        v_size = dict_entry['v_pixel_size']
-        bb_area = u_size * v_size
-        if bb_area < bodies_config['text_min_area']:
-            continue
+        u_size = dict_entry['u_pixel_size']/2
+        v_size = dict_entry['v_pixel_size']/2
 
         axis1 = np.tile(np.arange(float(model.shape[1]))-u,
                         model.shape[0]).reshape(model.shape)
@@ -177,6 +181,8 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     # previous model steps or actual moon data
     text_name = body_name.capitalize()
     text_size = text_draw.textsize(text_name+'->')
+    u = None
+    v = None
     first_u = None
     first_v = None
     first_text = None
@@ -288,6 +294,7 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['size_ok'] = False
     metadata['curvature_ok'] = False
     metadata['limb_ok'] = False
+    metadata['latlon_mask'] = None
     metadata['start_time'] = start_time 
 
     logger.info('Processing %s', body_name)
@@ -385,18 +392,19 @@ def bodies_create_model(obs, body_name, inventory,
                                            swap  =True)
     restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
 
-    # Compute the lat/lon mask for bootstrapping
+    if bb_area >= bodies_config['min_latlon_mask_area']:
+        # Compute the lat/lon mask for bootstrapping
+        
+        latlon_mask = bodies_reproject(obs, body_name, 
+            latitude_resolution=bodies_config['mask_lat_resolution'], 
+            longitude_resolution=bodies_config['mask_lon_resolution'],
+            zoom_amt=1,
+            latlon_type=bodies_config['mask_latlon_type'],
+            lon_direction=bodies_config['mask_lon_direction'],
+            mask_only=True, override_backplane=restr_bp,
+            subimage_edges=(u_min,u_max,v_min,v_max))
     
-    latlon_mask = bodies_reproject(obs, body_name, 
-        latitude_resolution=bodies_config['mask_lat_resolution'], 
-        longitude_resolution=bodies_config['mask_lon_resolution'],
-        zoom_amt=1,
-        latlon_type=bodies_config['mask_latlon_type'],
-        lon_direction=bodies_config['mask_lon_direction'],
-        mask_only=True, override_backplane=restr_bp,
-        subimage_edges=(u_min,u_max,v_min,v_max))
-
-    metadata['latlon_mask'] = latlon_mask
+        metadata['latlon_mask'] = latlon_mask
 
     if mask_only:
         metadata['end_time'] = time.time()

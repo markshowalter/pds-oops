@@ -67,7 +67,8 @@ def _combine_models(model_list, solid=False, masked=False):
 def _combine_text(text_list):
     ret = text_list[0]
     for text in text_list[1:]:
-        ret = np.logical_or(ret, text)
+        if text is not None:
+            ret = np.logical_or(ret, text)
     return ret
 
 def _model_filter(image, gaussian_pre_blur, median_boxsize, 
@@ -287,7 +288,7 @@ def master_find_offset(obs,
     metadata['image_shape'] = obs.data.shape
     metadata['midtime'] = obs.midtime
     metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
-                                           obs, extend_fov=extend_fov)    
+                                           obs, extend_fov=extend_fov)
     set_obs_center_bp(obs)
     ra = obs.center_bp.right_ascension()
     dec = obs.center_bp.declination()
@@ -767,18 +768,23 @@ def master_find_offset(obs,
                 bodies_overlay = shift_image(bodies_overlay, 
                                              -int(np.round(offset[0])), 
                                              -int(np.round(offset[1])))
-                bodies_overlay_text = shift_image(bodies_overlay_text, 
-                                             -int(np.round(offset[0])), 
-                                             -int(np.round(offset[1])))
+                if bodies_overlay_text is not None:
+                    bodies_overlay_text = shift_image(bodies_overlay_text, 
+                                                 -int(np.round(offset[0])), 
+                                                 -int(np.round(offset[1])))
             metadata['bodies_overlay'] = unpad_image(bodies_overlay, 
                                                      extend_fov)
-            metadata['bodies_overlay_text'] = unpad_image(bodies_overlay_text,
-                                                          extend_fov)
-            label_avoid_mask = np.logical_or(label_avoid_mask,
-                                             metadata['bodies_overlay_text'])
-            color_overlay[...,1] = np.clip(bodies_overlay+
-                                           bodies_overlay_text*255,
-                                           0, 255)
+            if bodies_overlay_text is None:
+                metadata['bodies_overlay_text'] = None
+            else:
+                metadata['bodies_overlay_text'] = unpad_image(
+                                                      bodies_overlay_text,
+                                                      extend_fov)
+                label_avoid_mask = np.logical_or(label_avoid_mask,
+                                                 metadata['bodies_overlay_text'])
+                color_overlay[...,1] = np.clip(bodies_overlay+
+                                               bodies_overlay_text*255,
+                                               0, 255)
         
         ## RINGS ##
         if rings_model is not None:
@@ -789,18 +795,22 @@ def master_find_offset(obs,
                 rings_overlay = shift_image(rings_overlay, 
                                              -int(np.round(offset[0])), 
                                              -int(np.round(offset[1])))
-                rings_overlay_text = shift_image(rings_overlay_text, 
-                                             -int(np.round(offset[0])), 
-                                             -int(np.round(offset[1])))
+                if rings_overlay_text is not None:
+                    rings_overlay_text = shift_image(rings_overlay_text, 
+                                                 -int(np.round(offset[0])), 
+                                                 -int(np.round(offset[1])))
             metadata['rings_overlay'] = unpad_image(rings_overlay,
                                                     extend_fov)
-            metadata['rings_overlay_text'] = unpad_image(rings_overlay_text,
-                                                         extend_fov)
-            label_avoid_mask = np.logical_or(label_avoid_mask,
-                                             metadata['rings_overlay_text'])
-            color_overlay[...,2] = np.clip(rings_overlay+
-                                           rings_overlay_text*255,
-                                           0, 255)
+            if rings_overlay_text is None:
+                metadata['rings_overlay_text'] = None
+            else:
+                metadata['rings_overlay_text'] = unpad_image(rings_overlay_text,
+                                                             extend_fov)
+                label_avoid_mask = np.logical_or(label_avoid_mask,
+                                                 metadata['rings_overlay_text'])
+                color_overlay[...,2] = np.clip(rings_overlay+
+                                               rings_overlay_text*255,
+                                               0, 255)
         
         ## STARS ##
         if stars_overlay is not None:
@@ -820,16 +830,18 @@ def master_find_offset(obs,
                 stars_overlay = shift_image(stars_overlay, 
                                             -int(np.round(offset[0])), 
                                             -int(np.round(offset[1])))
-                stars_overlay_text = shift_image(stars_overlay_text, 
-                                            -int(np.round(offset[0])), 
-                                            -int(np.round(offset[1])))
+                if stars_overlay_text is not None:
+                    stars_overlay_text = shift_image(stars_overlay_text, 
+                                                -int(np.round(offset[0])), 
+                                                -int(np.round(offset[1])))
             metadata['stars_overlay'] = new_stars_overlay
             metadata['stars_overlay_text'] = new_stars_overlay_text
-            label_avoid_mask = np.logical_or(label_avoid_mask,
-                                             metadata['stars_overlay_text'])
-            color_overlay[...,0] = np.clip(stars_overlay+
-                                           stars_overlay_text*255,
-                                           0, 255)
+            if new_stars_overlay_text is not None:
+                label_avoid_mask = np.logical_or(label_avoid_mask,
+                                                 metadata['stars_overlay_text'])
+                color_overlay[...,0] = np.clip(stars_overlay+
+                                               stars_overlay_text*255,
+                                               0, 255)
 
     metadata['ext_overlay'] = color_overlay
     if color_overlay is not None:
