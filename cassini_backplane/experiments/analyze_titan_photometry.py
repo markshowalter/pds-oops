@@ -1,9 +1,11 @@
 import colorsys
 import copy
 import os
+import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.ma as ma
 import scipy.optimize as sciopt
 import scipy.interpolate as interp
 
@@ -12,6 +14,7 @@ import imgdisp
 import oops
 import oops.inst.cassini.iss as iss
 
+from cb_correlate import *
 from cb_gui_offset_data import *
 from cb_offset import *
 from cb_util_file import *
@@ -255,91 +258,91 @@ IMAGE_LIST_BY_PHASE = [
     'COISS_2024/data/1532136934_1532184428/W1532184214_1_CALIB.IMG', # MT2
     'COISS_2024/data/1532136934_1532184428/W1532183891_1_CALIB.IMG', # MT3
                            
-#    # 125
-#    'COISS_2015/data/1503416732_1503874914/W1503421986_2_CALIB.IMG', # VIO
-#    'COISS_2015/data/1503416732_1503874914/W1503422118_2_CALIB.IMG', # BL1
-#    'COISS_2015/data/1503416732_1503874914/W1503422052_2_CALIB.IMG', # GRN
-#    'COISS_2015/data/1503416732_1503874914/W1503422085_2_CALIB.IMG', # RED
-#                           
-#    # 130
-#    'COISS_2055/data/1622711732_1623166344/W1622977122_1_CALIB.IMG', # VIO
-#    'COISS_2055/data/1622711732_1623166344/W1622977155_1_CALIB.IMG', # BL1
-#    'COISS_2055/data/1622711732_1623166344/W1622977188_1_CALIB.IMG', # GRN
-#    'COISS_2055/data/1622711732_1623166344/W1622977221_1_CALIB.IMG', # RED
-#    'COISS_2055/data/1622711732_1623166344/W1622977738_1_CALIB.IMG', # CB2
-#    'COISS_2055/data/1622711732_1623166344/W1622977497_1_CALIB.IMG', # CB3
-#    'COISS_2055/data/1622711732_1623166344/W1622977705_1_CALIB.IMG', # MT2
-#    'COISS_2055/data/1622711732_1623166344/W1622977567_1_CALIB.IMG', # MT3
-#                           
-#    # 135
-#    'COISS_2060/data/1643317802_1643406946/W1643375992_1_CALIB.IMG', # VIO
-#    'COISS_2060/data/1643317802_1643406946/W1643376025_1_CALIB.IMG', # BL1
-#    'COISS_2060/data/1643317802_1643406946/W1643376058_1_CALIB.IMG', # GRN
-#    'COISS_2060/data/1643317802_1643406946/W1643376091_1_CALIB.IMG', # RED
-#    'COISS_2060/data/1643317802_1643406946/W1643376539_1_CALIB.IMG', # CB2
-#    'COISS_2060/data/1643317802_1643406946/W1643376327_1_CALIB.IMG', # CB3
-#    'COISS_2060/data/1643317802_1643406946/W1643376506_1_CALIB.IMG', # MT2
-#    'COISS_2060/data/1643317802_1643406946/W1643376375_1_CALIB.IMG', # MT3
-#                           
-#    # 140
-#    'COISS_2076/data/1727255245_1727449737/W1727330741_1_CALIB.IMG', # VIO
-#    'COISS_2076/data/1727255245_1727449737/W1727330774_1_CALIB.IMG', # BL1
-#    'COISS_2076/data/1727255245_1727449737/W1727330807_1_CALIB.IMG', # GRN
-#    'COISS_2076/data/1727255245_1727449737/W1727330840_1_CALIB.IMG', # RED
-#    'COISS_2076/data/1727255245_1727449737/W1727332645_1_CALIB.IMG', # CB2
-#    'COISS_2076/data/1727255245_1727449737/W1727332801_1_CALIB.IMG', # CB3
-#    'COISS_2076/data/1727255245_1727449737/W1727332572_1_CALIB.IMG', # MT2
-#    'COISS_2076/data/1727255245_1727449737/W1727332734_1_CALIB.IMG', # MT3
-#                           
-#    # 145
-#    'COISS_2062/data/1652952601_1653081456/W1652985001_1_CALIB.IMG', # VIO
-#    'COISS_2062/data/1652952601_1653081456/W1652985034_1_CALIB.IMG', # BL1
-#    'COISS_2062/data/1652952601_1653081456/W1652985067_1_CALIB.IMG', # GRN
-#    'COISS_2062/data/1652952601_1653081456/W1652985100_1_CALIB.IMG', # RED
-#    'COISS_2062/data/1652952601_1653081456/W1652985344_1_CALIB.IMG', # CB3
-#    'COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG', # MT3
-#                           
-#    # 149
-#    'COISS_2076/data/1721802517_1721894741/W1721822901_1_CALIB.IMG', # CLEAR
-#    'COISS_2076/data/1721802517_1721894741/W1721822934_1_CALIB.IMG', # VIO
-#    'COISS_2076/data/1721802517_1721894741/W1721822967_1_CALIB.IMG', # BL1
-#    'COISS_2076/data/1721802517_1721894741/W1721823000_1_CALIB.IMG', # GRN
-#    'COISS_2076/data/1721802517_1721894741/W1721823033_1_CALIB.IMG', # RED
-#    'COISS_2076/data/1721802517_1721894741/W1721823066_1_CALIB.IMG', # IR1
-#    'COISS_2076/data/1721802517_1721894741/W1721823382_1_CALIB.IMG', # IR2
-#    'COISS_2076/data/1721802517_1721894741/W1721823099_1_CALIB.IMG', # IR3
-#    'COISS_2076/data/1721802517_1721894741/W1721823316_1_CALIB.IMG', # CB2
-#    'COISS_2076/data/1721802517_1721894741/W1721823147_1_CALIB.IMG', # CB3
-#    'COISS_2076/data/1721802517_1721894741/W1721823349_1_CALIB.IMG', # MT2
-#    'COISS_2076/data/1721802517_1721894741/W1721823283_1_CALIB.IMG', # MT3
-#                           
-#    # 155
-#    'COISS_2074/data/1717673485_1717756625/W1717682790_1_CALIB.IMG', # VIO
-#    'COISS_2074/data/1717673485_1717756625/W1717688223_1_CALIB.IMG', # BL1
-#    'COISS_2074/data/1717673485_1717756625/W1717682856_1_CALIB.IMG', # GRN
-#    'COISS_2074/data/1717673485_1717756625/W1717688289_1_CALIB.IMG', # RED
-#    'COISS_2074/data/1717673485_1717756625/W1717688370_1_CALIB.IMG', # MT3
-#                           
-#    # 158
-#    'COISS_2009/data/1487140530_1487182149/W1487166992_2_CALIB.IMG', # CLEAR
-#    'COISS_2009/data/1487140530_1487182149/W1487167364_2_CALIB.IMG', # VIO
-#    'COISS_2009/data/1487140530_1487182149/W1487167243_2_CALIB.IMG', # BL1
-#    'COISS_2009/data/1487140530_1487182149/W1487167154_2_CALIB.IMG', # GRN
-#    'COISS_2009/data/1487140530_1487182149/W1487167033_2_CALIB.IMG', # RED
-#        
-#    # 164
-#    'COISS_2074/data/1716194058_1716328931/W1716307950_1_CALIB.IMG', # VIO
-#    'COISS_2074/data/1716194058_1716328931/W1716307983_1_CALIB.IMG', # BL1
-#    'COISS_2074/data/1716194058_1716328931/W1716308016_1_CALIB.IMG', # GRN
-#    'COISS_2074/data/1716194058_1716328931/W1716308049_1_CALIB.IMG', # RED
-#                           
-#    # 166
-#    'COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG', # CLEAR
-#    'COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG', # VIO
-#    'COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG', # BL1
-#    'COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG', # GRN
-#    'COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG', # RED
-#    'COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG', # MT2
+    # 125
+    'COISS_2015/data/1503416732_1503874914/W1503421986_2_CALIB.IMG', # VIO
+    'COISS_2015/data/1503416732_1503874914/W1503422118_2_CALIB.IMG', # BL1
+    'COISS_2015/data/1503416732_1503874914/W1503422052_2_CALIB.IMG', # GRN
+    'COISS_2015/data/1503416732_1503874914/W1503422085_2_CALIB.IMG', # RED
+                           
+    # 130
+    'COISS_2055/data/1622711732_1623166344/W1622977122_1_CALIB.IMG', # VIO
+    'COISS_2055/data/1622711732_1623166344/W1622977155_1_CALIB.IMG', # BL1
+    'COISS_2055/data/1622711732_1623166344/W1622977188_1_CALIB.IMG', # GRN
+    'COISS_2055/data/1622711732_1623166344/W1622977221_1_CALIB.IMG', # RED
+    'COISS_2055/data/1622711732_1623166344/W1622977738_1_CALIB.IMG', # CB2
+    'COISS_2055/data/1622711732_1623166344/W1622977497_1_CALIB.IMG', # CB3
+    'COISS_2055/data/1622711732_1623166344/W1622977705_1_CALIB.IMG', # MT2
+    'COISS_2055/data/1622711732_1623166344/W1622977567_1_CALIB.IMG', # MT3
+                           
+    # 135
+    'COISS_2060/data/1643317802_1643406946/W1643375992_1_CALIB.IMG', # VIO
+    'COISS_2060/data/1643317802_1643406946/W1643376025_1_CALIB.IMG', # BL1
+    'COISS_2060/data/1643317802_1643406946/W1643376058_1_CALIB.IMG', # GRN
+    'COISS_2060/data/1643317802_1643406946/W1643376091_1_CALIB.IMG', # RED
+    'COISS_2060/data/1643317802_1643406946/W1643376539_1_CALIB.IMG', # CB2
+    'COISS_2060/data/1643317802_1643406946/W1643376327_1_CALIB.IMG', # CB3
+    'COISS_2060/data/1643317802_1643406946/W1643376506_1_CALIB.IMG', # MT2
+    'COISS_2060/data/1643317802_1643406946/W1643376375_1_CALIB.IMG', # MT3
+                           
+    # 140
+    'COISS_2076/data/1727255245_1727449737/W1727330741_1_CALIB.IMG', # VIO
+    'COISS_2076/data/1727255245_1727449737/W1727330774_1_CALIB.IMG', # BL1
+    'COISS_2076/data/1727255245_1727449737/W1727330807_1_CALIB.IMG', # GRN
+    'COISS_2076/data/1727255245_1727449737/W1727330840_1_CALIB.IMG', # RED
+    'COISS_2076/data/1727255245_1727449737/W1727332645_1_CALIB.IMG', # CB2
+    'COISS_2076/data/1727255245_1727449737/W1727332801_1_CALIB.IMG', # CB3
+    'COISS_2076/data/1727255245_1727449737/W1727332572_1_CALIB.IMG', # MT2
+    'COISS_2076/data/1727255245_1727449737/W1727332734_1_CALIB.IMG', # MT3
+                           
+    # 145
+    'COISS_2062/data/1652952601_1653081456/W1652985001_1_CALIB.IMG', # VIO
+    'COISS_2062/data/1652952601_1653081456/W1652985034_1_CALIB.IMG', # BL1
+    'COISS_2062/data/1652952601_1653081456/W1652985067_1_CALIB.IMG', # GRN
+    'COISS_2062/data/1652952601_1653081456/W1652985100_1_CALIB.IMG', # RED
+    'COISS_2062/data/1652952601_1653081456/W1652985344_1_CALIB.IMG', # CB3
+    'COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG', # MT3
+                           
+    # 149
+    'COISS_2076/data/1721802517_1721894741/W1721822901_1_CALIB.IMG', # CLEAR
+    'COISS_2076/data/1721802517_1721894741/W1721822934_1_CALIB.IMG', # VIO
+    'COISS_2076/data/1721802517_1721894741/W1721822967_1_CALIB.IMG', # BL1
+    'COISS_2076/data/1721802517_1721894741/W1721823000_1_CALIB.IMG', # GRN
+    'COISS_2076/data/1721802517_1721894741/W1721823033_1_CALIB.IMG', # RED
+    'COISS_2076/data/1721802517_1721894741/W1721823066_1_CALIB.IMG', # IR1
+    'COISS_2076/data/1721802517_1721894741/W1721823382_1_CALIB.IMG', # IR2
+    'COISS_2076/data/1721802517_1721894741/W1721823099_1_CALIB.IMG', # IR3
+    'COISS_2076/data/1721802517_1721894741/W1721823316_1_CALIB.IMG', # CB2
+    'COISS_2076/data/1721802517_1721894741/W1721823147_1_CALIB.IMG', # CB3
+    'COISS_2076/data/1721802517_1721894741/W1721823349_1_CALIB.IMG', # MT2
+    'COISS_2076/data/1721802517_1721894741/W1721823283_1_CALIB.IMG', # MT3
+                           
+    # 155
+    'COISS_2074/data/1717673485_1717756625/W1717682790_1_CALIB.IMG', # VIO
+    'COISS_2074/data/1717673485_1717756625/W1717688223_1_CALIB.IMG', # BL1
+    'COISS_2074/data/1717673485_1717756625/W1717682856_1_CALIB.IMG', # GRN
+    'COISS_2074/data/1717673485_1717756625/W1717688289_1_CALIB.IMG', # RED
+    'COISS_2074/data/1717673485_1717756625/W1717688370_1_CALIB.IMG', # MT3
+                           
+    # 158
+    'COISS_2009/data/1487140530_1487182149/W1487166992_2_CALIB.IMG', # CLEAR
+    'COISS_2009/data/1487140530_1487182149/W1487167364_2_CALIB.IMG', # VIO
+    'COISS_2009/data/1487140530_1487182149/W1487167243_2_CALIB.IMG', # BL1
+    'COISS_2009/data/1487140530_1487182149/W1487167154_2_CALIB.IMG', # GRN
+    'COISS_2009/data/1487140530_1487182149/W1487167033_2_CALIB.IMG', # RED
+        
+    # 164
+    'COISS_2074/data/1716194058_1716328931/W1716307950_1_CALIB.IMG', # VIO
+    'COISS_2074/data/1716194058_1716328931/W1716307983_1_CALIB.IMG', # BL1
+    'COISS_2074/data/1716194058_1716328931/W1716308016_1_CALIB.IMG', # GRN
+    'COISS_2074/data/1716194058_1716328931/W1716308049_1_CALIB.IMG', # RED
+                           
+    # 166
+    'COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG', # CLEAR
+    'COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG', # VIO
+    'COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG', # BL1
+    'COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG', # GRN
+    'COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG', # RED
+    'COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG', # MT2
 ]
 
 
@@ -392,8 +395,11 @@ def make_bins(full_incidence, incidence_res, full_emission, emission_res):
     i_bins = (full_incidence / incidence_res).astype('int')
     e_bins = (full_emission / emission_res).astype('int')
 
-    num_incidence_bins = int(np.ceil(360. / incidence_res))
+    num_incidence_bins = int(np.ceil(2. / incidence_res))
     num_emission_bins = int(np.ceil(1. / emission_res))
+    
+    print '# Incidence Bins', num_incidence_bins
+    print '# Emission Bins', num_emission_bins
     
     bins = []
     num_bins = 0
@@ -435,10 +441,37 @@ def bin_one_image(i_bins, e_bins, data, full_mask, bins, u_offset, v_offset, ver
     
     rms = np.sqrt(np.sum(np.array(std_list)**2))
     
-    return rms, len(std_list)
+    return rms, len(std_list), bins
+
+def plot_bin_contents_hist(i_bins, e_bins, data, full_mask, bins):
+    bins = copy.deepcopy(bins)
+    num_incidence_bins = len(bins)
+    num_emission_bins = len(bins[0])
+
+    full_data = data[full_mask].flatten()
+
+    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
+        bins[i_bin][e_bin].append(datum)
+
+    flat_bins = []
+    for xi,x in enumerate(bins):
+        for yi,y in enumerate(x):
+            if len(y) > 0:
+                flat_bins.append(len(y))
+            
+    print flat_bins
     
+    
+    plt.hist(flat_bins)
+    plt.show()
+
 def find_offset_one_image(filename, save=True, display=True, verbose=True):
-    print 'Finding offset for', filename
+    if verbose:
+        print 'Finding offset for', filename
+
+    offset_limit = 10#20#85
+#    if filename.find('/W') != -1:
+#        offset_limit = 8
 
     full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
     obs = file_read_iss_file(full_filename)
@@ -455,87 +488,299 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
         print 'Computing backplanes'
     
     bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE') * oops.DPR
-    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE').sin()# * oops.DPR
-    bp_incidence.vals[bp_incidence.mask] = 0.
-    bp_emission.vals[bp_incidence.mask] = 0.
+    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE') * oops.DPR
+    bp_phase = bp.phase_angle('TITAN+ATMOSPHERE') * oops.DPR
     
-#    plt.imshow(bp_incidence.vals)
-#    plt.figure()
-#    plt.imshow(bp_emission.vals)
+    full_mask = bp_incidence.mask
+#    full_mask[bp_emission.vals < 0.80] = True
+    full_mask[:offset_limit,:] = True
+    full_mask[-offset_limit:,:] = True
+    full_mask[:,:offset_limit] = True
+    full_mask[:,-offset_limit:] = True
+
+    bp_incidence.vals[full_mask] = 0.
+    bp_emission.vals[full_mask] = 0.
+
+    lambert = bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
+
+    offset_list = find_correlation_and_offset(obs.data, lambert,
+                                search_size_max=85)
+    model_offset = offset_list[0][0]
+    if verbose:
+        print 'MODEL OFFSET', model_offset
+    
+    std_value = np.std(obs.data[full_mask])
+    median_value = np.median(obs.data[full_mask])
+    diff_threshold = std_value * 5
+    if verbose:
+        print 'DIFF THRESHOLD', diff_threshold
+    min_threshold = median_value / 10
+    
+    total_intersect = None
+    inc_list = []
+    for inc_ang in np.arange(0, 180., 10):
+        intersect = bp.border_atop(('incidence_angle', 'TITAN+ATMOSPHERE'), inc_ang * oops.RPD).vals.astype('float')
+        intersect[full_mask] = ma.masked
+        inc_list.append(intersect)
+        if total_intersect is None:
+            total_intersect = intersect
+        else:
+            total_intersect = np.logical_or(total_intersect, intersect)
+        
+    em_list = []
+    for em_ang in np.arange(2.5, 90., 5):
+        intersect = bp.border_atop(('emission_angle', 'TITAN+ATMOSPHERE'), em_ang * oops.RPD).vals.astype('float')
+        intersect[full_mask] = ma.masked
+        em_list.append(intersect)
+        total_intersect = np.logical_or(total_intersect, intersect)
+
+#    plt.imshow(total_intersect)
 #    plt.show()
     
-    full_mask = np.logical_not(bp_incidence.mask)
-    full_mask[bp_emission.vals < 0.85] = 0
-    full_mask[:5,:] = 0
-    full_mask[-5:,:] = 0
-    full_mask[:,:5] = 0
-    full_mask[:,-5:] = 0
-            
-    full_incidence = bp_incidence.vals[full_mask].flatten()
-    full_emission  = bp_emission.vals[full_mask].flatten()
+    ie_list = []
+    
+    threshold = 10
+    
+    for inc_int in inc_list:
+        for em_int in em_list:
+            joint_intersect = np.logical_and(inc_int, em_int)
+#            plt.imshow(joint_intersect)
+#            plt.show()
+            pixels = np.where(joint_intersect) # in Y,X
+            pixels = zip(*pixels)
+            if len(pixels) < 2:
+                continue
+            pixels.sort()
+            if verbose:
+                print pixels
+            # There has to be a gap of "threshold" in either x or y coords
+            gap_y = None
+            gap_x_pos = False
+            last_x = None
+            last_y = None
+            cluster_xy = None
+            for y, x in pixels:
+                if last_y is not None:
+                    if y-last_y >= threshold:
+                        gap_y = True
+                        cluster_xy = y
+                        break
+                if last_x is not None:
+                    if abs(x-last_x) >= threshold:
+                        gap_y = False
+                        cluster_xy = x
+                        gap_x_pos = x-last_x > 0
+                        break
+                last_x = x
+                last_y = y
+            if verbose:
+                print gap_y, cluster_xy
+            if gap_y is None:
+                # No gap!
+                continue
+            cluster1_list = []
+            cluster2_list = []
+            for pix in pixels:
+                if ((gap_y and pix[0] >= cluster_xy) or 
+                    (not gap_y and gap_x_pos and pix[1] >= cluster_xy) or
+                    (not gap_y and not gap_x_pos and pix[1] <= cluster_xy)):
+                    cluster2_list.append(pix)
+                else:
+                    cluster1_list.append(pix)
+            if verbose:
+                print cluster1_list
+                print cluster2_list
+            ie_list.append((cluster1_list, cluster2_list))
 
-    area = np.sum(full_mask)
-    diameter = np.sqrt(area / oops.PI) * 2
+    data = obs.data
+    best_rms = 1e38
+    best_offset = None
     
-    i_res = 360. / diameter
-    e_res = 1. / diameter
-    
-    print 'Choosing i_res', i_res, 'e_res', e_res
-
-    i_bins, e_bins, bins = make_bins(full_incidence, i_res,
-                                     full_emission, e_res)
-    
-    if False:
-        # Find the optimal resolutions
-    
-        if verbose:
-            print 'Finding optimal resolutions'
-    
-        best_i_res = None
-        best_e_res = None
-        best_num_bins = 0
-        
-        for i_res in np.arange(0.3, 5., 0.3):
-            for e_res in np.arange(0.002, 0.05, 0.002):
-                rms, num_bins = bin_one_image(full_incidence, i_res, 
-                                              full_emission, e_res,
-                                              obs.data, full_mask, 0, 0,
-                                              verbose=True)
-                print i_res, e_res, num_bins
-                if num_bins > best_num_bins:
-                    best_num_bins = num_bins
-                    best_i_res = i_res
-                    best_e_res = e_res
-        
-        print 'BEST', best_i_res, best_e_res
-        assert False
-
-    
-    limit = 20
-    
-    for u_offset in xrange(-limit,limit+1):
-        for v_offset in xrange(-limit,limit+1):
+    for u_offset in xrange(-offset_limit,offset_limit+1):
+        u_offset += model_offset[0]
+        for v_offset in xrange(-offset_limit,offset_limit+1):
+            v_offset += model_offset[1]
             if verbose:
                 print 'Trying offset', u_offset, v_offset
-    
-            rms, num_bins = bin_one_image(i_bins, e_bins, obs.data, full_mask,
-                                          bins, u_offset, v_offset, 
-                                          verbose=True)
+
+            diff_list = []
+            
+            for cluster1_list, cluster2_list in ie_list:
+                mean1_list = []
+                mean2_list = []
+                for pix in cluster1_list:
+                    mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+                for pix in cluster2_list:
+                    mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+                mean1 = np.mean(mean1_list)
+                mean2 = np.mean(mean2_list)
+                if mean1 < min_threshold or mean2 < min_threshold:
+                    continue
+                diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list))
+                diff_list.append(diff)
+                
+            diff_list = np.array(diff_list)
+
+            if verbose:
+                print 'DIFF MIN MAX MEAN STD', np.min(diff_list), np.max(diff_list), np.mean(diff_list), np.std(diff_list)
+            
+#            if np.max(diff_list) > diff_threshold:
+#                print 'DIFF TOO LARGE'
+#                continue
+            
+            rms = np.sqrt(np.sum(diff_list**2))
             
             if verbose:
-                print 'GOOD BINS', num_bins, 'RMS STD', rms
-            
+                print 'RMS', rms
+                
             if rms < best_rms:
                 best_rms = rms
                 best_offset = (u_offset, v_offset)
 
-    print 'FINAL RESULT', best_offset, best_rms
+    if verbose:
+        print 'FINAL RESULT', best_offset, best_rms
+
+    if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
+        filter = 'CLEAR'
+    else:
+        filter = obs.filter1
+        if filter == 'CL1':
+            filter = obs.filter2
+        elif obs.filter2 != 'CL2':
+            filter += '+' + obs.filter2
+    
+    return best_offset, best_rms, model_offset, filter, np.mean(bp_phase.mvals)
+
+
+def find_optimal_atmosphere():
+    result_list = []
+    
+    titan = oops.Body.lookup('TITAN')
+    titan_atmos = oops.Body.lookup('TITAN+ATMOSPHERE')
+
+    for filename in IMAGE_LIST_BY_PHASE:    
+        for atmos in np.arange(0., 851, 50):
+            titan_atmos.radius = titan.radius + atmos
+            titan_atmos.inner_radius = titan.inner_radius + atmos
+            surface = titan_atmos.surface
+            titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
+            offset, rms, model_offset, filter, phase = find_offset_one_image(filename, save=False, verbose=False, display=False)
+            print '%s %.2f %s %d' % (filename, phase, filter, atmos),
+            print model_offset, offset, rms
+            result_list.append((filename, phase, filter, atmos, model_offset, offset, rms))
+        fp = open('j:/Temp/titan-atmos.pickle', 'wb')
+        pickle.dump(result_list, fp)
+        fp.close()
+
+        
+        
+        
+#    emission_limit = 0.80
+#    
+#    full_mask = bp_incidence.mask
+#    full_mask[bp_emission.vals < 0.80] = True
+#    full_mask[:5,:] = True
+#    full_mask[-5:,:] = True
+#    full_mask[:,:5] = True
+#    full_mask[:,-5:] = True
+#    
+#    bp_incidence = bp_incidence.remask(full_mask).mvals
+#    bp_emission = bp_emission.remask(full_mask).mvals
+#    
+#    bp_agg = np.sqrt(bp_incidence**2 + bp_emission**2)
+#    
+#    print bp_agg[682-4:682+5,646-4:646+5]
+#    print bp_agg[683-4:683+5,359-4:359+5]
+#    
+#    plt.imshow(bp_agg)
+#    plt.show()
+#    
+#    while np.any(np.logical_not(bp_agg.mask)):
+#        # Choose the largest value because we have to choose something
+#        pix_coord = np.unravel_index(np.argmax(bp_agg), bp_agg.shape)
+#        temp_agg = (bp_agg-bp_agg[pix_coord])**2
+#        region_size = 2
+#        for xd in xrange(-region_size, region_size+1):
+#            for yd in xrange(-region_size, region_size+1):
+#                temp_agg.mask[pix_coord[0]+yd,pix_coord[1]+xd] = True
+#        # Now find the other pixel closest to this e/i value
+#        new_pix_coord = np.unravel_index(np.argmin(temp_agg), bp_agg.shape)
+#        print 'Coord', pix_coord, new_pix_coord, bp_agg[pix_coord]-bp_agg[new_pix_coord]
+#        bp_agg.mask[pix_coord] = True
+#        bp_agg.mask[new_pix_coord] = True
+        
+                
+        
+    # Create the array of nearest pixels
+    
+#    full_incidence = bp_incidence.vals[full_mask].flatten()
+#    full_emission  = bp_emission.vals[full_mask].flatten()
+#
+#    area = np.sum(full_mask)
+#    diameter = np.sqrt(area / oops.PI) * 2
+#    
+#    i_res = 1. / diameter
+#    e_res = 1. / diameter
+#    
+#    print 'Choosing i_res', i_res, 'e_res', e_res
+#
+#    i_bins, e_bins, bins = make_bins(full_incidence, i_res,
+#                                     full_emission, e_res)
+#    
+#    plot_bin_contents_hist(i_bins, e_bins, obs.data, full_mask, bins)
+#    
+#    if False:
+#        # Find the optimal resolutions
+#    
+#        if verbose:
+#            print 'Finding optimal resolutions'
+#    
+#        best_i_res = None
+#        best_e_res = None
+#        best_num_bins = 0
+#        
+#        for i_res in np.arange(0.3, 5., 0.3):
+#            for e_res in np.arange(0.002, 0.05, 0.002):
+#                rms, num_bins = bin_one_image(full_incidence, i_res, 
+#                                              full_emission, e_res,
+#                                              obs.data, full_mask, 0, 0,
+#                                              verbose=True)
+#                print i_res, e_res, num_bins
+#                if num_bins > best_num_bins:
+#                    best_num_bins = num_bins
+#                    best_i_res = i_res
+#                    best_e_res = e_res
+#        
+#        print 'BEST', best_i_res, best_e_res
+#        assert False
+#
+#    
+#    limit = 20
+#    
+#    for u_offset in xrange(-limit,limit+1):
+#        for v_offset in xrange(-limit,limit+1):
+#            if verbose:
+#                print 'Trying offset', u_offset, v_offset
+#    
+#            rms, num_bins, the_bins = bin_one_image(i_bins, e_bins, obs.data, full_mask,
+#                                          bins, u_offset, v_offset, 
+#                                          verbose=True)
+#            
+#            if verbose:
+#                print 'GOOD BINS', num_bins, 'RMS STD', rms
+#            
+#            if rms < best_rms:
+#                best_rms = rms
+#                best_offset = (u_offset, v_offset)
+#
+#    print 'FINAL RESULT', best_offset, best_rms
 
     if display:
+        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
         orig_overlay = np.zeros(obs.data.shape+(3,))
-        orig_overlay[:,:,0] = full_mask
+        orig_overlay[:,:,0] = np.logical_not(full_mask)
         best_overlay = np.zeros(obs.data.shape+(3,))
-        best_overlay[:,:,0] = shift_image(full_mask, best_offset[0], best_offset[1])
+        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -best_offset[0], -best_offset[1])
 
         im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
                                canvas_size=None,
@@ -1559,18 +1804,20 @@ titan = oops.Body.lookup('TITAN')
 new_titan = copy.copy(titan)
 oops.Body.BODY_REGISTRY['TITAN'] = new_titan
 
-new_titan.radius += 350
-new_titan.inner_radius += 350
+#new_titan.radius += 350
+#new_titan.inner_radius += 350
 surface = new_titan.surface
 new_titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (new_titan.radius, new_titan.radius))
 
 titan.name = 'TITAN+ATMOSPHERE'
-titan.radius += 650
-titan.inner_radius += 650
+titan.radius += 350#650
+titan.inner_radius += 350#650
 surface = titan.surface
 titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
 oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
 
+find_optimal_atmosphere()
+    
 # 16 - VIO
 #find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG')
@@ -1583,7 +1830,7 @@ oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
 #backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG', offset=(0,-1))#display=True, save=False)
 
 # 16 - RED
-find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG')
+#find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
@@ -1592,6 +1839,25 @@ find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB
 
 # 166 - VIO
 #find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG')
+
+# NAC test images
+#find_offset_one_image('COISS_2022/data/1525327124_1525363592/N1525327174_1_CALIB.IMG')
+
+# 145 - MT3
+#find_offset_one_image('COISS_2030/data/1551868920_1552128641/N1551889179_1_CALIB.IMG')
+#find_offset_one_image('COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG')
+
+# 166
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # CLEAR
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG') # VIO
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG') # BL1
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG') # GRN
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG') # RED
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG') # MT2
+
+
+# Titan and Rhea
+#find_offset_one_image('COISS_2068/data/1686496870_1686939958/N1686939958_1_CALIB.IMG') # Star-based offset -10, -2
 
 #backplane_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG', offset=(-3,-4), display=True)
 #backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG', offset=())
@@ -1605,12 +1871,12 @@ find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB
 #backplane_all_images(force=False)
 
 # Read the backplanes
-read_backplanes()
+#read_backplanes()
 
 #test_interpolation(13, 18, 26, 'VIO')
 #test_interpolation(140, 145, 149, 'BL1')
 
-show_plots_multiple_phases(phases=[16.], filters=['RED'])
+#show_plots_multiple_phases(phases=[16.], filters=['RED'])
 
 #show_plots_multiple(phases=[13,18,26], filters=['VIO'])#['RED','GRN', 'BL1', 'VIO'])
 #show_plots_multiple(phases=[140,145,149], filters=['BL1'])#['RED','GRN', 'BL1', 'VIO'])
