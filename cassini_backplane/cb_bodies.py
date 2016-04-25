@@ -141,6 +141,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
 
     body_u = dict_entry['center_uv'][0]+extend_fov[0]
     body_v = dict_entry['center_uv'][1]+extend_fov[1]
+    body_v_size = dict_entry['v_pixel_size']/2
 
     # Create an array of distances from the center pixel - always try to put
     # text labels as close to the center as possible to minimize the chance
@@ -150,21 +151,26 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                     model.shape[0]).reshape(model.shape)
     axis2 = np.repeat(np.arange(float(model.shape[0]))-body_v,
                       model.shape[1]).reshape(model.shape)
-    dist_from_center = axis1**2+5*axis2**2    
+    dist_from_center = axis1**2+5*axis2**2
+    # Don't even label aboves above or below their extent
+    if body_v-body_v_size > 0:
+        dist_from_center[:body_v-body_v_size+1,:] = 1e38
+    if body_v+body_v_size <= obs.ext_data.shape[0]:
+        dist_from_center[body_v+body_v_size:,:] = 1e38    
 
     # Don't do anything too close to the top or bottom edges because text
     # has height
     dist_from_center[:5,:] = 1e38
     dist_from_center[-5:,:] = 1e38
-
+    
     # Mask out the areas where bodies are sitting so we don't draw text over
     # them
     for name in large_body_dict:
-        dict_entry = large_body_dict[name]
-        u = dict_entry['center_uv'][0]+extend_fov[0]
-        v = dict_entry['center_uv'][1]+extend_fov[1]
-        u_size = dict_entry['u_pixel_size']/2
-        v_size = dict_entry['v_pixel_size']/2
+        dict_entry2 = large_body_dict[name]
+        u = dict_entry2['center_uv'][0]+extend_fov[0]
+        v = dict_entry2['center_uv'][1]+extend_fov[1]
+        u_size = dict_entry2['u_pixel_size']/2
+        v_size = dict_entry2['v_pixel_size']/2
 
         axis1 = np.tile(np.arange(float(model.shape[1]))-u,
                         model.shape[0]).reshape(model.shape)
@@ -176,6 +182,14 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         
     # Give us a few pixels margin from the edge of a moon
     dist_from_center = filt.maximum_filter(dist_from_center, 3)
+
+    # Don't do anything too close to any edge if possible so when the
+    # mask is shifted by the final offset we don't lose text
+    pointing_error = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
+    if np.any(dist_from_center[pointing_error[1]+extend_fov[1]+5:,:] != 1e38):
+        dist_from_center[:pointing_error[1]+extend_fov[1]+5,:] = 1e38
+    if np.any(dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] != 1e38):
+        dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] = 1e38
 
     # Now find a good place for each label that doesn't overlap text from 
     # previous model steps or actual moon data

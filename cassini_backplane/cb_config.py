@@ -96,7 +96,7 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 
 # These are bodies that shouldn't be used for navigation because they
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
-FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE']#, 'TITAN'] # XXX
+FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE']
 
 
 ##################
@@ -212,6 +212,37 @@ BODIES_DEFAULT_CONFIG = {
     
     # A body has to take up at least this many pixels in order to be labeled.
     'min_text_area': 0.5,
+}
+
+TITAN_DEFAULT_CONFIG = {
+    # The altitude of the top of the atmosphere (km).
+    'atmosphere_height': 340,
+
+    # How far to search for a Lambert model match using standard correlation.
+    # This needs to be more than the standard pointing error because we can
+    # match Titan off-center.
+    'search_size_max': {'NAC': 128, 'WAC': 32},
+    
+    # The fraction of Titan's diameter to search for a photometric match.
+    'offset_limit': {'NAC': 0.05, 'WAC': 0.04},
+    
+    # Increment in incidence and emission angles for creating photometric
+    # grid. These should have a decent beat frequency (e.g. be relatively
+    # prime) for best coverage.
+    'incidence_increment': 3. * oops.RPD,
+    'emission_increment': 5. * oops.RPD,
+    'max_emission_angle': 80. * oops.RPD,
+    
+    # The minimum number of pixels between the two clusters for an
+    # incidence/emission intersection to be used.
+    'min_gap_pixels': 10,
+    
+    # The largest number of pixels that can make up a cluster.
+    'max_cluster_size': 10000,
+    
+    # The granularity for the first offset search. This is purely for 
+    # performance.
+    'search_granularity': 4,
 }
 
 RINGS_DEFAULT_CONFIG = {

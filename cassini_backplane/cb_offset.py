@@ -28,6 +28,7 @@ from cb_config import MAX_POINTING_ERROR, LARGE_BODY_LIST, FUZZY_BODY_LIST
 from cb_correlate import *
 from cb_rings import *
 from cb_stars import *
+from cb_titan import *
 from cb_util_image import *
 
 _LOGGING_NAME = 'cb.' + __name__
@@ -97,6 +98,7 @@ def master_find_offset(obs,
                    allow_moons=True,
                        bodies_cartographic_data=None,
                        bodies_config=None,
+                       titan_config=None,
                    
                    allow_rings=True,
                        rings_model_source='voyager',
@@ -123,6 +125,7 @@ def master_find_offset(obs,
         bodies_cartographic_data The metadata to use for cartographic
                                  surfaces (see cb_bodies).
         bodies_config            Config parameters for bodies.
+        titan_config             Config parameters for Titan navigation.
 
         allow_rings              True to allow finding the offset based on
                                  rings.
@@ -172,8 +175,11 @@ def master_find_offset(obs,
                                rings and nothing else.
             'used_objects_type' The type of objects used for the final offset:
                                None, 'stars', or 'model'.
-            'model_contents'   A list of object types used to create the
-                               non-star model: 'rings', 'bodies'.
+            'model_contents'   A list of objects used to create the
+                               non-star model: 'rings' and body names.
+                               If the contents is only "TITAN", then the
+                               special photometry-based Titan navigation
+                               was performed.
             'model_overrides_stars' True if the non-star model was more trusted
                                than the star model.
             'stars_metadata'   The metadata from star matching. None if star
@@ -449,15 +455,13 @@ def master_find_offset(obs,
     model_offset = None
     
     #
-    # MAKE MODELS FOR THE BODIES IN THE IMAGE
+    # MAKE MODELS FOR THE BODIES IN THE IMAGE, EVEN THE FUZZY ONES
     #
     if (allow_saturn or allow_moons) and not entirely_rings:
         for body_name, inv in large_bodies_by_range:
             if body_name == 'SATURN' and not allow_saturn:
                 continue
             if body_name != 'SATURN' and not allow_moons:
-                continue
-            if body_name in FUZZY_BODY_LIST:
                 continue
             mask_only = (entirely_body == body_name and
                          (bodies_cartographic_data is None or
@@ -523,6 +527,7 @@ def master_find_offset(obs,
 
     model_list = []
     used_model_str_list = []
+    titan_metadata = None
 
     # XXX Deal with moons on the far side of the rings
     if (rings_model is not None and rings_curvature_ok and 
@@ -533,7 +538,7 @@ def master_find_offset(obs,
         # navigation reference
         # Only use blurred rings if there are no bodies to use
         model_list = model_list + [rings_model]
-        used_model_str_list.append('rings')
+        used_model_str_list.append('RINGS')
         if rings_features_blurred is not None:
             logger.info('Using rings model blurred by %f because there are no'+
                         ' bodies', rings_features_blurred)
@@ -550,6 +555,10 @@ def master_find_offset(obs,
                 # Fuzzy bodies can't be used for navigation, but can be used
                 # later to create the overlay
                 continue
+            if body_name == 'TITAN':
+                # Titan can't be used for primary model navigation
+                titan_metadata = body_metadata
+                continue
             if ((bodies_cartographic_data is None or
                  body_name not in bodies_cartographic_data) and
                 (not body_metadata['curvature_ok'] or
@@ -560,8 +569,10 @@ def master_find_offset(obs,
                 continue
             good_body = True
             model_list.append(body_model)
-        used_model_str_list.append('bodies')
+            used_model_str_list.append(body_name)
     metadata['model_contents'] = used_model_str_list
+    logger.info('Model contains %s', str(used_model_str_list))
+    final_model = None
     if force_offset:
         model_offset = force_offset
         logger.info('FORCING OFFSET U,V %.2f,%.2f',
@@ -586,7 +597,7 @@ def master_find_offset(obs,
             np.count_nonzero(final_model) < 
               offset_config['bodies_cov_threshold']):
             logger.info('Too few moons, no rings, model has too little '+
-                        'coverage')
+                        'coverage - model not used')
             model_offset = None
             peak = None
         else:
@@ -661,7 +672,7 @@ def master_find_offset(obs,
                                         model_offset[1]+new_model_offset[1])
                         peak = new_peak
                         metadata['secondary_corr_ok'] = True
-                        
+                
         if model_offset is None:
             logger.info('Final model offset N/A')
         else:
@@ -683,6 +694,19 @@ def master_find_offset(obs,
                             'Offset rejected')
                 model_offset = None
                 peak = None
+
+#    model_offset = None #XXX
+    if (model_offset is None and star_offset is None and 
+        titan_metadata is not None and titan_metadata['curvature_ok']):
+        logger.info('Model contains only TITAN and no stars - '+
+                    'performing Titan photometric navigation')
+        main_final_model = None
+        if final_model is not None:
+            main_final_model = unpad_image(final_model, extend_fov)
+        titan_offset = titan_navigate(obs, main_final_model, titan_config=titan_config)
+        if titan_offset is not None:
+            model_offset = titan_offset
+
 
     metadata['model_offset'] = model_offset
     

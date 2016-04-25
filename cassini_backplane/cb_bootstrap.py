@@ -72,8 +72,6 @@ def _bootstrap_mask_overlap(mask1, mask2):
     
 def _bootstrap_bodies_reproject(obs, body_name, offset, bootstrap_config):
     data = bodies_interpolate_missing_stripes(obs.data)
-    if obs.filename[:13] == 'N1483279205_1':
-        pass
     
     repro_metadata = bodies_reproject(
           obs, body_name, data=data, offset=offset,
