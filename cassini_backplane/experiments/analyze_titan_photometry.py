@@ -19,7 +19,6 @@ from cb_gui_offset_data import *
 from cb_offset import *
 from cb_util_file import *
 
-
 IMAGE_LIST_CLEAR = [
     ### CLEAR FILTERS
     'COISS_2058/data/1634043408_1634144961/W1634064022_1_CALIB.IMG', #  10.59  256  10.59_W1634064022_1
@@ -184,7 +183,7 @@ IMAGE_LIST_BY_PHASE = [
     # 73
     'COISS_2082/data/1743902905_1744323160/W1743914297_1_CALIB.IMG', # VIO
     'COISS_2082/data/1743902905_1744323160/W1743914227_1_CALIB.IMG', # BL1
-    'COISS_2082/data/1743902905_1744323160/W1743914172_1_CALIB.IMG', # GRN
+    'COISS_2082/data/1743902905_1744323160/W1743914172_1_CALIB.IMG', # GRN   # STOPPED HERE @ 800
     'COISS_2082/data/1743902905_1744323160/W1743914117_1_CALIB.IMG', # RED
                            
     # 80
@@ -204,7 +203,7 @@ IMAGE_LIST_BY_PHASE = [
                            
     # 90
     'COISS_2084/data/1753489519_1753577899/W1753508727_1_CALIB.IMG', # VIO
-    'COISS_2084/data/1753489519_1753577899/W1753508760_1_CALIB.IMG', # BL1
+    'COISS_2084/data/1753489519_1753577899/W1753508760_1_CALIB.IMG', # BL1   # STARTED HERE
     'COISS_2084/data/1753489519_1753577899/W1753508793_1_CALIB.IMG', # GRN
     'COISS_2084/data/1753489519_1753577899/W1753508826_1_CALIB.IMG', # RED
     'COISS_2084/data/1753489519_1753577899/W1753507284_1_CALIB.IMG', # CB2
@@ -349,6 +348,10 @@ IMAGE_LIST_BY_PHASE = [
 FILTER_COLOR = {
     'CLEAR': (.7,.7,.7),
     
+    'IR1': (0.5,0,0),
+    'IR2': (0.6,0,0),
+    'IR3': (0.7,0,0),
+    'IR5': (0.8,0,0),
     'RED': (1,0,0),
     'GRN': (0,1,0),
     'BL1': (0,0,1),
@@ -359,6 +362,25 @@ FILTER_COLOR = {
 
     'MT3': (1,153/256.,204/256.),
     'CB3': (1,.3,1),
+}    
+
+FILTER_NUMBER = {
+    'CLEAR': 0,
+    
+    'IR1': 1,
+    'IR2': 2,
+    'IR3': 3,
+    'IR5': 4,
+    'RED': 5,
+    'GRN': 6,
+    'BL1': 7,
+    'VIO': 8,
+    
+    'MT2': 9,
+    'CB2': 10,
+
+    'MT3': 11,
+    'CB3': 12,
 }    
 
     
@@ -502,6 +524,8 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
     bp_emission.vals[full_mask] = 0.
 
     lambert = bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
+    plt.imshow(lambert)
+    plt.show()
 
     offset_list = find_correlation_and_offset(obs.data, lambert,
                                 search_size_max=85)
@@ -609,9 +633,17 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
                 mean1_list = []
                 mean2_list = []
                 for pix in cluster1_list:
+                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                        not 0 <= pix[1]+u_offset < data.shape[1]):
+                        continue
                     mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
                 for pix in cluster2_list:
+                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                        not 0 <= pix[1]+u_offset < data.shape[1]):
+                        continue
                     mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+                if len(mean1_list) == 0 or len(mean2_list) == 0:
+                    continue
                 mean1 = np.mean(mean1_list)
                 mean2 = np.mean(mean2_list)
                 if mean1 < min_threshold or mean2 < min_threshold:
@@ -640,6 +672,19 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
     if verbose:
         print 'FINAL RESULT', best_offset, best_rms
 
+    if display:
+        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
+        orig_overlay = np.zeros(obs.data.shape+(3,))
+        orig_overlay[:,:,0] = np.logical_not(full_mask)
+        best_overlay = np.zeros(obs.data.shape+(3,))
+        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -best_offset[0], -best_offset[1])
+
+        im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
+                               canvas_size=None,
+                               title=filename, allow_enlarge=True,
+                               one_zoom=True, auto_update=True)
+        tk.mainloop()
+
     if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
         filter = 'CLEAR'
     else:
@@ -653,25 +698,135 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
 
 
 def find_optimal_atmosphere():
+    passno = 2
+
     result_list = []
     
     titan = oops.Body.lookup('TITAN')
     titan_atmos = oops.Body.lookup('TITAN+ATMOSPHERE')
 
-    for filename in IMAGE_LIST_BY_PHASE:    
-        for atmos in np.arange(0., 851, 50):
+    incr = len(IMAGE_LIST_BY_PHASE) // 2
+    start_idx = incr*(passno-1)
+    end_idx = incr*passno
+    if passno == 2:
+        end_idx = len(IMAGE_LIST_BY_PHASE)
+        
+    print 'START IDX', start_idx, 'END IDX', end_idx, 'LEN', len(IMAGE_LIST_BY_PHASE)
+    
+    for filename in IMAGE_LIST_BY_PHASE[start_idx:end_idx]:
+#         for atmos in np.arange(0., 851, 50):
+        for atmos in np.arange(270., 391, 10):
             titan_atmos.radius = titan.radius + atmos
             titan_atmos.inner_radius = titan.inner_radius + atmos
             surface = titan_atmos.surface
-            titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
+            titan_atmos.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan_atmos.radius, titan_atmos.radius))
             offset, rms, model_offset, filter, phase = find_offset_one_image(filename, save=False, verbose=False, display=False)
             print '%s %.2f %s %d' % (filename, phase, filter, atmos),
             print model_offset, offset, rms
             result_list.append((filename, phase, filter, atmos, model_offset, offset, rms))
-        fp = open('j:/Temp/titan-atmos.pickle', 'wb')
+        fp = open('/home/rfrench/titan-atmos-350-%d.pickle'%passno, 'wb')
         pickle.dump(result_list, fp)
         fp.close()
 
+def analyze_atmosphere_results():
+    result_list = []
+    
+    for passno in [1,2]:
+        fp = open('/home/rfrench/titan-atmos-350-%d.pickle'%passno, 'rb')
+        res = pickle.load(fp)
+        result_list = result_list+res
+        fp.close()
+
+    print len(IMAGE_LIST_BY_PHASE)
+    fig = plt.figure() 
+    ax = fig.add_subplot(111)
+
+    result_list.sort(key=lambda x: (x[0],x[3]))
+    result_list.append(('DONE', 0, 'XXX', 0, (0,0), (0,0), 0))
+    last_filename = None
+    for res in result_list:
+        (filename, phase, filter, atmos, model_offset, offset, rms) = res
+        if filter not in FILTER_COLOR:
+            print filter
+            continue
+        if last_filename is None:
+            last_filename = filename
+            last_phase = None
+            last_filter = None
+            best_rms = None
+            best_atmos = None
+            best_atmos1 = None
+            best_atmos2 = None
+            best_offset = None
+        elif last_filename != filename:
+            if best_atmos1 is not None:
+                plt.plot(last_phase, best_atmos1-2+FILTER_NUMBER[last_filter]/2, '*', color=FILTER_COLOR[last_filter])
+            if best_atmos2 is not None:
+                plt.plot(last_phase, best_atmos2-2+FILTER_NUMBER[last_filter]/2, 'o', color='none', mec=FILTER_COLOR[last_filter])
+            plt.plot(last_phase, best_atmos-2+FILTER_NUMBER[last_filter]/2, 'o', color=FILTER_COLOR[last_filter], mec=FILTER_COLOR[last_filter])
+            print phase, filter, best_atmos
+            if filename == 'DONE':
+                break
+        val = offset[0]**2+offset[1]**2
+        if best_offset is None or val < best_offset or (val == best_offset and rms < best_rms):
+            best_rms = rms
+            best_offset = val
+            best_atmos2 = best_atmos1
+            best_atmos1 = best_atmos
+            best_atmos = atmos
+        last_filename = filename
+        last_phase = phase
+        last_filter = filter
+    
+    plt.show()
+    
+#     result_list.
+#     phase_bin_incr = 5
+#     num_phase_bins = 180 // phase_bin_incr
+#     filters = {}
+#         if not filter in filters:
+#             phase_bins = []
+#             for phase_no in xrange(num_phase_bins):
+#                 phase_bins.append([])
+#             filters[filter] = phase_bins
+#         phase_bin = int(phase // phase_bin_incr)
+#         filters[filter][phase_bin].append((atmos, offset, rms))
+# 
+#     for filter in sorted(filters.keys()):
+#         if not filter in FILTER_COLOR:
+#             continue
+#         fig = plt.figure() 
+#         ax = fig.add_subplot(111)
+#            
+#         phase_bins = filters[filter]
+#         for phase_bin_no in xrange(num_phase_bins):
+#             phase_bin = phase_bins[phase_bin_no]
+#             x_data = []
+#             y_data = []
+#             for phase_data in phase_bin:
+#                 atmos, offset, rms = phase_data
+#                 if rms > 2:
+#                     continue
+#                 if abs(offset[0]) > 5 or abs(offset[1]) > 5:
+#                     continue 
+#                 phase = (phase_bin_no+0.5)*phase_bin_incr
+#                 x_data.append(atmos)
+#                 y_data.append(rms)
+#             if len(x_data) == 0:
+#                 continue
+#             joint = zip(x_data, y_data)
+#             joint.sort()
+#             x_data, y_data = zip(*joint)
+#             x_data = np.array(x_data)
+#             y_data = np.array(y_data)
+#             y_data /= np.min(y_data)
+#             x_data = x_data[np.where(y_data < 3)]
+#             y_data = y_data[np.where(y_data < 3)]
+#             plt.plot(x_data, y_data, 'o', color=FILTER_COLOR[filter])
+#             
+#         plt.show()
+    
+    
         
         
         
@@ -774,19 +929,6 @@ def find_optimal_atmosphere():
 #                best_offset = (u_offset, v_offset)
 #
 #    print 'FINAL RESULT', best_offset, best_rms
-
-    if display:
-        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
-        orig_overlay = np.zeros(obs.data.shape+(3,))
-        orig_overlay[:,:,0] = np.logical_not(full_mask)
-        best_overlay = np.zeros(obs.data.shape+(3,))
-        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -best_offset[0], -best_offset[1])
-
-        im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
-                               canvas_size=None,
-                               title=filename, allow_enlarge=True,
-                               one_zoom=True, auto_update=True)
-        tk.mainloop()
 
             
      
@@ -1810,16 +1952,17 @@ surface = new_titan.surface
 new_titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (new_titan.radius, new_titan.radius))
 
 titan.name = 'TITAN+ATMOSPHERE'
-titan.radius += 350#650
-titan.inner_radius += 350#650
+titan.radius += 350
+titan.inner_radius += 350
 surface = titan.surface
 titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
 oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
 
-find_optimal_atmosphere()
+# find_optimal_atmosphere()
+analyze_atmosphere_results()
     
 # 16 - VIO
-#find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
+# find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG')
 #find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG')
@@ -1848,7 +1991,7 @@ find_optimal_atmosphere()
 #find_offset_one_image('COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG')
 
 # 166
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # CLEAR
+# find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # CLEAR
 #find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG') # VIO
 #find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG') # BL1
 #find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG') # GRN
