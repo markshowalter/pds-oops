@@ -679,8 +679,8 @@ def master_find_offset(obs,
             logger.info('Final model offset    U,V %d %d', 
                          model_offset[0], model_offset[1])
     
-            shifted_model = shift_image(final_model, -model_offset[0], 
-                                        -model_offset[1])
+            shifted_model = shift_image(final_model, model_offset[0], 
+                                        model_offset[1])
             shifted_model = unpad_image(shifted_model, extend_fov)
 
             # Only trust a model if it has at least a reasonable number of 
@@ -790,12 +790,12 @@ def master_find_offset(obs,
             bodies_overlay_text = _combine_text(o_bodies_text_list)
             if offset is not None:
                 bodies_overlay = shift_image(bodies_overlay, 
-                                             -int(np.round(offset[0])), 
-                                             -int(np.round(offset[1])))
+                                             int(np.round(offset[0])), 
+                                             int(np.round(offset[1])))
                 if bodies_overlay_text is not None:
                     bodies_overlay_text = shift_image(bodies_overlay_text, 
-                                                 -int(np.round(offset[0])), 
-                                                 -int(np.round(offset[1])))
+                                                 int(np.round(offset[0])), 
+                                                 int(np.round(offset[1])))
             metadata['bodies_overlay'] = unpad_image(bodies_overlay, 
                                                      extend_fov)
             if bodies_overlay_text is None:
@@ -817,12 +817,12 @@ def master_find_offset(obs,
             rings_overlay = _normalize(rings_model) * 255
             if offset is not None:
                 rings_overlay = shift_image(rings_overlay, 
-                                             -int(np.round(offset[0])), 
-                                             -int(np.round(offset[1])))
+                                            int(np.round(offset[0])), 
+                                            int(np.round(offset[1])))
                 if rings_overlay_text is not None:
                     rings_overlay_text = shift_image(rings_overlay_text, 
-                                                 -int(np.round(offset[0])), 
-                                                 -int(np.round(offset[1])))
+                                                     int(np.round(offset[0])), 
+                                                     int(np.round(offset[1])))
             metadata['rings_overlay'] = unpad_image(rings_overlay,
                                                     extend_fov)
             if rings_overlay_text is None:
@@ -852,12 +852,12 @@ def master_find_offset(obs,
                 # new non-extended one since it was created with an offset
                 # in place
                 stars_overlay = shift_image(stars_overlay, 
-                                            -int(np.round(offset[0])), 
-                                            -int(np.round(offset[1])))
+                                            int(np.round(offset[0])), 
+                                            int(np.round(offset[1])))
                 if stars_overlay_text is not None:
                     stars_overlay_text = shift_image(stars_overlay_text, 
-                                                -int(np.round(offset[0])), 
-                                                -int(np.round(offset[1])))
+                                                     int(np.round(offset[0])), 
+                                                     int(np.round(offset[1])))
             metadata['stars_overlay'] = new_stars_overlay
             metadata['stars_overlay_text'] = new_stars_overlay_text
             if new_stars_overlay_text is not None:

@@ -33,23 +33,25 @@ _LOGGING_NAME = 'cb.' + __name__
 def shift_image(image, offset_u, offset_v):
     """Shift an image by an offset.
     
-    Pad the new area with zero and throw away the data moved off the edge."""
+    Pad the new area with zero and throw away the data moved off the edge.
+    
+    A positive offset moves the image to the right and down."""
     if offset_u == 0 and offset_v == 0:
         return image
     
-    image = np.roll(image, -offset_u, 1)
-    image = np.roll(image, -offset_v, 0)
+    image = np.roll(image, offset_u, 1)
+    image = np.roll(image, offset_v, 0)
 
     if offset_u != 0:    
         if offset_u < 0:
-            image[:,:-offset_u] = 0
+            image[:,:offset_u] = 0
         else:
-            image[:,-offset_u:] = 0
+            image[:,offset_u:] = 0
     if offset_v != 0:
         if offset_v < 0:
-            image[:-offset_v,:] = 0
+            image[:offset_v,:] = 0
         else:
-            image[-offset_v:,:] = 0
+            image[offset_v:,:] = 0
     
     return image
 
