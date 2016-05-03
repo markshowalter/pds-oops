@@ -1,6 +1,7 @@
 import copy
 import os
 import pickle
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,7 +17,6 @@ from cb_config import *
 from cb_offset import *
 from cb_util_file import *
 from cb_util_image import *
-
 
 TITAN_FILENAMES_CSV = os.path.join(SUPPORT_FILES_ROOT, 'titan', 
                                    'titan-file-list.csv')
@@ -371,7 +371,11 @@ with open(TITAN_FILENAMES_CSV, 'r') as csvfile:
         filespec = filespec.replace('.IMG', '_CALIB.IMG')
         image_list.append(filespec)
 
-for filename in image_list[len(image_list)//2:]:
+start_frac = 0
+if len(sys.argv) == 2:
+    start_frac = float(sys.argv[1])
+    
+for filename in image_list[int(start_frac*len(image_list)):]:
     try:
         process_image(filename)
     except RuntimeError:
