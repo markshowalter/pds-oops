@@ -413,91 +413,98 @@ def shift_image(image, offset_u, offset_v):
     
     return image
 
-def make_bins(full_incidence, incidence_res, full_emission, emission_res):
-    i_bins = (full_incidence / incidence_res).astype('int')
-    e_bins = (full_emission / emission_res).astype('int')
+def moving_average(a, n):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    ret[n-1:] /= n
+    ret[:n-1] /= np.arange(1., n)
+    return ret
 
-    num_incidence_bins = int(np.ceil(2. / incidence_res))
-    num_emission_bins = int(np.ceil(1. / emission_res))
+IMAGE_DATA = []
+TITAN_X = None
+
+# 1-D version
+def add_image_to_db(filename, display=False, verbose=True):
+    ret, filter, offset, sun_angle, titan_resolution = compute_profile(filename, display, verbose)
+
+    IMAGE_DATA.append(ret)
     
-    print '# Incidence Bins', num_incidence_bins
-    print '# Emission Bins', num_emission_bins
-    
-    bins = []
-    num_bins = 0
-    for i in xrange(num_incidence_bins):
-        bins.append([])
-        for j in xrange(num_emission_bins):
-            bins[-1].append([])
-            num_bins += 1
+    if display:
+        bp = oops.Backplane(obs)
+        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
+        orig_overlay = np.zeros(obs.data.shape+(3,))
+        orig_overlay[:,:,0] = np.logical_not(full_mask)
+        best_overlay = np.zeros(obs.data.shape+(3,))
+        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -offset[0], -offset[1])
+
+        im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
+                               canvas_size=None,
+                               title=filename, allow_enlarge=True,
+                               one_zoom=True, auto_update=True)
+        tk.mainloop()
+
+def find_min_correlation(a, b, n):
+    best_amt = None
+    best_rms = 1e38
+    pad_a = np.zeros(a.shape[0]+2*n)
+    pad_a[n:a.shape[0]+n] = a
+    for amt in xrange(-n, n+1):
+        a2 = pad_a[amt+n:amt+n+a.shape[0]]
+        rms = np.sum((a2-b)**2)
+        if rms < best_rms:
+            best_rms = rms
+            best_amt = amt
+    return best_amt
         
-    return i_bins, e_bins, bins
+def find_offset_one_image(filename, display=True, verbose=True):
+    ret, filter, offset, sun_angle, titan_resolution = compute_profile(filename, display, verbose)
+
+    baseline = IMAGE_DATA[0]
+    along_track_distance = find_min_correlation(baseline, ret, int(85 * titan_resolution))
+    along_track_pixel = along_track_distance / titan_resolution
+    print 'BEST DISTANCE', along_track_distance, 'km', along_track_pixel, 'pixel'
     
-def bin_one_image(i_bins, e_bins, data, full_mask, bins, u_offset, v_offset, verbose=False):
-    bins = copy.deepcopy(bins)
-    num_incidence_bins = len(bins)
-    num_emission_bins = len(bins[0])
+    new_offset = (int(offset[0] - np.cos(sun_angle)*along_track_pixel),
+                  int(offset[1] - np.sin(sun_angle)*along_track_pixel))
 
-    full_mask = shift_image(full_mask, u_offset, v_offset)
-    full_data = data[full_mask].flatten()
-
-    if full_data.shape != i_bins.shape:
-        if verbose:
-            print 'Offset shifts off edge'
-            return 1e38, 0
+    print 'NEW OFFSET', new_offset
         
-    if verbose:
-        print 'Populating bins'
-            
-    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
-        bins[i_bin][e_bin].append(datum)
-    
-    if verbose:
-        print 'Computing standard deviations'
-    
-    std_list = []
-    for i in xrange(num_incidence_bins):
-        for j in xrange(num_emission_bins):
-            if len(bins[i][j]) > 1:
-                std_list.append(np.std(bins[i][j]))
-    
-    rms = np.sqrt(np.sum(np.array(std_list)**2))
-    
-    return rms, len(std_list), bins
-
-def plot_bin_contents_hist(i_bins, e_bins, data, full_mask, bins):
-    bins = copy.deepcopy(bins)
-    num_incidence_bins = len(bins)
-    num_emission_bins = len(bins[0])
-
-    full_data = data[full_mask].flatten()
-
-    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
-        bins[i_bin][e_bin].append(datum)
-
-    flat_bins = []
-    for xi,x in enumerate(bins):
-        for yi,y in enumerate(x):
-            if len(y) > 0:
-                flat_bins.append(len(y))
-            
-    print flat_bins
-    
-    
-    plt.hist(flat_bins)
+    plt.plot(TITAN_X, IMAGE_DATA[0], '-', color='black')
+    plt.plot(TITAN_X, ret, '-', color='red')
+    new_titan_x = np.roll(TITAN_X, -along_track_distance)[:-abs(along_track_distance)]
+    new_ret = ret[:-abs(along_track_distance)]
+    plt.plot(new_titan_x, new_ret, '-', color='green')
     plt.show()
+    
+    if display:
+        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
+        obs = file_read_iss_file(full_filename)
+        bp = oops.Backplane(obs)
+        full_mask = bp.incidence_angle('TITAN').mask
+        orig_overlay = np.zeros(obs.data.shape+(3,))
+        orig_overlay[:,:,0] = np.logical_not(full_mask)
+        best_overlay = np.zeros(obs.data.shape+(3,))
+        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -offset[0], -offset[1])
+        new_overlay = np.zeros(obs.data.shape+(3,))
+        new_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -new_offset[0], -new_offset[1])
 
-def find_offset_one_image(filename, save=True, display=True, verbose=True):
+        im = imgdisp.ImageDisp([obs.data, obs.data, obs.data], [orig_overlay, best_overlay, new_overlay],
+                               canvas_size=(256,256),
+                               title=filename, allow_enlarge=True,
+                               one_zoom=True, auto_update=True)
+        tk.mainloop()
+
+
+def compute_profile(filename, display=False, verbose=True):
     if verbose:
-        print 'Finding offset for', filename
+        print 'Computing profile for', filename
 
-    offset_limit = 10#20#85
-#    if filename.find('/W') != -1:
-#        offset_limit = 8
+    offset_limit = 85
+    if filename.find('/W') != -1:
+        offset_limit = 10
 
     full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
     obs = file_read_iss_file(full_filename)
-    orig_fov = obs.fov
 
     best_offset = None
     best_rms = 1e38
@@ -508,8 +515,45 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
     
     if verbose:
         print 'Computing backplanes'
+
+#    plt.imshow(obs.data)
+#    plt.show()
+#    return
+
+    titan_inv = obs.inventory(['TITAN+ATMOSPHERE'], return_type='full')['TITAN+ATMOSPHERE']
+    titan_center = titan_inv['center_uv']
+    titan_resolution = titan_inv['resolution'][0]
+    titan_radius = titan_inv['outer_radius'] 
+    titan_radius_pix = int(titan_radius / titan_resolution)
     
+    global TITAN_X
+    if TITAN_X is None:
+        incr = 1.
+        TITAN_X = np.arange(-titan_radius, titan_radius+incr, incr)
+        
+    print 'CENTER', titan_center, 'RADIUS', titan_radius, 'RES', titan_resolution
+    
+    phase_angle = bp.center_phase_angle('TITAN+ATMOSPHERE').vals
+    print 'Phase angle', phase_angle * oops.DPR
     bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE') * oops.DPR
+    if phase_angle < oops.HALFPI:
+        extreme_pos = np.argmin(bp_incidence.mvals)
+    else:
+        extreme_pos = np.argmax(bp_incidence.mvals)
+    extreme_pos = np.unravel_index(extreme_pos, bp_incidence.mvals.shape)
+    extreme_uv = (extreme_pos[1], extreme_pos[0])
+    print 'Extremum', extreme_uv
+    
+    titan = obs.inventory(['TITAN+ATMOSPHERE'], return_type='full')['TITAN+ATMOSPHERE']
+    center_uv = titan['center_uv']
+    print 'Center', center_uv
+    
+    sun_angle = np.arctan2(extreme_uv[1]-center_uv[1], extreme_uv[0]-center_uv[0]) % oops.PI
+    print 'Sun angle', sun_angle * oops.DPR
+#    plt.imshow(bp_incidence.mvals)
+#    plt.show()
+#    return
+
     bp_emission = bp.emission_angle('TITAN+ATMOSPHERE') * oops.DPR
     bp_phase = bp.phase_angle('TITAN+ATMOSPHERE') * oops.DPR
     
@@ -524,14 +568,14 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
     bp_emission.vals[full_mask] = 0.
 
     lambert = bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
-    plt.imshow(lambert)
-    plt.show()
+#    plt.imshow(lambert)
+#    plt.show()
 
-    offset_list = find_correlation_and_offset(obs.data, lambert,
-                                search_size_max=85)
-    model_offset = offset_list[0][0]
-    if verbose:
-        print 'MODEL OFFSET', model_offset
+#    offset_list = find_correlation_and_offset(obs.data, lambert,
+#                                search_size_max=85)
+#    model_offset = offset_list[0][0]
+#    if verbose:
+#        print 'MODEL OFFSET', model_offset
     
     std_value = np.std(obs.data[full_mask])
     median_value = np.median(obs.data[full_mask])
@@ -575,8 +619,8 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
             if len(pixels) < 2:
                 continue
             pixels.sort()
-            if verbose:
-                print pixels
+#            if verbose:
+#                print pixels
             # There has to be a gap of "threshold" in either x or y coords
             gap_y = None
             gap_x_pos = False
@@ -597,8 +641,8 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
                         break
                 last_x = x
                 last_y = y
-            if verbose:
-                print gap_y, cluster_xy
+#            if verbose:
+#                print gap_y, cluster_xy
             if gap_y is None:
                 # No gap!
                 continue
@@ -611,79 +655,108 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
                     cluster2_list.append(pix)
                 else:
                     cluster1_list.append(pix)
-            if verbose:
-                print cluster1_list
-                print cluster2_list
+#            if verbose:
+#                print cluster1_list
+#                print cluster2_list
+            if len(cluster1_list) > 10 or len(cluster2_list) > 10:
+#                print 'TOO MANY PIXELS - IGNORING'
+                continue
             ie_list.append((cluster1_list, cluster2_list))
 
+    model_offset = (0,0)
     data = obs.data
     best_rms = 1e38
     best_offset = None
     
-    for u_offset in xrange(-offset_limit,offset_limit+1):
-        u_offset += model_offset[0]
-        for v_offset in xrange(-offset_limit,offset_limit+1):
-            v_offset += model_offset[1]
-            if verbose:
-                print 'Trying offset', u_offset, v_offset
+    a_sun_angle = (sun_angle + oops.HALFPI) % oops.PI
+    print 'ALONG SUN ANGLE', a_sun_angle * oops.DPR
+    if oops.PI/4 < a_sun_angle < 3*oops.PI/4:
+        a_offset_limit = abs(int(offset_limit / np.sin(a_sun_angle)))
+    else:
+        a_offset_limit = abs(int(offset_limit / np.cos(a_sun_angle)))
+    
+    print 'ALONG OFFSET LIMIT', a_offset_limit
+    
+    for along_path_dist in xrange(-a_offset_limit,a_offset_limit+1):
+        # We want to go ACROSS the Sun angle
+        u_offset = int(along_path_dist * np.cos(sun_angle+oops.HALFPI) + model_offset[0])
+        v_offset = int(along_path_dist * np.sin(sun_angle+oops.HALFPI) + model_offset[1])
+        if verbose:
+            print 'Along offset', along_path_dist, u_offset, v_offset
 
-            diff_list = []
+        diff_list = []
+        
+        for cluster1_list, cluster2_list in ie_list:
+            mean1_list = []
+            mean2_list = []
+            for pix in cluster1_list:
+                if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                    not 0 <= pix[1]+u_offset < data.shape[1]):
+                    continue
+                mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            for pix in cluster2_list:
+                if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                    not 0 <= pix[1]+u_offset < data.shape[1]):
+                    continue
+                mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            if len(mean1_list) == 0 or len(mean2_list) == 0:
+                continue
+            mean1 = np.mean(mean1_list)
+            mean2 = np.mean(mean2_list)
+#            if mean1 < min_threshold or mean2 < min_threshold:
+#                continue
+            diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list))
+            diff_list.append(diff)
             
-            for cluster1_list, cluster2_list in ie_list:
-                mean1_list = []
-                mean2_list = []
-                for pix in cluster1_list:
-                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                        not 0 <= pix[1]+u_offset < data.shape[1]):
-                        continue
-                    mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-                for pix in cluster2_list:
-                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                        not 0 <= pix[1]+u_offset < data.shape[1]):
-                        continue
-                    mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-                if len(mean1_list) == 0 or len(mean2_list) == 0:
-                    continue
-                mean1 = np.mean(mean1_list)
-                mean2 = np.mean(mean2_list)
-                if mean1 < min_threshold or mean2 < min_threshold:
-                    continue
-                diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list))
-                diff_list.append(diff)
-                
-            diff_list = np.array(diff_list)
+        diff_list = np.array(diff_list)
 
-            if verbose:
-                print 'DIFF MIN MAX MEAN STD', np.min(diff_list), np.max(diff_list), np.mean(diff_list), np.std(diff_list)
-            
+        if verbose:
+            print 'DIFF MIN MAX MEAN STD', np.min(diff_list), np.max(diff_list), np.mean(diff_list), np.std(diff_list)
+        
 #            if np.max(diff_list) > diff_threshold:
 #                print 'DIFF TOO LARGE'
 #                continue
+        
+        rms = np.sqrt(np.sum(diff_list**2))
+        
+        if verbose:
+            print 'RMS', rms
             
-            rms = np.sqrt(np.sum(diff_list**2))
-            
-            if verbose:
-                print 'RMS', rms
-                
-            if rms < best_rms:
-                best_rms = rms
-                best_offset = (u_offset, v_offset)
+        if rms < best_rms:
+            best_rms = rms
+            best_offset = (u_offset, v_offset)
 
     if verbose:
         print 'FINAL RESULT', best_offset, best_rms
 
-    if display:
-        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
-        orig_overlay = np.zeros(obs.data.shape+(3,))
-        orig_overlay[:,:,0] = np.logical_not(full_mask)
-        best_overlay = np.zeros(obs.data.shape+(3,))
-        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -best_offset[0], -best_offset[1])
 
-        im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
-                               canvas_size=None,
-                               title=filename, allow_enlarge=True,
-                               one_zoom=True, auto_update=True)
-        tk.mainloop()
+###################################################
+
+    x_offset_limit = offset_limit + titan_radius_pix
+    
+    slice_x = []
+    slice_y = []
+    
+    for x_along_path_dist in xrange(-x_offset_limit,x_offset_limit+1):
+        # We want to go ACROSS the Sun angle
+        u_offset = int(x_along_path_dist * np.cos(sun_angle) + best_offset[0]) + titan_center[0]
+        v_offset = int(x_along_path_dist * np.sin(sun_angle) + best_offset[1]) + titan_center[1]
+        if verbose:
+            print 'Cross Offset', x_along_path_dist, u_offset, v_offset
+        if (not 0 <= u_offset < data.shape[1] or
+            not 0 <= v_offset < data.shape[0]):
+            continue
+        
+        slice_x.append(x_along_path_dist * titan_resolution)
+        slice_y.append(data[v_offset,u_offset])
+    
+    interp_func = interp.interp1d(slice_x, slice_y, bounds_error=False, fill_value=0., kind='cubic')
+    res_y = interp_func(TITAN_X)
+    
+    res_y = moving_average(res_y, 100)
+    
+#    plt.plot(TITAN_X, res_y)
+#    plt.show()
 
     if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
         filter = 'CLEAR'
@@ -693,8 +766,8 @@ def find_offset_one_image(filename, save=True, display=True, verbose=True):
             filter = obs.filter2
         elif obs.filter2 != 'CL2':
             filter += '+' + obs.filter2
-    
-    return best_offset, best_rms, model_offset, filter, np.mean(bp_phase.mvals)
+
+    return res_y, filter, best_offset, sun_angle, titan_resolution
 
 
 def find_optimal_atmosphere():
@@ -779,7 +852,242 @@ def analyze_atmosphere_results():
         last_filter = filter
     
     plt.show()
-    
+               
+     
+
+
+
+#==============================================================================
+#
+# MAIN ROUTINES
+# 
+#==============================================================================
+
+root = tk.Tk()
+root.withdraw()
+
+# Make a new big Titan
+   
+titan = oops.Body.lookup('TITAN')
+new_titan = copy.copy(titan)
+oops.Body.BODY_REGISTRY['TITAN'] = new_titan
+
+#new_titan.radius += 350
+#new_titan.inner_radius += 350
+surface = new_titan.surface
+new_titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (new_titan.radius, new_titan.radius))
+
+titan.name = 'TITAN+ATMOSPHERE'
+titan.radius += 600
+titan.inner_radius += 600
+surface = titan.surface
+titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
+oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
+
+# find_optimal_atmosphere()
+#analyze_atmosphere_results()
+
+# VIO
+#add_image_to_db('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG') # 16    
+#add_image_to_db('COISS_2063/data/1655742537_1655905033/W1655808265_1_CALIB.IMG') # 30
+#add_image_to_db('COISS_2068/data/1683372651_1683615321/W1683615178_1_CALIB.IMG') # 45
+#add_image_to_db('COISS_2030/data/1552197101_1552225837/W1552216646_1_CALIB.IMG') # 60
+#add_image_to_db('COISS_2082/data/1743902905_1744323160/W1743914297_1_CALIB.IMG') # 73
+#add_image_to_db('COISS_2084/data/1753489519_1753577899/W1753508727_1_CALIB.IMG') # 90 
+#add_image_to_db('COISS_2028/data/1548522106_1548756214/W1548712789_1_CALIB.IMG') # 104 
+#add_image_to_db('COISS_2024/data/1532184650_1532257621/W1532185013_1_CALIB.IMG') # 120 
+#add_image_to_db('COISS_2060/data/1643317802_1643406946/W1643375992_1_CALIB.IMG') # 135
+#add_image_to_db('COISS_2076/data/1721802517_1721894741/W1721822901_1_CALIB.IMG') # 149 
+#add_image_to_db('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # 166
+
+# RED
+#add_image_to_db('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG') # 16    
+#add_image_to_db('COISS_2063/data/1655742537_1655905033/W1655808364_1_CALIB.IMG') # 30
+#add_image_to_db('COISS_2068/data/1683372651_1683615321/W1683615321_1_CALIB.IMG') # 45
+#add_image_to_db('COISS_2030/data/1552197101_1552225837/W1552216540_1_CALIB.IMG') # 60
+#add_image_to_db('COISS_2082/data/1743902905_1744323160/W1743914117_1_CALIB.IMG') # 73
+#add_image_to_db('COISS_2084/data/1753489519_1753577899/W1753508826_1_CALIB.IMG') # 90 
+add_image_to_db('COISS_2028/data/1548522106_1548756214/W1548712675_1_CALIB.IMG') # 104 
+#add_image_to_db('COISS_2024/data/1532184650_1532257621/W1532184947_1_CALIB.IMG') # 120 
+#add_image_to_db('COISS_2060/data/1643317802_1643406946/W1643376091_1_CALIB.IMG') # 135
+#add_image_to_db('COISS_2076/data/1721802517_1721894741/W1721823033_1_CALIB.IMG') # 149 
+#add_image_to_db('COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG') # 166
+
+#for res_y in IMAGE_DATA:
+#    plt.plot(TITAN_X, res_y, '-')
+#plt.show()
+
+# NAC test images
+#find_offset_one_image('COISS_2055/data/1624550852_1624654769/N1624600010_1_CALIB.IMG') # RED 12
+#find_offset_one_image('COISS_2056/data/1628771696_1628859820/N1628820760_1_CALIB.IMG') # RED 60
+#find_offset_one_image('COISS_2055/data/1624836945_1625069379/N1624879028_1_CALIB.IMG') # RED 81
+#find_offset_one_image('COISS_2056/data/1625115008_1625673763/N1625521136_1_CALIB.IMG') # RED 148
+#find_offset_one_image('COISS_2058/data/1633653092_1633809566/N1633794885_1_CALIB.IMG') # RED 156
+
+
+# 16 - VIO
+#find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG')
+
+#backplane_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG', display=True)#, offset=(-1,-4), display=True)#offset=(-1,-2))#display=True, save=False)
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG', offset=(1,-3))#display=True, save=False)
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG', offset=(1,-2))#display=True, save=False)
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG', offset=(0,-1))#display=True, save=False)
+
+# 16 - RED
+#find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
+#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
+
+#find_offset_one_image('COISS_2022/data/1525327124_1525363592/N1525327174_1_CALIB.IMG') # 146 MT3
+
+# 166 - VIO
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG')
+
+# 145 - MT3
+#find_offset_one_image('COISS_2030/data/1551868920_1552128641/N1551889179_1_CALIB.IMG')
+#find_offset_one_image('COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG')
+
+# 166
+# find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # CLEAR
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG') # VIO
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG') # BL1
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG') # GRN
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG') # RED
+#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG') # MT2
+
+
+# Titan and Rhea
+find_offset_one_image('COISS_2068/data/1686496870_1686939958/N1686939958_1_CALIB.IMG') # Star-based offset -10, -2
+
+#backplane_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG', offset=(-3,-4), display=True)
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG', offset=())
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
+#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
+
+
+# Reprocess all the data to make new backplanes
+#backplane_all_images(force=False)
+
+# Read the backplanes
+#read_backplanes()
+
+#test_interpolation(13, 18, 26, 'VIO')
+#test_interpolation(140, 145, 149, 'BL1')
+
+#show_plots_multiple_phases(phases=[16.], filters=['RED'])
+
+#show_plots_multiple(phases=[13,18,26], filters=['VIO'])#['RED','GRN', 'BL1', 'VIO'])
+#show_plots_multiple(phases=[140,145,149], filters=['BL1'])#['RED','GRN', 'BL1', 'VIO'])
+#show_plots_multiple(['CLEAR'])
+
+
+#===============================================================================
+# OLD STUFF 
+#===============================================================================
+
+#plot_canned_result()
+
+#plot_params('dm2')
+
+#optimize_disc('arctan1')
+#plot_double_minnaert()
+#optimize_disc_minnaert()
+
+#optimize_disc_double_minnaert1(name=' 28.65_W1557729551_1')
+#optimize_disc_double_minnaert2()
+
+#optimize_disc(alg='dm2', name=' 81.62_W1589361573_1')
+#optimize_disc_double_minnaert(name=' 64.59_W1539146659_1')
+  
+#optimize_disc_double_minnaert2(name=' 71.46_W1540513147_1')
+
+#test_minnaert_offset()
+
+
+
+#def make_bins(full_incidence, incidence_res, full_emission, emission_res):
+#    i_bins = (full_incidence / incidence_res).astype('int')
+#    e_bins = (full_emission / emission_res).astype('int')
+#
+#    num_incidence_bins = int(np.ceil(2. / incidence_res))
+#    num_emission_bins = int(np.ceil(1. / emission_res))
+#    
+#    print '# Incidence Bins', num_incidence_bins
+#    print '# Emission Bins', num_emission_bins
+#    
+#    bins = []
+#    num_bins = 0
+#    for i in xrange(num_incidence_bins):
+#        bins.append([])
+#        for j in xrange(num_emission_bins):
+#            bins[-1].append([])
+#            num_bins += 1
+#        
+#    return i_bins, e_bins, bins
+#    
+#def bin_one_image(i_bins, e_bins, data, full_mask, bins, u_offset, v_offset, verbose=False):
+#    bins = copy.deepcopy(bins)
+#    num_incidence_bins = len(bins)
+#    num_emission_bins = len(bins[0])
+#
+#    full_mask = shift_image(full_mask, u_offset, v_offset)
+#    full_data = data[full_mask].flatten()
+#
+#    if full_data.shape != i_bins.shape:
+#        if verbose:
+#            print 'Offset shifts off edge'
+#            return 1e38, 0
+#        
+#    if verbose:
+#        print 'Populating bins'
+#            
+#    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
+#        bins[i_bin][e_bin].append(datum)
+#    
+#    if verbose:
+#        print 'Computing standard deviations'
+#    
+#    std_list = []
+#    for i in xrange(num_incidence_bins):
+#        for j in xrange(num_emission_bins):
+#            if len(bins[i][j]) > 1:
+#                std_list.append(np.std(bins[i][j]))
+#    
+#    rms = np.sqrt(np.sum(np.array(std_list)**2))
+#    
+#    return rms, len(std_list), bins
+#
+#def plot_bin_contents_hist(i_bins, e_bins, data, full_mask, bins):
+#    bins = copy.deepcopy(bins)
+#    num_incidence_bins = len(bins)
+#    num_emission_bins = len(bins[0])
+#
+#    full_data = data[full_mask].flatten()
+#
+#    for i_bin, e_bin, datum in zip(i_bins, e_bins, full_data):
+#        bins[i_bin][e_bin].append(datum)
+#
+#    flat_bins = []
+#    for xi,x in enumerate(bins):
+#        for yi,y in enumerate(x):
+#            if len(y) > 0:
+#                flat_bins.append(len(y))
+#            
+#    print flat_bins
+#    
+#    
+#    plt.hist(flat_bins)
+#    plt.show()
+
+
 #     result_list.
 #     phase_bin_incr = 5
 #     num_phase_bins = 180 // phase_bin_incr
@@ -930,1120 +1238,1213 @@ def analyze_atmosphere_results():
 #
 #    print 'FINAL RESULT', best_offset, best_rms
 
-            
-     
-def backplane_one_image(filename_list, save=True, display=False, offset=None):
-    print 'Analyzing', filename_list
-    if type(filename_list) != type((0,)):
-        filename_list = [filename_list]
 
-    full_phase = np.array([])
-    full_incidence = np.array([])
-    full_emission = np.array([])
-    full_data = np.array([])
-    
-    for filename in filename_list:
-        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
-        obs = read_iss_file(full_filename)
-#        offset_metadata = file_read_offset_metadata(full_filename)
+#def backplane_one_image(filename_list, save=True, display=False, offset=None):
+#    print 'Analyzing', filename_list
+#    if type(filename_list) != type((0,)):
+#        filename_list = [filename_list]
+#
+#    full_phase = np.array([])
+#    full_incidence = np.array([])
+#    full_emission = np.array([])
+#    full_data = np.array([])
 #    
-#        if offset_metadata is None:
-#            print 'Warning: No offset data for', filename
+#    for filename in filename_list:
+#        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
+#        obs = read_iss_file(full_filename)
+##        offset_metadata = file_read_offset_metadata(full_filename)
+##    
+##        if offset_metadata is None:
+##            print 'Warning: No offset data for', filename
+##        else:
+##            offset = offset_metadata['offset']
+#        if offset:
+#            obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
+#            print 'Using offset', offset
+#    
+#        bp = oops.Backplane(obs)
+#        
+#        phase = bp.phase_angle('TITAN+ATMOSPHERE')
+#        incidence = bp.incidence_angle('TITAN+ATMOSPHERE')
+#        emission = bp.emission_angle('TITAN+ATMOSPHERE')
+#
+#        full_mask = np.logical_not(phase.mask)
+#        full_mask[:5,:] = 0
+#        full_mask[-5:,:] = 0
+#        full_mask[:,:5] = 0
+#        full_mask[:,-5:] = 0
+#        
+#        full_phase     = np.append(full_phase,
+#                                   phase.vals[full_mask].flatten())
+#        full_incidence = np.append(full_incidence,
+#                                   incidence.vals[full_mask].flatten())
+#        full_emission  = np.append(full_emission,
+#                                   emission.vals[full_mask].flatten())
+#        full_data      = np.append(full_data,
+#                                   obs.data[full_mask].flatten())
+#
+#        if display:
+#            overlay = np.zeros(obs.data.shape+(3,))
+#            overlay[:,:,0] = full_mask
+#            
+#            im = imgdisp.ImageDisp([obs.data], [overlay],
+#                                   canvas_size=None,
+#                                   title=filename, allow_enlarge=True,
+#                                   one_zoom=True, auto_update=True)
+#            tk.mainloop()
+#            
+#    mean_phase = np.mean(full_phase) * oops.DPR
+#    print obs.data.shape, obs.filter1, obs.filter2,
+#        
+#    clean_name = file_clean_name(filename_list[0])
+#    ph_name = ('%6.2f' % mean_phase) + '_' + clean_name
+#
+#    print 'Mean phase %6.2f' % mean_phase,
+#    print ph_name
+#    
+#    if save:
+#        np.savez(os.path.join(RESULTS_ROOT, 'titan', clean_name),
+#                 full_phase=full_phase, full_incidence=full_incidence, 
+#                 full_emission=full_emission, full_data=full_data)
+#     
+#def backplane_all_images(force=False):
+#    for filename in IMAGE_LIST_BY_PHASE:
+#        if force:
+#            backplane_one_image(filename)
 #        else:
-#            offset = offset_metadata['offset']
-        if offset:
-            obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
-            print 'Using offset', offset
-    
-        bp = oops.Backplane(obs)
-        
-        phase = bp.phase_angle('TITAN+ATMOSPHERE')
-        incidence = bp.incidence_angle('TITAN+ATMOSPHERE')
-        emission = bp.emission_angle('TITAN+ATMOSPHERE')
-
-        full_mask = np.logical_not(phase.mask)
-        full_mask[:5,:] = 0
-        full_mask[-5:,:] = 0
-        full_mask[:,:5] = 0
-        full_mask[:,-5:] = 0
-        
-        full_phase     = np.append(full_phase,
-                                   phase.vals[full_mask].flatten())
-        full_incidence = np.append(full_incidence,
-                                   incidence.vals[full_mask].flatten())
-        full_emission  = np.append(full_emission,
-                                   emission.vals[full_mask].flatten())
-        full_data      = np.append(full_data,
-                                   obs.data[full_mask].flatten())
-
-        if display:
-            overlay = np.zeros(obs.data.shape+(3,))
-            overlay[:,:,0] = full_mask
-            
-            im = imgdisp.ImageDisp([obs.data], [overlay],
-                                   canvas_size=None,
-                                   title=filename, allow_enlarge=True,
-                                   one_zoom=True, auto_update=True)
-            tk.mainloop()
-            
-    mean_phase = np.mean(full_phase) * oops.DPR
-    print obs.data.shape, obs.filter1, obs.filter2,
-        
-    clean_name = file_clean_name(filename_list[0])
-    ph_name = ('%6.2f' % mean_phase) + '_' + clean_name
-
-    print 'Mean phase %6.2f' % mean_phase,
-    print ph_name
-    
-    if save:
-        np.savez(os.path.join(RESULTS_ROOT, 'titan', clean_name),
-                 full_phase=full_phase, full_incidence=full_incidence, 
-                 full_emission=full_emission, full_data=full_data)
-     
-def backplane_all_images(force=False):
-    for filename in IMAGE_LIST_BY_PHASE:
-        if force:
-            backplane_one_image(filename)
-        else:
-            try:
-                if type(filename) == type((0,)):
-                    clean_name = file_clean_name(filename[0])
-                else:
-                    clean_name = file_clean_name(filename)
-                np_arrays = np.load(os.path.join(RESULTS_ROOT, 'titan', 
-                                                 clean_name+'.npz'))
-            except IOError:
-                backplane_one_image(filename)
-
-
-#===============================================================================
+#            try:
+#                if type(filename) == type((0,)):
+#                    clean_name = file_clean_name(filename[0])
+#                else:
+#                    clean_name = file_clean_name(filename)
+#                np_arrays = np.load(os.path.join(RESULTS_ROOT, 'titan', 
+#                                                 clean_name+'.npz'))
+#            except IOError:
+#                backplane_one_image(filename)
 #
-# READ METADATA
-# 
-#===============================================================================
-
-DATA_BY_FILTER = {}
-DATA_BY_PHASE = {}
-
-def read_backplanes():
-    for filename in IMAGE_LIST_BY_PHASE:
-        if type(filename) == type((0,)):
-            filename = filename[0]
-        print 'Reading', filename
-
-        clean_name = file_clean_name(filename)
-        
-        try:
-            np_arrays = np.load(os.path.join(RESULTS_ROOT, 'titan', clean_name+'.npz'))
-        except IOError:
-            print 'NO DATA FILE', clean_name
-            continue
-
-        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
-        obs = read_iss_file(full_filename)
-        
-        full_data = np_arrays['full_data']
-        full_phase = np_arrays['full_phase']
-        full_incidence = np_arrays['full_incidence']
-        full_emission = np_arrays['full_emission']
-        mean_phase = np.mean(full_phase) * oops.DPR
-
-        if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
-            filter = 'CLEAR'
-        else:
-            filter = obs.filter1
-            if filter == 'CL1':
-                filter = obs.filter2
-            elif obs.filter2 != 'CL2':
-                filter += '+' + obs.filter2
-                
-        if filter not in DATA_BY_FILTER:
-            DATA_BY_FILTER[filter] = {}
-
-        data = (clean_name, full_data, full_phase, full_incidence, 
-                full_emission)
-        
-        DATA_BY_FILTER[filter][mean_phase] = data
-        DATA_BY_PHASE[(mean_phase, filter)] = data 
-
-
-#===============================================================================
 #
-# PLOTTING HELPERS
-# 
-#===============================================================================
-    
-#def show_plots(name=None, use_minnaert=True):
+##===============================================================================
+##
+## READ METADATA
+## 
+##===============================================================================
+#
+#DATA_BY_FILTER = {}
+#DATA_BY_PHASE = {}
+#
+#def read_backplanes():
+#    for filename in IMAGE_LIST_BY_PHASE:
+#        if type(filename) == type((0,)):
+#            filename = filename[0]
+#        print 'Reading', filename
+#
+#        clean_name = file_clean_name(filename)
+#        
+#        try:
+#            np_arrays = np.load(os.path.join(RESULTS_ROOT, 'titan', clean_name+'.npz'))
+#        except IOError:
+#            print 'NO DATA FILE', clean_name
+#            continue
+#
+#        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
+#        obs = read_iss_file(full_filename)
+#        
+#        full_data = np_arrays['full_data']
+#        full_phase = np_arrays['full_phase']
+#        full_incidence = np_arrays['full_incidence']
+#        full_emission = np_arrays['full_emission']
+#        mean_phase = np.mean(full_phase) * oops.DPR
+#
+#        if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
+#            filter = 'CLEAR'
+#        else:
+#            filter = obs.filter1
+#            if filter == 'CL1':
+#                filter = obs.filter2
+#            elif obs.filter2 != 'CL2':
+#                filter += '+' + obs.filter2
+#                
+#        if filter not in DATA_BY_FILTER:
+#            DATA_BY_FILTER[filter] = {}
+#
+#        data = (clean_name, full_data, full_phase, full_incidence, 
+#                full_emission)
+#        
+#        DATA_BY_FILTER[filter][mean_phase] = data
+#        DATA_BY_PHASE[(mean_phase, filter)] = data 
+#
+#
+##===============================================================================
+##
+## PLOTTING HELPERS
+## 
+##===============================================================================
+#    
+##def show_plots(name=None, use_minnaert=True):
+##    for filename in sorted(DISC_DATA):
+##        print filename, name
+##        if name is not None and filename != name:
+##            continue
+##        full_data = FULL_DATA[filename]
+##        full_phase = FULL_PHASE[filename]
+##        full_incidence = FULL_INCIDENCE[filename]
+##        full_emission = FULL_EMISSION[filename]
+##
+##        if use_minnaert:
+##            cutoff = 80 * oops.RPD
+##            
+##            odata = full_data[np.where(full_incidence < cutoff)]
+##            oemission = full_emission[np.where(full_incidence < cutoff)]
+##            ophase = full_phase[np.where(full_incidence < cutoff)]
+##            oincidence = full_incidence[np.where(full_incidence < cutoff)]
+##            mean_phase = np.mean(full_phase) * oops.DPR
+##            print 'Mean phase', mean_phase
+##            if mean_phase > 108:
+##                continue
+##            
+##            mi, me = sciopt.fmin(minnaert_opt_func, (0.5,0.5),
+##                                 args=(oincidence, oemission, odata),
+##                                 disp=0)
+##
+##        plot_one(full_data, full_phase, full_incidence, full_emission)
+##        plt.title(filename)
+##        plt.show()
+#
+#def show_plots_multiple_filters(filters=None, phases=None):
+#    phase_tolerance = 2.
+#    if phases is None:
+#        phases = np.arange(phase_tolerance, 360, phase_tolerance*2)
+#        
+#    for goal_phase in phases:
+#        first_one = True
+#        used_filters = []
+#        # For each filter, find the phase entry closest to the target phase
+#        for filter in sorted(DATA_BY_FILTER):
+#            if filters and filter not in filters:
+#                continue
+#        
+#            best_phase = None
+#            best_phase_dist = 1e38
+#            for phase in DATA_BY_FILTER[filter]:
+#                delta = abs(goal_phase-phase)
+#                if delta < phase_tolerance:
+#                    if delta < best_phase_dist:
+#                        best_phase_dost = delta
+#                        best_phase = phase 
+#
+#            if best_phase is None:
+#                continue
+#        
+#            print 'FOUND', filter, 'GOAL', goal_phase, 'ACTUAL', best_phase
+#            
+#            if first_one:
+#                fig = plt.figure()
+#                ax = fig.add_subplot(111)
+#                first_one = False
+#        
+#            (clean_name, full_data, full_phase, full_incidence, 
+#             full_emission) = DATA_BY_PHASE[(best_phase,filter)]
+#                
+#            used_filters.append(filter)
+#
+#            full_decimate = 1#max(1, len(full_data) // 10000)
+#            full_decimate = 100
+#                    
+#            full_data = full_data[::full_decimate]
+#            full_phase = full_phase[::full_decimate]
+#            full_incidence = full_incidence[::full_decimate]
+#            full_emission = full_emission[::full_decimate]
+#
+#            if filter not in FILTER_COLOR:
+#                print 'Unknown filter', filter, 'file', clean_name
+#                continue
+#            
+#            base_color = FILTER_COLOR[filter]
+#
+#            colors = []
+#            for data_idx in xrange(len(full_data)):
+#                shade = np.cos(full_emission[data_idx])
+#                color = (base_color[0] * shade,
+#                         base_color[1] * shade,
+#                         base_color[2] * shade)
+#                colors.append(color)
+#            plt.scatter(full_incidence*oops.DPR,
+#                        full_data, s=20, c=colors, alpha=0.05,
+#                        edgecolors='none')
+#        
+#        if first_one:
+#            continue
+#        
+#        print '-------------'
+#        
+#        xlimits = plt.xlim()
+#        ylimits = plt.ylim()
+#        
+#        for filter in sorted(used_filters):
+#            if filter not in FILTER_COLOR:
+#                continue
+#            plt.plot(-100,-100, 'o', mec=FILTER_COLOR[filter], mfc=FILTER_COLOR[filter], ms=10,
+#                     label=filter)
+#
+#        plt.xlim(0, xlimits[1])
+#        plt.ylim(0, ylimits[1])
+#        
+#        plt.legend(numpoints=1)
+#        plt.xlabel('Incidence angle')
+#        plt.ylabel('I/F')
+#        plt.title('PHASE %7.2f' % goal_phase)
+#        plt.show()
+#        
+#
+#def show_plots_multiple_phases(filters=None, phases=None):
+#    phase_tolerance = 2.
+#    if phases is None:
+#        phases = np.arange(phase_tolerance, 360, phase_tolerance*2)
+#        
+#    for filter in sorted(DATA_BY_FILTER):
+#        if filters and filter not in filters:
+#            continue
+#
+#        phase_list = []
+#        
+#        for goal_phase in phases:
+#            first_one = True
+#            used_images = []
+#
+#            for phase in sorted(DATA_BY_FILTER[filter]):
+#                delta = abs(goal_phase-phase)
+#                if delta < phase_tolerance:
+#                    phase_list.append(phase)               
+#                    print 'FOUND', filter, 'GOAL', goal_phase, 'ACTUAL', phase
+#
+#            if len(phase_list) == 0:
+#                continue
+#                    
+#            fig = plt.figure()
+#            ax = fig.add_subplot(111)
+#            first_one = False
+#            
+#            for phase_num, phase in enumerate(phase_list):
+#                (clean_name, full_data, full_phase, full_incidence, 
+#                 full_emission) = DATA_BY_PHASE[(phase,filter)]
+#                    
+#                used_images.append(clean_name)
+#    
+#                full_decimate = 1#max(1, len(full_data) // 10000)
+##                full_decimate = 100
+#                        
+#                full_data = full_data[::full_decimate]
+#                full_phase = full_phase[::full_decimate]
+#                full_incidence = full_incidence[::full_decimate]
+#                full_emission = full_emission[::full_decimate]
+#
+#                base_color = colorsys.hsv_to_rgb(
+#                         float(phase_num)/len(phase_list), 1, 1)
+#    
+#                colors = []
+#                for data_idx in xrange(len(full_data)):
+#                    shade = np.cos(full_emission[data_idx])
+#                    shade = 1
+#                    color = (base_color[0] * shade,
+#                             base_color[1] * shade,
+#                             base_color[2] * shade)
+#                    colors.append(color)
+#                plt.scatter(full_incidence*oops.DPR,
+#                            full_data, s=20, c=colors, alpha=0.05,
+#                            edgecolors='none')
+#        
+#        if first_one:
+#            continue
+#        
+#        print '-------------'
+#        
+#        xlimits = plt.xlim()
+#        ylimits = plt.ylim()
+#        
+#        for image_num, image in enumerate(used_images):
+#            color = colorsys.hsv_to_rgb(
+#                            float(image_num)/len(phase_list), 1, 1)
+#            plt.plot(-100,-100, 'o', ms=10,
+#                     mec=color, mfc=color, 
+#                     label=('%s %7.3f' % (image, phase_list[image_num])))
+#
+#        plt.xlim(0, xlimits[1])
+#        plt.ylim(0, ylimits[1])
+#        
+#        plt.legend(numpoints=1)
+#        plt.xlabel('Incidence angle')
+#        plt.ylabel('I/F')
+#        plt.title('PHASE %7.2f' % goal_phase)
+#        plt.show()
+#        
+#        
+#def plot_one(disc_data, disc_phase, disc_incidence, disc_emission, 
+#             full_data=None, full_phase=None, full_incidence=None, 
+#             full_emission=None,
+#             phot_func=None):
+#    disc_decimate = len(disc_data) // 1000
+#    full_decimate = 100
+#            
+##    disc_decimate = 10
+#    
+#    disc_data = disc_data[::disc_decimate]
+#    disc_phase = disc_phase[::disc_decimate]
+#    disc_incidence = disc_incidence[::disc_decimate]
+#    disc_emission = disc_emission[::disc_decimate]
+#    
+#    phase_list = [1]
+#    if full_data:
+#        full_data = full_data[::full_decimate]
+#        full_phase = full_phase[::full_decimate]
+#        full_incidence = full_incidence[::full_decimate]
+#        full_emission = full_emission[::full_decimate]
+#        phase_list = [0,1]
+#
+#    fig = plt.figure()
+#    ax = fig.add_subplot(111)
+#
+#    for phase in phase_list:
+#        if phase == 0:
+#            incidence = disc_incidence
+#            emission = disc_emission
+#            data = disc_data
+#            marker = '.'
+#        else:
+#            incidence = full_incidence
+#            emission = full_emission
+#            data = full_data
+#            marker = '+'
+#        color_by_vals = np.cos(emission)
+#        min_v = 0.
+#        max_v = 1.
+#        for idx in xrange(len(incidence)):
+#            i = incidence[idx]
+#            e = emission[idx]
+#            color_by_val = color_by_vals[idx]
+#
+#            phot = 1.
+#            if phot_func:
+#                phot = phot_func(np.array([i]), np.array([e]))
+#            iof = data[idx] / phot
+#            color_by = (color_by_val-min_v)/(max_v-min_v)
+#            color = colorsys.hsv_to_rgb(color_by/2+.5, 1, 1)
+#            plt.plot(i*oops.DPR, iof, marker, color=color, alpha=0.3)
+#
+#        max_i = np.max(incidence)
+#        c_range = np.arange(min_v, max_v, (max_v-min_v)/100)
+#        for idx in xrange(len(c_range)):
+#            color_by_val = c_range[idx]
+#            color_by = (color_by_val-min_v)/(max_v-min_v)
+#            color = colorsys.hsv_to_rgb(color_by/2+.5, 1, 1)
+#            plt.plot(max_i+10, c_range[idx], '.', color=color)
+#
+#    if phot_func:
+#        plt.ylim(0,2)
+#    else:
+#        plt.ylim(0,1)
+#    plt.xlabel('Incidence angle')
+#    plt.ylabel('I/F')
+#
+#
+##===============================================================================
+##
+## OPTIMIZATION FUNCTIONS
+## 
+##===============================================================================
+#
+## Single Minnaert
+##    abs(cos(i))**mi * abs(cos(e))**me
+#
+#def minnaert_angle_conv(params):
+#    return params
+#
+#def minnaert_func(params, incidence, emission):
+#    a, mi, me = params
+#    phot = a*(np.abs(np.cos(incidence))**mi *
+#              np.abs(np.cos(emission))**me)
+#
+#    print 'SM A %9.6f MI %9.6f ME %9.6f' % (a, mi, me)
+#
+#    zero_incidence = np.arccos(0)
+#    phot[np.where(incidence >= zero_incidence)] = 0.
+#    
+#    return phot
+#
+#def minnaert_opt_func(params, incidence, emission, data):
+#    phot = minnaert_func(params, incidence, emission)
+#
+#    resid = np.sqrt(np.sum((data-phot)**2))
+#    print 'RESID', resid
+#    return resid
+#
+#
+## Double Minnaert version 1
+##    Before break incidence angle:
+##      a1*abs(cos(b1*i+c1))**d1 * cos(e)**d3
+##    After break incidence angkle:
+##      a2*(abs(cos(b2*i+c2))**d2-1) * cos(e)**d3
+#
+#def double_minnaert1_angle_conv(params, min_incidence):
+#    brk_angle, a1_angle, b1_angle, c1_angle, d1_angle, b2_angle, c2_angle, d2_angle, d3_angle = params
+#    a1 = (np.sin(a1_angle)+1)/2 # 0-1
+#    b1 = np.sin(b1_angle)/2+1 # .5-1.5
+#    c1 = np.sin(c1_angle)*oops.PI/4 # -PI/4 - PI/4
+#    d1 = np.sin(d1_angle)+1 # 0-2
+#    b2 = -(np.sin(b2_angle)/2+1) # -1.5 - -.5
+#    c2 = (np.sin(c2_angle)+1)*oops.TWOPI # 0 - FOURPI
+#    d2 = np.sin(d2_angle)+1 # 0-2
+#    d3 = 2*np.sin(d3_angle) # -2 - 2
+#    
+#    zero_incidence1 = (oops.HALFPI-c1)/b1
+#    
+#    # Breakpoint has to be between the minimum incidence angle and the 0-zero crossing of first curve 
+#    brk = (np.sin(brk_angle)+1)/2 * (zero_incidence1-min_incidence) + min_incidence 
+#    
+#    return brk, a1, b1, c1, d1, b2, c2, d2, d3
+#    
+#def double_minnaert1_func(params, incidence, emission):
+#    brk, a1, b1, c1, d1, b2, c2, d2, d3 = double_minnaert1_angle_conv(params,
+#                                                                 np.min(incidence))
+#    
+#    brk_val1 = a1*np.abs(np.cos(b1*brk+c1))**d1 * np.cos(emission)**d3
+#    brk_val2 = (np.abs(np.cos(b2*brk+c2))**d2-1) * np.cos(emission)**d3
+#    a2 = brk_val1/brk_val2
+#    
+#    phot = a1*np.abs(np.cos(b1*incidence+c1))**d1 * np.cos(emission)**d3
+#    phot2 = a2*(np.abs(np.cos(b2*incidence+c2))**d2-1) * np.cos(emission)**d3
+#    phot[np.where(incidence >= brk)] = phot2[np.where(incidence >= brk)]
+#    
+#    zero_incidence2 = -(c2%oops.TWOPI)/b2
+#    while zero_incidence2 > brk-oops.PI/b2:
+#        zero_incidence2 += oops.PI/b2
+#    
+#    phot[np.where(incidence >= zero_incidence2)] = 0.
+#    
+#    print 'DM1 BRK %6.2f A1 %7.5f B1 %7.5f C1 %9.6f D1 %7.5f B2 %8.5f C2 %9.6f D2 %7.5f D3 %7.5f' % (
+#                 brk*oops.DPR, a1, b1, c1, d1, b2, c2, d2, d3)
+#    
+#    return phot
+#
+#def double_minnaert1_opt_func(params, incidence, emission, data):
+#    phot = double_minnaert1_func(params, incidence, emission)
+#    resid = np.sqrt(np.sum((data-phot)**2))
+#    print 'RESID', resid
+#    return resid
+#
+#
+## Double Minnaert version 2
+##    a*abs(cos(b*i+c)+e)**d * cos(em)**f
+#
+#def double_minnaert2_angle_conv(params):
+#    a_angle, b_angle, c_angle, d_angle, e_angle, f_angle = params
+#    a = (np.sin(a_angle)+1)/2 # 0-1
+#    b = 2*np.sin(b_angle)+2.1 # .1-4.1
+#    c = -(np.sin(c_angle)+1)/2*oops.HALFPI # -PI - PI
+##    while c > 0: c = c-oops.PI
+##    while c < -oops.PI: c = c+oops.PI
+#    d = 1.5*(np.sin(d_angle)+1) # 0-6
+#    e = (np.sin(e_angle)+1)/4 # 0 - 0.5
+#    f = np.sin(f_angle)-1 # -1 - 1
+#    
+#    return a, b, c, d, e, f
+#    
+#def double_minnaert2_func(params, incidence, emission, cvt_angle=True):
+#    if cvt_angle:
+#        a, b, c, d, e, f = double_minnaert2_angle_conv(params)
+#    else:
+#        a, b, c, d, e, f = params
+#    
+#    phot = a*np.abs(np.cos(b*(incidence+c))+e)**d * np.cos(emission)**f
+#
+#    zero_incidence = np.arccos(-e)/b-c
+#    if zero_incidence < 0:
+#        zero_incidence += oops.PI
+#    if zero_incidence > oops.PI:
+#        zero_incidence -= oops.PI
+#    phot[incidence >= zero_incidence] = 0.
+#    
+##    print 'DM2 A %9.6f B %9.6f C %9.6f D %9.6f E %9.6f F %9.6f' % (a, b, c, d, e, f)
+#    
+#    return phot
+#
+#def double_minnaert2_opt_func(params, incidence, emission, data):
+#    phot = double_minnaert2_func(params, incidence, emission)
+#    resid = np.sqrt(np.sum((data-phot)**2))
+##    print 'RESID', resid
+#    return resid
+#    
+#
+## Arctan version 1
+##    a*(arctan(b*i+c)+d) * cos(em)**e
+#
+#def arctan1_angle_conv(params):
+#    a_angle, b_angle, c_angle, d_angle, e_angle = params
+#    a = (np.sin(a_angle)+1)/2 # 0-1
+#    b = (np.sin(b_angle)-1) # -2 to 0
+#    c = np.sin(c_angle)*oops.PI # -PI - PI
+##    d = 3*(np.sin(d_angle)+1) # 0-3
+#    d = np.sin(d_angle)*oops.HALFPI # -PI/2 - PI/2
+#    e = 2*np.sin(e_angle) # -2 - 2
+#    
+#    return a, b, c, d, e
+#    
+#def arctan1_func(params, incidence, emission):
+#    a, b, c, d, e = arctan1_angle_conv(params)
+#    
+#    phot = a*(np.arctan(b*incidence+c)+d) * np.cos(emission)**e
+#
+#    print 'AT1 A %9.6f B %9.6f C %9.6f D %9.6f E %9.6f' % (a, b, c, d, e)
+#    
+#    return phot
+#
+#def arctan1_opt_func(params, incidence, emission, data):
+#    phot = arctan1_func(params, incidence, emission)
+#    resid = np.sqrt(np.sum((data-phot)**2))
+#    print 'RESID', resid
+#    return resid
+#
+#def get_funcs(alg):
+#    if alg == 'sm':
+#        phot_func = minnaert_func
+#        opt_func = minnaert_opt_func
+#        angel_func = minnaert_angle_conv
+#        guess = (0.25,0.5,-0.5)
+#    elif alg == 'dm1':
+#        phot_func = double_minnaert1_func
+#        opt_func = double_minnaert1_opt_func
+#        angle_func = double_minnaert1_angle_conv
+#        guess = (oops.PI*.75, 
+#                 np.arcsin(0.25*2-1), 0., 0., 0.,
+#                 0., np.arcsin(2.7*oops.PI/oops.TWOPI-1), 0.,
+#                 0.)    
+#    elif alg == 'dm2':
+#        phot_func = double_minnaert2_func
+#        opt_func = double_minnaert2_opt_func
+#        angle_func = double_minnaert2_angle_conv
+#        guess = (np.arcsin(0.25*2-1), 0., 0., 0., 0., 0.)
+#    elif alg == 'arctan1':
+#        phot_func = arctan1_func
+#        opt_func = arctan1_opt_func
+#        angle_func = arctan1_angle_convguess = (np.arcsin(0.25*2-1), 0., 0., 0., 0.)
+#    else:
+#        print 'Unknown algorithm', alg
+#        assert False
+#
+#    return phot_func, opt_func, angle_func, guess
+#
+#def optimize_disc(alg, name=None):
+#    assert False # Convert to full?
+#    phot_func, opt_func, angle_func, guess = get_funcs(alg)
+#    
 #    for filename in sorted(DISC_DATA):
 #        print filename, name
 #        if name is not None and filename != name:
 #            continue
-#        full_data = FULL_DATA[filename]
-#        full_phase = FULL_PHASE[filename]
-#        full_incidence = FULL_INCIDENCE[filename]
-#        full_emission = FULL_EMISSION[filename]
+#        print 'Optimizing', alg, filename
 #
-#        if use_minnaert:
-#            cutoff = 80 * oops.RPD
+#        disc_data = DISC_DATA[filename]
+#        disc_phase = DISC_PHASE[filename]
+#        disc_incidence = DISC_INCIDENCE[filename]
+#        disc_emission = DISC_EMISSION[filename]
+#        
+#        mean_phase = np.mean(full_phase) * oops.DPR
+#        print 'Mean phase', mean_phase
+#
+#        opt_data = disc_data
+#        opt_phase = disc_phase
+#        opt_incidence = disc_incidence
+#        opt_emission = disc_emission
+#        
+#        if alg == 'sm':
+#            cutoff = 80 * oops.RPD        
+#            opt_data = opt_data[np.where(opt_incidence < cutoff)]
+#            opt_emission = opt_emission[np.where(opt_incidence < cutoff)]
+#            opt_phase = opt_phase[np.where(opt_incidence < cutoff)]
+#            opt_incidence = opt_incidence[np.where(opt_incidence < cutoff)]
 #            
-#            odata = full_data[np.where(full_incidence < cutoff)]
-#            oemission = full_emission[np.where(full_incidence < cutoff)]
-#            ophase = full_phase[np.where(full_incidence < cutoff)]
-#            oincidence = full_incidence[np.where(full_incidence < cutoff)]
-#            mean_phase = np.mean(full_phase) * oops.DPR
-#            print 'Mean phase', mean_phase
-#            if mean_phase > 108:
-#                continue
-#            
-#            mi, me = sciopt.fmin(minnaert_opt_func, (0.5,0.5),
-#                                 args=(oincidence, oemission, odata),
+#        opt_decimate = len(opt_data) // 1000
+#        
+#        dec_data = opt_data[::opt_decimate]
+#        dec_phase = opt_phase[::opt_decimate]
+#        dec_incidence = opt_incidence[::opt_decimate]
+#        dec_emission = opt_emission[::opt_decimate]
+#
+#        ret = sciopt.fmin_powell(opt_func, guess,
+#                                 args=(dec_incidence, dec_emission, dec_data),
 #                                 disp=0)
+#        
+#        plot_one(disc_data, disc_phase, disc_incidence, disc_emission)
 #
-#        plot_one(full_data, full_phase, full_incidence, full_emission)
+#        di_incidence = np.arange(0, 180., 0.1) * oops.RPD
+#        di_zeros = np.zeros(di_incidence.shape)
+#
+#        for e in [0, 45, 60]:        
+#            phot = phot_func(ret, di_incidence, di_zeros+e*oops.RPD)        
+#            color = colorsys.hsv_to_rgb(np.cos(e*oops.RPD)/2+.5, 1, 1)
+#            plt.plot(di_incidence*oops.DPR, phot, '-', color=color, lw=1)
+#
 #        plt.title(filename)
 #        plt.show()
-
-def show_plots_multiple_filters(filters=None, phases=None):
-    phase_tolerance = 2.
-    if phases is None:
-        phases = np.arange(phase_tolerance, 360, phase_tolerance*2)
-        
-    for goal_phase in phases:
-        first_one = True
-        used_filters = []
-        # For each filter, find the phase entry closest to the target phase
-        for filter in sorted(DATA_BY_FILTER):
-            if filters and filter not in filters:
-                continue
-        
-            best_phase = None
-            best_phase_dist = 1e38
-            for phase in DATA_BY_FILTER[filter]:
-                delta = abs(goal_phase-phase)
-                if delta < phase_tolerance:
-                    if delta < best_phase_dist:
-                        best_phase_dost = delta
-                        best_phase = phase 
-
-            if best_phase is None:
-                continue
-        
-            print 'FOUND', filter, 'GOAL', goal_phase, 'ACTUAL', best_phase
-            
-            if first_one:
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
-                first_one = False
-        
-            (clean_name, full_data, full_phase, full_incidence, 
-             full_emission) = DATA_BY_PHASE[(best_phase,filter)]
-                
-            used_filters.append(filter)
-
-            full_decimate = 1#max(1, len(full_data) // 10000)
-            full_decimate = 100
-                    
-            full_data = full_data[::full_decimate]
-            full_phase = full_phase[::full_decimate]
-            full_incidence = full_incidence[::full_decimate]
-            full_emission = full_emission[::full_decimate]
-
-            if filter not in FILTER_COLOR:
-                print 'Unknown filter', filter, 'file', clean_name
-                continue
-            
-            base_color = FILTER_COLOR[filter]
-
-            colors = []
-            for data_idx in xrange(len(full_data)):
-                shade = np.cos(full_emission[data_idx])
-                color = (base_color[0] * shade,
-                         base_color[1] * shade,
-                         base_color[2] * shade)
-                colors.append(color)
-            plt.scatter(full_incidence*oops.DPR,
-                        full_data, s=20, c=colors, alpha=0.05,
-                        edgecolors='none')
-        
-        if first_one:
-            continue
-        
-        print '-------------'
-        
-        xlimits = plt.xlim()
-        ylimits = plt.ylim()
-        
-        for filter in sorted(used_filters):
-            if filter not in FILTER_COLOR:
-                continue
-            plt.plot(-100,-100, 'o', mec=FILTER_COLOR[filter], mfc=FILTER_COLOR[filter], ms=10,
-                     label=filter)
-
-        plt.xlim(0, xlimits[1])
-        plt.ylim(0, ylimits[1])
-        
-        plt.legend(numpoints=1)
-        plt.xlabel('Incidence angle')
-        plt.ylabel('I/F')
-        plt.title('PHASE %7.2f' % goal_phase)
-        plt.show()
-        
-
-def show_plots_multiple_phases(filters=None, phases=None):
-    phase_tolerance = 2.
-    if phases is None:
-        phases = np.arange(phase_tolerance, 360, phase_tolerance*2)
-        
-    for filter in sorted(DATA_BY_FILTER):
-        if filters and filter not in filters:
-            continue
-
-        phase_list = []
-        
-        for goal_phase in phases:
-            first_one = True
-            used_images = []
-
-            for phase in sorted(DATA_BY_FILTER[filter]):
-                delta = abs(goal_phase-phase)
-                if delta < phase_tolerance:
-                    phase_list.append(phase)               
-                    print 'FOUND', filter, 'GOAL', goal_phase, 'ACTUAL', phase
-
-            if len(phase_list) == 0:
-                continue
-                    
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            first_one = False
-            
-            for phase_num, phase in enumerate(phase_list):
-                (clean_name, full_data, full_phase, full_incidence, 
-                 full_emission) = DATA_BY_PHASE[(phase,filter)]
-                    
-                used_images.append(clean_name)
-    
-                full_decimate = 1#max(1, len(full_data) // 10000)
-#                full_decimate = 100
-                        
-                full_data = full_data[::full_decimate]
-                full_phase = full_phase[::full_decimate]
-                full_incidence = full_incidence[::full_decimate]
-                full_emission = full_emission[::full_decimate]
-
-                base_color = colorsys.hsv_to_rgb(
-                         float(phase_num)/len(phase_list), 1, 1)
-    
-                colors = []
-                for data_idx in xrange(len(full_data)):
-                    shade = np.cos(full_emission[data_idx])
-                    shade = 1
-                    color = (base_color[0] * shade,
-                             base_color[1] * shade,
-                             base_color[2] * shade)
-                    colors.append(color)
-                plt.scatter(full_incidence*oops.DPR,
-                            full_data, s=20, c=colors, alpha=0.05,
-                            edgecolors='none')
-        
-        if first_one:
-            continue
-        
-        print '-------------'
-        
-        xlimits = plt.xlim()
-        ylimits = plt.ylim()
-        
-        for image_num, image in enumerate(used_images):
-            color = colorsys.hsv_to_rgb(
-                            float(image_num)/len(phase_list), 1, 1)
-            plt.plot(-100,-100, 'o', ms=10,
-                     mec=color, mfc=color, 
-                     label=('%s %7.3f' % (image, phase_list[image_num])))
-
-        plt.xlim(0, xlimits[1])
-        plt.ylim(0, ylimits[1])
-        
-        plt.legend(numpoints=1)
-        plt.xlabel('Incidence angle')
-        plt.ylabel('I/F')
-        plt.title('PHASE %7.2f' % goal_phase)
-        plt.show()
-        
-        
-def plot_one(disc_data, disc_phase, disc_incidence, disc_emission, 
-             full_data=None, full_phase=None, full_incidence=None, 
-             full_emission=None,
-             phot_func=None):
-    disc_decimate = len(disc_data) // 1000
-    full_decimate = 100
-            
-#    disc_decimate = 10
-    
-    disc_data = disc_data[::disc_decimate]
-    disc_phase = disc_phase[::disc_decimate]
-    disc_incidence = disc_incidence[::disc_decimate]
-    disc_emission = disc_emission[::disc_decimate]
-    
-    phase_list = [1]
-    if full_data:
-        full_data = full_data[::full_decimate]
-        full_phase = full_phase[::full_decimate]
-        full_incidence = full_incidence[::full_decimate]
-        full_emission = full_emission[::full_decimate]
-        phase_list = [0,1]
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-
-    for phase in phase_list:
-        if phase == 0:
-            incidence = disc_incidence
-            emission = disc_emission
-            data = disc_data
-            marker = '.'
-        else:
-            incidence = full_incidence
-            emission = full_emission
-            data = full_data
-            marker = '+'
-        color_by_vals = np.cos(emission)
-        min_v = 0.
-        max_v = 1.
-        for idx in xrange(len(incidence)):
-            i = incidence[idx]
-            e = emission[idx]
-            color_by_val = color_by_vals[idx]
-
-            phot = 1.
-            if phot_func:
-                phot = phot_func(np.array([i]), np.array([e]))
-            iof = data[idx] / phot
-            color_by = (color_by_val-min_v)/(max_v-min_v)
-            color = colorsys.hsv_to_rgb(color_by/2+.5, 1, 1)
-            plt.plot(i*oops.DPR, iof, marker, color=color, alpha=0.3)
-
-        max_i = np.max(incidence)
-        c_range = np.arange(min_v, max_v, (max_v-min_v)/100)
-        for idx in xrange(len(c_range)):
-            color_by_val = c_range[idx]
-            color_by = (color_by_val-min_v)/(max_v-min_v)
-            color = colorsys.hsv_to_rgb(color_by/2+.5, 1, 1)
-            plt.plot(max_i+10, c_range[idx], '.', color=color)
-
-    if phot_func:
-        plt.ylim(0,2)
-    else:
-        plt.ylim(0,1)
-    plt.xlabel('Incidence angle')
-    plt.ylabel('I/F')
-
-
-#===============================================================================
 #
-# OPTIMIZATION FUNCTIONS
-# 
-#===============================================================================
-
-# Single Minnaert
-#    abs(cos(i))**mi * abs(cos(e))**me
-
-def minnaert_angle_conv(params):
-    return params
-
-def minnaert_func(params, incidence, emission):
-    a, mi, me = params
-    phot = a*(np.abs(np.cos(incidence))**mi *
-              np.abs(np.cos(emission))**me)
-
-    print 'SM A %9.6f MI %9.6f ME %9.6f' % (a, mi, me)
-
-    zero_incidence = np.arccos(0)
-    phot[np.where(incidence >= zero_incidence)] = 0.
-    
-    return phot
-
-def minnaert_opt_func(params, incidence, emission, data):
-    phot = minnaert_func(params, incidence, emission)
-
-    resid = np.sqrt(np.sum((data-phot)**2))
-    print 'RESID', resid
-    return resid
-
-
-# Double Minnaert version 1
-#    Before break incidence angle:
-#      a1*abs(cos(b1*i+c1))**d1 * cos(e)**d3
-#    After break incidence angkle:
-#      a2*(abs(cos(b2*i+c2))**d2-1) * cos(e)**d3
-
-def double_minnaert1_angle_conv(params, min_incidence):
-    brk_angle, a1_angle, b1_angle, c1_angle, d1_angle, b2_angle, c2_angle, d2_angle, d3_angle = params
-    a1 = (np.sin(a1_angle)+1)/2 # 0-1
-    b1 = np.sin(b1_angle)/2+1 # .5-1.5
-    c1 = np.sin(c1_angle)*oops.PI/4 # -PI/4 - PI/4
-    d1 = np.sin(d1_angle)+1 # 0-2
-    b2 = -(np.sin(b2_angle)/2+1) # -1.5 - -.5
-    c2 = (np.sin(c2_angle)+1)*oops.TWOPI # 0 - FOURPI
-    d2 = np.sin(d2_angle)+1 # 0-2
-    d3 = 2*np.sin(d3_angle) # -2 - 2
-    
-    zero_incidence1 = (oops.HALFPI-c1)/b1
-    
-    # Breakpoint has to be between the minimum incidence angle and the 0-zero crossing of first curve 
-    brk = (np.sin(brk_angle)+1)/2 * (zero_incidence1-min_incidence) + min_incidence 
-    
-    return brk, a1, b1, c1, d1, b2, c2, d2, d3
-    
-def double_minnaert1_func(params, incidence, emission):
-    brk, a1, b1, c1, d1, b2, c2, d2, d3 = double_minnaert1_angle_conv(params,
-                                                                 np.min(incidence))
-    
-    brk_val1 = a1*np.abs(np.cos(b1*brk+c1))**d1 * np.cos(emission)**d3
-    brk_val2 = (np.abs(np.cos(b2*brk+c2))**d2-1) * np.cos(emission)**d3
-    a2 = brk_val1/brk_val2
-    
-    phot = a1*np.abs(np.cos(b1*incidence+c1))**d1 * np.cos(emission)**d3
-    phot2 = a2*(np.abs(np.cos(b2*incidence+c2))**d2-1) * np.cos(emission)**d3
-    phot[np.where(incidence >= brk)] = phot2[np.where(incidence >= brk)]
-    
-    zero_incidence2 = -(c2%oops.TWOPI)/b2
-    while zero_incidence2 > brk-oops.PI/b2:
-        zero_incidence2 += oops.PI/b2
-    
-    phot[np.where(incidence >= zero_incidence2)] = 0.
-    
-    print 'DM1 BRK %6.2f A1 %7.5f B1 %7.5f C1 %9.6f D1 %7.5f B2 %8.5f C2 %9.6f D2 %7.5f D3 %7.5f' % (
-                 brk*oops.DPR, a1, b1, c1, d1, b2, c2, d2, d3)
-    
-    return phot
-
-def double_minnaert1_opt_func(params, incidence, emission, data):
-    phot = double_minnaert1_func(params, incidence, emission)
-    resid = np.sqrt(np.sum((data-phot)**2))
-    print 'RESID', resid
-    return resid
-
-
-# Double Minnaert version 2
-#    a*abs(cos(b*i+c)+e)**d * cos(em)**f
-
-def double_minnaert2_angle_conv(params):
-    a_angle, b_angle, c_angle, d_angle, e_angle, f_angle = params
-    a = (np.sin(a_angle)+1)/2 # 0-1
-    b = 2*np.sin(b_angle)+2.1 # .1-4.1
-    c = -(np.sin(c_angle)+1)/2*oops.HALFPI # -PI - PI
-#    while c > 0: c = c-oops.PI
-#    while c < -oops.PI: c = c+oops.PI
-    d = 1.5*(np.sin(d_angle)+1) # 0-6
-    e = (np.sin(e_angle)+1)/4 # 0 - 0.5
-    f = np.sin(f_angle)-1 # -1 - 1
-    
-    return a, b, c, d, e, f
-    
-def double_minnaert2_func(params, incidence, emission, cvt_angle=True):
-    if cvt_angle:
-        a, b, c, d, e, f = double_minnaert2_angle_conv(params)
-    else:
-        a, b, c, d, e, f = params
-    
-    phot = a*np.abs(np.cos(b*(incidence+c))+e)**d * np.cos(emission)**f
-
-    zero_incidence = np.arccos(-e)/b-c
-    if zero_incidence < 0:
-        zero_incidence += oops.PI
-    if zero_incidence > oops.PI:
-        zero_incidence -= oops.PI
-    phot[incidence >= zero_incidence] = 0.
-    
-#    print 'DM2 A %9.6f B %9.6f C %9.6f D %9.6f E %9.6f F %9.6f' % (a, b, c, d, e, f)
-    
-    return phot
-
-def double_minnaert2_opt_func(params, incidence, emission, data):
-    phot = double_minnaert2_func(params, incidence, emission)
-    resid = np.sqrt(np.sum((data-phot)**2))
-#    print 'RESID', resid
-    return resid
-    
-
-# Arctan version 1
-#    a*(arctan(b*i+c)+d) * cos(em)**e
-
-def arctan1_angle_conv(params):
-    a_angle, b_angle, c_angle, d_angle, e_angle = params
-    a = (np.sin(a_angle)+1)/2 # 0-1
-    b = (np.sin(b_angle)-1) # -2 to 0
-    c = np.sin(c_angle)*oops.PI # -PI - PI
-#    d = 3*(np.sin(d_angle)+1) # 0-3
-    d = np.sin(d_angle)*oops.HALFPI # -PI/2 - PI/2
-    e = 2*np.sin(e_angle) # -2 - 2
-    
-    return a, b, c, d, e
-    
-def arctan1_func(params, incidence, emission):
-    a, b, c, d, e = arctan1_angle_conv(params)
-    
-    phot = a*(np.arctan(b*incidence+c)+d) * np.cos(emission)**e
-
-    print 'AT1 A %9.6f B %9.6f C %9.6f D %9.6f E %9.6f' % (a, b, c, d, e)
-    
-    return phot
-
-def arctan1_opt_func(params, incidence, emission, data):
-    phot = arctan1_func(params, incidence, emission)
-    resid = np.sqrt(np.sum((data-phot)**2))
-    print 'RESID', resid
-    return resid
-
-def get_funcs(alg):
-    if alg == 'sm':
-        phot_func = minnaert_func
-        opt_func = minnaert_opt_func
-        angel_func = minnaert_angle_conv
-        guess = (0.25,0.5,-0.5)
-    elif alg == 'dm1':
-        phot_func = double_minnaert1_func
-        opt_func = double_minnaert1_opt_func
-        angle_func = double_minnaert1_angle_conv
-        guess = (oops.PI*.75, 
-                 np.arcsin(0.25*2-1), 0., 0., 0.,
-                 0., np.arcsin(2.7*oops.PI/oops.TWOPI-1), 0.,
-                 0.)    
-    elif alg == 'dm2':
-        phot_func = double_minnaert2_func
-        opt_func = double_minnaert2_opt_func
-        angle_func = double_minnaert2_angle_conv
-        guess = (np.arcsin(0.25*2-1), 0., 0., 0., 0., 0.)
-    elif alg == 'arctan1':
-        phot_func = arctan1_func
-        opt_func = arctan1_opt_func
-        angle_func = arctan1_angle_convguess = (np.arcsin(0.25*2-1), 0., 0., 0., 0.)
-    else:
-        print 'Unknown algorithm', alg
-        assert False
-
-    return phot_func, opt_func, angle_func, guess
-
-def optimize_disc(alg, name=None):
-    assert False # Convert to full?
-    phot_func, opt_func, angle_func, guess = get_funcs(alg)
-    
-    for filename in sorted(DISC_DATA):
-        print filename, name
-        if name is not None and filename != name:
-            continue
-        print 'Optimizing', alg, filename
-
-        disc_data = DISC_DATA[filename]
-        disc_phase = DISC_PHASE[filename]
-        disc_incidence = DISC_INCIDENCE[filename]
-        disc_emission = DISC_EMISSION[filename]
-        
-        mean_phase = np.mean(full_phase) * oops.DPR
-        print 'Mean phase', mean_phase
-
-        opt_data = disc_data
-        opt_phase = disc_phase
-        opt_incidence = disc_incidence
-        opt_emission = disc_emission
-        
-        if alg == 'sm':
-            cutoff = 80 * oops.RPD        
-            opt_data = opt_data[np.where(opt_incidence < cutoff)]
-            opt_emission = opt_emission[np.where(opt_incidence < cutoff)]
-            opt_phase = opt_phase[np.where(opt_incidence < cutoff)]
-            opt_incidence = opt_incidence[np.where(opt_incidence < cutoff)]
-            
-        opt_decimate = len(opt_data) // 1000
-        
-        dec_data = opt_data[::opt_decimate]
-        dec_phase = opt_phase[::opt_decimate]
-        dec_incidence = opt_incidence[::opt_decimate]
-        dec_emission = opt_emission[::opt_decimate]
-
-        ret = sciopt.fmin_powell(opt_func, guess,
-                                 args=(dec_incidence, dec_emission, dec_data),
-                                 disp=0)
-        
-        plot_one(disc_data, disc_phase, disc_incidence, disc_emission)
-
-        di_incidence = np.arange(0, 180., 0.1) * oops.RPD
-        di_zeros = np.zeros(di_incidence.shape)
-
-        for e in [0, 45, 60]:        
-            phot = phot_func(ret, di_incidence, di_zeros+e*oops.RPD)        
-            color = colorsys.hsv_to_rgb(np.cos(e*oops.RPD)/2+.5, 1, 1)
-            plt.plot(di_incidence*oops.DPR, phot, '-', color=color, lw=1)
-
-        plt.title(filename)
-        plt.show()
-
-        plot_one(disc_data, disc_phase, disc_incidence, disc_emission,
-                 phot_func=lambda i,e: phot_func(ret, i, e))
-        plt.title(filename)
-        plt.show()
-
-def plot_params(alg):
-    assert False # Convert to full?
-    phase_list = []
-    ret_list = []
-    
-    phot_func, opt_func, angle_func, guess = get_funcs(alg)
-    
-    for filename in sorted(DISC_DATA):
-        print 'Optimizing', alg, filename
-
-        disc_data = DISC_DATA[filename]
-        disc_phase = DISC_PHASE[filename]
-        disc_incidence = DISC_INCIDENCE[filename]
-        disc_emission = DISC_EMISSION[filename]
-
-        mean_phase = np.mean(full_phase) * oops.DPR
-        print 'Mean phase', mean_phase
-        
-        if mean_phase > 100:
-            continue
-        if mean_phase < 18:
-            continue
-        
-        opt_data = disc_data
-        opt_phase = disc_phase
-        opt_incidence = disc_incidence
-        opt_emission = disc_emission
-        
-        if alg == 'sm':
-            cutoff = 80 * oops.RPD        
-            opt_data = opt_data[np.where(opt_incidence < cutoff)]
-            opt_emission = opt_emission[np.where(opt_incidence < cutoff)]
-            opt_phase = opt_phase[np.where(opt_incidence < cutoff)]
-            opt_incidence = opt_incidence[np.where(opt_incidence < cutoff)]
-
-        opt_decimate = max(len(opt_data) // 10000, 1)
-                
-        dec_data = opt_data[::opt_decimate]
-        dec_phase = opt_phase[::opt_decimate]
-        dec_incidence = opt_incidence[::opt_decimate]
-        dec_emission = opt_emission[::opt_decimate]
-
-        ret = sciopt.fmin_powell(opt_func, guess,
-                                 args=(dec_incidence, dec_emission, dec_data),
-                                 disp=0)
-
-        real_ret = angle_func(ret)
-
-        for j in xrange(len(real_ret)):
-            print '%9.6f' % real_ret[j],
-        print
-
-        phase_list.append(mean_phase)
-        ret_list.append(real_ret)
-    
-    print
-    data_lists = []
-    for i in xrange(len(ret_list[0])):
-        data_lists.append([])
-        
-    for i in xrange(len(phase_list)):
-        print 'PH %7.3f' % phase_list[i],
-        for j in xrange(len(ret_list[i])):
-            data_lists[j].append(ret_list[i][j])
-            print '%9.6f' % ret_list[i][j],
-        print
-    
-    for i in xrange(len(data_lists)):
-        print np.polyfit(phase_list, data_lists[i], 1)
-        print np.min(data_lists[i]), np.max(data_lists[i]), np.mean(data_lists[i]), np.std(data_lists[i])
-        
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    
-    for i in xrange(len(ret_list[0])):
-        plt.plot(phase_list, [x[i] for x in ret_list],
-                 '-', label=str(i+1))
-        
-    plt.legend()
-        
-    plt.show()
-
-def plot_canned_result(name=None):
-    assert False # Convert to full?
-    orig_phot_func, opt_func, angle_func, guess = get_funcs('dm2')
-    
-    phot_func = lambda params, incidence, emission: orig_phot_func(params, incidence, emission, cvt_angle=False)
-    
-    for filename in sorted(DISC_DATA):
-        print filename, name
-        if name is not None and filename != name:
-            continue
-        print 'Displaying', filename
-
-        disc_data = DISC_DATA[filename]
-        disc_phase = DISC_PHASE[filename]
-        disc_incidence = DISC_INCIDENCE[filename]
-        disc_emission = DISC_EMISSION[filename]
-        
-        mean_phase = np.mean(full_phase) * oops.DPR
-        print 'Mean phase', mean_phase
-
-#[-0.00091367  0.20465154]
-#0.116122236394 0.207111387164 0.153182435836 0.025327772196
-#[ 0.00170376  1.4196773 ]
-#1.2941870853 1.65744621641 1.51565424633 0.0878671138453
-#[-0.01025439  0.19890163]
-#-0.834762884324 -0.00708461479878 -0.378752904923 0.235314820405
-#[ 0.02121966  0.10946198]
-#0.695123783062 2.22827531327 1.30481719104 0.512535770118
-#[-0.0032684   0.58933541]
-#0.164388199373 0.498322546288 0.405218424073 0.0943748624381
-#[-0.00359419 -0.0005182 ]
-#-0.505006529992 -0.000251161577628 -0.202987511611 0.12036164079
-
-        ret = [0.153182435836, # A
-               1.51565424633, # B
-               -0.01025439 * mean_phase + 0.19890163, # C
-               0.02121966 * mean_phase + 0.10946198, # D
-               0.405218424073, # E
-               -0.202987511611 # F
-               ]        
-        plot_one(disc_data, disc_phase, disc_incidence, disc_emission)
-
-        di_incidence = np.arange(0, 180., 0.1) * oops.RPD
-        di_zeros = np.zeros(di_incidence.shape)
-
-        for e in [0, 45, 60]:        
-            phot = phot_func(ret, di_incidence, di_zeros+e*oops.RPD)        
-            color = colorsys.hsv_to_rgb(np.cos(e*oops.RPD)/2+.5, 1, 1)
-            plt.plot(di_incidence*oops.DPR, phot, '-', color=color, lw=1)
-
-        plt.title(filename)
-        plt.show()
-
-        plot_one(disc_data, disc_phase, disc_incidence, disc_emission,
-                 phot_func=lambda i,e: phot_func(ret, i, e))
-        plt.title(filename)
-        plt.show()
-
-#===============================================================================
-# 
-#===============================================================================
-
-def plot_double_minnaert():
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    
-    incidence = np.arange(0, 150., 0.1) * oops.RPD
-    zeros = np.zeros(incidence.shape)
-    
-    args = (oops.PI*.75, 
-            np.arcsin(0.25*2-1), 0., 0., 0.,
-            0., np.arcsin(2.7*oops.PI/oops.TWOPI-1), 0.,
-            0.)
-    
-    new_incidence, new_emission, new_data, phot0 = double_minnaert_func(
-           args, incidence, zeros, zeros)
-    new_incidence, new_emission, new_data, phot45 = double_minnaert_func(
-           args, incidence, zeros+oops.PI/4, zeros)
-        
-    plt.plot(incidence*oops.DPR, phot0, '-', color='red')
-    plt.plot(incidence*oops.DPR, phot45, '-', color='blue')
-    plt.show()
-    
-def test_minnaert_offset():    
-    assert False # Convert to full?    
-    for full_filename in IMAGE_LIST:
-        if type(full_filename) == type((0,)):
-            offset_metadata = file_read_offset_metadata(full_filename[0])
-            clean_name = file_clean_name(full_filename[0])
-        else:
-            offset_metadata = file_read_offset_metadata(full_filename)
-            clean_name = file_clean_name(full_filename)
-
-        if offset_metadata is None:
-            continue
-
-        if offset_metadata['stars_metadata']['offset'] is None:
-            continue
-            
-        for filename in DISC_DATA:
-            if filename.endswith(clean_name):
-                break
-            
-        print 'Testing offset for', filename
-
-        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, full_filename)
-        obs = read_iss_file(full_filename)
-
-        disc_data = DISC_DATA[filename]
-        disc_phase = DISC_PHASE[filename]
-        disc_incidence = DISC_INCIDENCE[filename]
-        disc_emission = DISC_EMISSION[filename]
-        
-        incidence = disc_incidence
-        emission = disc_emission
-        phase = disc_phase
-        data = disc_data
-        
-        cutoff = 80 * oops.RPD
-        
-        data = data[np.where(incidence < cutoff)]
-        emission = emission[np.where(incidence < cutoff)]
-        phase = phase[np.where(incidence < cutoff)]
-        incidence = incidence[np.where(incidence < cutoff)]
-        mean_phase = np.mean(full_phase) * oops.DPR
-        print 'Mean phase', mean_phase
-
-        if mean_phase > 108:
-            continue
-                    
-        ret = sciopt.fmin_powell(minnaert_opt_func, (0.5,0.5),
-                                 args=(incidence, emission, data),
-                                 disp=0)
-        
-        print ret
-
-        k1 = ret[0]
-        k2 = ret[1]
-        
-        new_offset_metadata = master_find_offset(obs, allow_stars=False,
-                                                 create_overlay=True)
-        
-        print 'STAR OFFSET', offset_metadata['stars_metadata']['offset']
-        print 'MODEL OFFSET', new_offset_metadata['model_offset']
-        
-#        new_offset_metadata['offset'] = new_offset_metadata['model_offset']
-#        new_offset_metadata['offset'] = offset_metadata['stars_metadata']['offset']
-        display_offset_data(obs, new_offset_metadata, show_rings=False)
-
-
-#==============================================================================
+#        plot_one(disc_data, disc_phase, disc_incidence, disc_emission,
+#                 phot_func=lambda i,e: phot_func(ret, i, e))
+#        plt.title(filename)
+#        plt.show()
 #
-# INTERPOLATION FUNCTIONS
-# 
-#==============================================================================
- 
-def test_interpolation(phase1, phase2, phase3, filter):
-    actual_phase1 = None
-    actual_phase2 = None
-    actual_phase3 = None
-     
-    for phase in sorted(DATA_BY_PHASE):
-        print phase*oops.DPR
-        if abs(phase-phase1*oops.RPD) < 1*oops.RPD:
-            actual_phase1 = phase
-        if abs(phase-phase2*oops.RPD) < 1*oops.RPD:
-            actual_phase2 = phase
-        if abs(phase-phase3*oops.RPD) < 1*oops.RPD:
-            actual_phase3 = phase
-            
-    (clean_name1,
-     disc_data1,
-     disc_phase1,
-     disc_incidence1,
-     disc_emission1,
-     full_data1,
-     full_phase1,
-     full_incidence1,
-     full_emission1) = DATA_BY_PHASE[actual_phase1][filter]
-
-    (clean_name2,
-     disc_data2,
-     disc_phase2,
-     disc_incidence2,
-     disc_emission2,
-     full_data2,
-     full_phase2,
-     full_incidence2,
-     full_emission2) = DATA_BY_PHASE[actual_phase2][filter]
-
-    (clean_name3,
-     disc_data3,
-     disc_phase3,
-     disc_incidence3,
-     disc_emission3,
-     full_data3,
-     full_phase3,
-     full_incidence3,
-     full_emission3) = DATA_BY_PHASE[actual_phase3][filter]
-    
-    points = np.zeros((full_data1.shape[0]+full_data3.shape[0], 3))
-    points[:full_data1.shape[0],0] = full_phase1
-    points[:full_data1.shape[0],1] = full_incidence1
-    points[:full_data1.shape[0],2] = np.cos(full_emission1)
-    points[full_data1.shape[0]:,0] = full_phase3
-    points[full_data1.shape[0]:,1] = full_incidence3
-    points[full_data1.shape[0]:,2] = np.cos(full_emission3)
-
-    points2 = np.zeros((full_data2.shape[0], 3))
-    points2[:,0] = full_phase2
-    points2[:,1] = full_incidence2
-    points2[:,2] = np.cos(full_emission2)
-    
-    values = np.append(full_data1, full_data3)
-    
-    new_full_data2 = sciinterp.griddata(points, values, points2, fill_value=0.)
-  
-    delta = full_data2 - new_full_data2
-    print 'Phases', actual_phase1*oops.DPR, actual_phase2*oops.DPR, actual_phase3*oops.DPR
-    print 'Mean', np.mean(delta)
-    print 'Std', np.std(delta)
-    print 'Min', np.min(delta)
-    print 'Max', np.max(delta)
-    
-    full_decimate2 = max(1, len(full_data2) // 10000)
-                    
-    full_data2 = full_data2[::full_decimate2]
-    full_phase2 = full_phase2[::full_decimate2]
-    full_incidence2 = full_incidence2[::full_decimate2]
-    full_emission2 = full_emission2[::full_decimate2]
-
-    new_full_data2 = new_full_data2[::full_decimate2]
-
-    base_color = (1.,0,0)
-
-    colors = []
-    for data_idx in xrange(len(full_data2)):
-        shade = np.cos(full_emission2[data_idx])
-        color = (base_color[0] * shade,
-                 base_color[1] * shade,
-                 base_color[2] * shade)
-        colors.append(color)
-    plt.scatter(full_incidence2*oops.DPR,
-                full_data2, s=20, c=colors, alpha=0.05,
-                edgecolors='none')
-
-    base_color = (0,0,1.)
-
-    colors = []
-    for data_idx in xrange(len(new_full_data2)):
-        shade = np.cos(full_emission2[data_idx])
-        color = (base_color[0] * shade,
-                 base_color[1] * shade,
-                 base_color[2] * shade)
-        colors.append(color)
-    plt.scatter(full_incidence2*oops.DPR,
-                new_full_data2, s=20, c=colors, alpha=0.05,
-                edgecolors='none')
-                        
-    plt.xlabel('Incidence angle')
-    plt.ylabel('I/F')
-    plt.title('PHASE %7.2f' % (actual_phase2*oops.DPR))
-    plt.show()
-
-
-#==============================================================================
+#def plot_params(alg):
+#    assert False # Convert to full?
+#    phase_list = []
+#    ret_list = []
+#    
+#    phot_func, opt_func, angle_func, guess = get_funcs(alg)
+#    
+#    for filename in sorted(DISC_DATA):
+#        print 'Optimizing', alg, filename
 #
-# MAIN ROUTINES
+#        disc_data = DISC_DATA[filename]
+#        disc_phase = DISC_PHASE[filename]
+#        disc_incidence = DISC_INCIDENCE[filename]
+#        disc_emission = DISC_EMISSION[filename]
+#
+#        mean_phase = np.mean(full_phase) * oops.DPR
+#        print 'Mean phase', mean_phase
+#        
+#        if mean_phase > 100:
+#            continue
+#        if mean_phase < 18:
+#            continue
+#        
+#        opt_data = disc_data
+#        opt_phase = disc_phase
+#        opt_incidence = disc_incidence
+#        opt_emission = disc_emission
+#        
+#        if alg == 'sm':
+#            cutoff = 80 * oops.RPD        
+#            opt_data = opt_data[np.where(opt_incidence < cutoff)]
+#            opt_emission = opt_emission[np.where(opt_incidence < cutoff)]
+#            opt_phase = opt_phase[np.where(opt_incidence < cutoff)]
+#            opt_incidence = opt_incidence[np.where(opt_incidence < cutoff)]
+#
+#        opt_decimate = max(len(opt_data) // 10000, 1)
+#                
+#        dec_data = opt_data[::opt_decimate]
+#        dec_phase = opt_phase[::opt_decimate]
+#        dec_incidence = opt_incidence[::opt_decimate]
+#        dec_emission = opt_emission[::opt_decimate]
+#
+#        ret = sciopt.fmin_powell(opt_func, guess,
+#                                 args=(dec_incidence, dec_emission, dec_data),
+#                                 disp=0)
+#
+#        real_ret = angle_func(ret)
+#
+#        for j in xrange(len(real_ret)):
+#            print '%9.6f' % real_ret[j],
+#        print
+#
+#        phase_list.append(mean_phase)
+#        ret_list.append(real_ret)
+#    
+#    print
+#    data_lists = []
+#    for i in xrange(len(ret_list[0])):
+#        data_lists.append([])
+#        
+#    for i in xrange(len(phase_list)):
+#        print 'PH %7.3f' % phase_list[i],
+#        for j in xrange(len(ret_list[i])):
+#            data_lists[j].append(ret_list[i][j])
+#            print '%9.6f' % ret_list[i][j],
+#        print
+#    
+#    for i in xrange(len(data_lists)):
+#        print np.polyfit(phase_list, data_lists[i], 1)
+#        print np.min(data_lists[i]), np.max(data_lists[i]), np.mean(data_lists[i]), np.std(data_lists[i])
+#        
+#    fig = plt.figure()
+#    ax = fig.add_subplot(111)
+#    
+#    for i in xrange(len(ret_list[0])):
+#        plt.plot(phase_list, [x[i] for x in ret_list],
+#                 '-', label=str(i+1))
+#        
+#    plt.legend()
+#        
+#    plt.show()
+#
+#def plot_canned_result(name=None):
+#    assert False # Convert to full?
+#    orig_phot_func, opt_func, angle_func, guess = get_funcs('dm2')
+#    
+#    phot_func = lambda params, incidence, emission: orig_phot_func(params, incidence, emission, cvt_angle=False)
+#    
+#    for filename in sorted(DISC_DATA):
+#        print filename, name
+#        if name is not None and filename != name:
+#            continue
+#        print 'Displaying', filename
+#
+#        disc_data = DISC_DATA[filename]
+#        disc_phase = DISC_PHASE[filename]
+#        disc_incidence = DISC_INCIDENCE[filename]
+#        disc_emission = DISC_EMISSION[filename]
+#        
+#        mean_phase = np.mean(full_phase) * oops.DPR
+#        print 'Mean phase', mean_phase
+#
+##[-0.00091367  0.20465154]
+##0.116122236394 0.207111387164 0.153182435836 0.025327772196
+##[ 0.00170376  1.4196773 ]
+##1.2941870853 1.65744621641 1.51565424633 0.0878671138453
+##[-0.01025439  0.19890163]
+##-0.834762884324 -0.00708461479878 -0.378752904923 0.235314820405
+##[ 0.02121966  0.10946198]
+##0.695123783062 2.22827531327 1.30481719104 0.512535770118
+##[-0.0032684   0.58933541]
+##0.164388199373 0.498322546288 0.405218424073 0.0943748624381
+##[-0.00359419 -0.0005182 ]
+##-0.505006529992 -0.000251161577628 -0.202987511611 0.12036164079
+#
+#        ret = [0.153182435836, # A
+#               1.51565424633, # B
+#               -0.01025439 * mean_phase + 0.19890163, # C
+#               0.02121966 * mean_phase + 0.10946198, # D
+#               0.405218424073, # E
+#               -0.202987511611 # F
+#               ]        
+#        plot_one(disc_data, disc_phase, disc_incidence, disc_emission)
+#
+#        di_incidence = np.arange(0, 180., 0.1) * oops.RPD
+#        di_zeros = np.zeros(di_incidence.shape)
+#
+#        for e in [0, 45, 60]:        
+#            phot = phot_func(ret, di_incidence, di_zeros+e*oops.RPD)        
+#            color = colorsys.hsv_to_rgb(np.cos(e*oops.RPD)/2+.5, 1, 1)
+#            plt.plot(di_incidence*oops.DPR, phot, '-', color=color, lw=1)
+#
+#        plt.title(filename)
+#        plt.show()
+#
+#        plot_one(disc_data, disc_phase, disc_incidence, disc_emission,
+#                 phot_func=lambda i,e: phot_func(ret, i, e))
+#        plt.title(filename)
+#        plt.show()
+#
+##===============================================================================
+## 
+##===============================================================================
+#
+#def plot_double_minnaert():
+#    fig = plt.figure()
+#    ax = fig.add_subplot(111)
+#    
+#    incidence = np.arange(0, 150., 0.1) * oops.RPD
+#    zeros = np.zeros(incidence.shape)
+#    
+#    args = (oops.PI*.75, 
+#            np.arcsin(0.25*2-1), 0., 0., 0.,
+#            0., np.arcsin(2.7*oops.PI/oops.TWOPI-1), 0.,
+#            0.)
+#    
+#    new_incidence, new_emission, new_data, phot0 = double_minnaert_func(
+#           args, incidence, zeros, zeros)
+#    new_incidence, new_emission, new_data, phot45 = double_minnaert_func(
+#           args, incidence, zeros+oops.PI/4, zeros)
+#        
+#    plt.plot(incidence*oops.DPR, phot0, '-', color='red')
+#    plt.plot(incidence*oops.DPR, phot45, '-', color='blue')
+#    plt.show()
+#    
+#def test_minnaert_offset():    
+#    assert False # Convert to full?    
+#    for full_filename in IMAGE_LIST:
+#        if type(full_filename) == type((0,)):
+#            offset_metadata = file_read_offset_metadata(full_filename[0])
+#            clean_name = file_clean_name(full_filename[0])
+#        else:
+#            offset_metadata = file_read_offset_metadata(full_filename)
+#            clean_name = file_clean_name(full_filename)
+#
+#        if offset_metadata is None:
+#            continue
+#
+#        if offset_metadata['stars_metadata']['offset'] is None:
+#            continue
+#            
+#        for filename in DISC_DATA:
+#            if filename.endswith(clean_name):
+#                break
+#            
+#        print 'Testing offset for', filename
+#
+#        full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, full_filename)
+#        obs = read_iss_file(full_filename)
+#
+#        disc_data = DISC_DATA[filename]
+#        disc_phase = DISC_PHASE[filename]
+#        disc_incidence = DISC_INCIDENCE[filename]
+#        disc_emission = DISC_EMISSION[filename]
+#        
+#        incidence = disc_incidence
+#        emission = disc_emission
+#        phase = disc_phase
+#        data = disc_data
+#        
+#        cutoff = 80 * oops.RPD
+#        
+#        data = data[np.where(incidence < cutoff)]
+#        emission = emission[np.where(incidence < cutoff)]
+#        phase = phase[np.where(incidence < cutoff)]
+#        incidence = incidence[np.where(incidence < cutoff)]
+#        mean_phase = np.mean(full_phase) * oops.DPR
+#        print 'Mean phase', mean_phase
+#
+#        if mean_phase > 108:
+#            continue
+#                    
+#        ret = sciopt.fmin_powell(minnaert_opt_func, (0.5,0.5),
+#                                 args=(incidence, emission, data),
+#                                 disp=0)
+#        
+#        print ret
+#
+#        k1 = ret[0]
+#        k2 = ret[1]
+#        
+#        new_offset_metadata = master_find_offset(obs, allow_stars=False,
+#                                                 create_overlay=True)
+#        
+#        print 'STAR OFFSET', offset_metadata['stars_metadata']['offset']
+#        print 'MODEL OFFSET', new_offset_metadata['model_offset']
+#        
+##        new_offset_metadata['offset'] = new_offset_metadata['model_offset']
+##        new_offset_metadata['offset'] = offset_metadata['stars_metadata']['offset']
+#        display_offset_data(obs, new_offset_metadata, show_rings=False)
+#
+#
+##==============================================================================
+##
+## INTERPOLATION FUNCTIONS
+## 
+##==============================================================================
 # 
-#==============================================================================
+#def test_interpolation(phase1, phase2, phase3, filter):
+#    actual_phase1 = None
+#    actual_phase2 = None
+#    actual_phase3 = None
+#     
+#    for phase in sorted(DATA_BY_PHASE):
+#        print phase*oops.DPR
+#        if abs(phase-phase1*oops.RPD) < 1*oops.RPD:
+#            actual_phase1 = phase
+#        if abs(phase-phase2*oops.RPD) < 1*oops.RPD:
+#            actual_phase2 = phase
+#        if abs(phase-phase3*oops.RPD) < 1*oops.RPD:
+#            actual_phase3 = phase
+#            
+#    (clean_name1,
+#     disc_data1,
+#     disc_phase1,
+#     disc_incidence1,
+#     disc_emission1,
+#     full_data1,
+#     full_phase1,
+#     full_incidence1,
+#     full_emission1) = DATA_BY_PHASE[actual_phase1][filter]
+#
+#    (clean_name2,
+#     disc_data2,
+#     disc_phase2,
+#     disc_incidence2,
+#     disc_emission2,
+#     full_data2,
+#     full_phase2,
+#     full_incidence2,
+#     full_emission2) = DATA_BY_PHASE[actual_phase2][filter]
+#
+#    (clean_name3,
+#     disc_data3,
+#     disc_phase3,
+#     disc_incidence3,
+#     disc_emission3,
+#     full_data3,
+#     full_phase3,
+#     full_incidence3,
+#     full_emission3) = DATA_BY_PHASE[actual_phase3][filter]
+#    
+#    points = np.zeros((full_data1.shape[0]+full_data3.shape[0], 3))
+#    points[:full_data1.shape[0],0] = full_phase1
+#    points[:full_data1.shape[0],1] = full_incidence1
+#    points[:full_data1.shape[0],2] = np.cos(full_emission1)
+#    points[full_data1.shape[0]:,0] = full_phase3
+#    points[full_data1.shape[0]:,1] = full_incidence3
+#    points[full_data1.shape[0]:,2] = np.cos(full_emission3)
+#
+#    points2 = np.zeros((full_data2.shape[0], 3))
+#    points2[:,0] = full_phase2
+#    points2[:,1] = full_incidence2
+#    points2[:,2] = np.cos(full_emission2)
+#    
+#    values = np.append(full_data1, full_data3)
+#    
+#    new_full_data2 = sciinterp.griddata(points, values, points2, fill_value=0.)
+#  
+#    delta = full_data2 - new_full_data2
+#    print 'Phases', actual_phase1*oops.DPR, actual_phase2*oops.DPR, actual_phase3*oops.DPR
+#    print 'Mean', np.mean(delta)
+#    print 'Std', np.std(delta)
+#    print 'Min', np.min(delta)
+#    print 'Max', np.max(delta)
+#    
+#    full_decimate2 = max(1, len(full_data2) // 10000)
+#                    
+#    full_data2 = full_data2[::full_decimate2]
+#    full_phase2 = full_phase2[::full_decimate2]
+#    full_incidence2 = full_incidence2[::full_decimate2]
+#    full_emission2 = full_emission2[::full_decimate2]
+#
+#    new_full_data2 = new_full_data2[::full_decimate2]
+#
+#    base_color = (1.,0,0)
+#
+#    colors = []
+#    for data_idx in xrange(len(full_data2)):
+#        shade = np.cos(full_emission2[data_idx])
+#        color = (base_color[0] * shade,
+#                 base_color[1] * shade,
+#                 base_color[2] * shade)
+#        colors.append(color)
+#    plt.scatter(full_incidence2*oops.DPR,
+#                full_data2, s=20, c=colors, alpha=0.05,
+#                edgecolors='none')
+#
+#    base_color = (0,0,1.)
+#
+#    colors = []
+#    for data_idx in xrange(len(new_full_data2)):
+#        shade = np.cos(full_emission2[data_idx])
+#        color = (base_color[0] * shade,
+#                 base_color[1] * shade,
+#                 base_color[2] * shade)
+#        colors.append(color)
+#    plt.scatter(full_incidence2*oops.DPR,
+#                new_full_data2, s=20, c=colors, alpha=0.05,
+#                edgecolors='none')
+#                        
+#    plt.xlabel('Incidence angle')
+#    plt.ylabel('I/F')
+#    plt.title('PHASE %7.2f' % (actual_phase2*oops.DPR))
+#    plt.show()
 
-root = tk.Tk()
-root.withdraw()
-
-# Make a new big Titan
-   
-titan = oops.Body.lookup('TITAN')
-new_titan = copy.copy(titan)
-oops.Body.BODY_REGISTRY['TITAN'] = new_titan
-
-#new_titan.radius += 350
-#new_titan.inner_radius += 350
-surface = new_titan.surface
-new_titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (new_titan.radius, new_titan.radius))
-
-titan.name = 'TITAN+ATMOSPHERE'
-titan.radius += 350
-titan.inner_radius += 350
-surface = titan.surface
-titan.surface = oops.surface.Spheroid(surface.origin, surface.frame, (titan.radius, titan.radius))
-oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE'] = titan
-
-# find_optimal_atmosphere()
-analyze_atmosphere_results()
-    
-# 16 - VIO
-# find_offset_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG')
-
-#backplane_one_image('COISS_2032/data/1560496833_1560553326/W1560496994_1_CALIB.IMG', display=True)#, offset=(-1,-4), display=True)#offset=(-1,-2))#display=True, save=False)
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG', offset=(1,-3))#display=True, save=False)
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681936403_1_CALIB.IMG', offset=(1,-2))#display=True, save=False)
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945950_1_CALIB.IMG', offset=(0,-1))#display=True, save=False)
-
-# 16 - RED
-#find_offset_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
-#find_offset_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
-
-# 166 - VIO
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG')
-
-# NAC test images
-#find_offset_one_image('COISS_2022/data/1525327124_1525363592/N1525327174_1_CALIB.IMG')
-
-# 145 - MT3
-#find_offset_one_image('COISS_2030/data/1551868920_1552128641/N1551889179_1_CALIB.IMG')
-#find_offset_one_image('COISS_2062/data/1652952601_1653081456/W1652985414_1_CALIB.IMG')
-
-# 166
-# find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561790952_1_CALIB.IMG') # CLEAR
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794086_1_CALIB.IMG') # VIO
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794119_1_CALIB.IMG') # BL1
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794152_1_CALIB.IMG') # GRN
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794185_1_CALIB.IMG') # RED
-#find_offset_one_image('COISS_2033/data/1561668355_1561837358/W1561794349_1_CALIB.IMG') # MT2
 
 
-# Titan and Rhea
-#find_offset_one_image('COISS_2068/data/1686496870_1686939958/N1686939958_1_CALIB.IMG') # Star-based offset -10, -2
-
-#backplane_one_image('COISS_2057/data/1629783492_1630072138/W1629929515_1_CALIB.IMG', offset=(-3,-4), display=True)
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681910412_1_CALIB.IMG', offset=())
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681916843_1_CALIB.IMG')
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681926406_1_CALIB.IMG')
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681935953_1_CALIB.IMG')
-#backplane_one_image('COISS_2068/data/1680805782_1681997642/W1681945500_1_CALIB.IMG')
-
-
-# Reprocess all the data to make new backplanes
-#backplane_all_images(force=False)
-
-# Read the backplanes
-#read_backplanes()
-
-#test_interpolation(13, 18, 26, 'VIO')
-#test_interpolation(140, 145, 149, 'BL1')
-
-#show_plots_multiple_phases(phases=[16.], filters=['RED'])
-
-#show_plots_multiple(phases=[13,18,26], filters=['VIO'])#['RED','GRN', 'BL1', 'VIO'])
-#show_plots_multiple(phases=[140,145,149], filters=['BL1'])#['RED','GRN', 'BL1', 'VIO'])
-#show_plots_multiple(['CLEAR'])
-
-
-#===============================================================================
-# OLD STUFF 
-#===============================================================================
-
-#plot_canned_result()
-
-#plot_params('dm2')
-
-#optimize_disc('arctan1')
-#plot_double_minnaert()
-#optimize_disc_minnaert()
-
-#optimize_disc_double_minnaert1(name=' 28.65_W1557729551_1')
-#optimize_disc_double_minnaert2()
-
-#optimize_disc(alg='dm2', name=' 81.62_W1589361573_1')
-#optimize_disc_double_minnaert(name=' 64.59_W1539146659_1')
-  
-#optimize_disc_double_minnaert2(name=' 71.46_W1540513147_1')
-
-#test_minnaert_offset()
+# 2-D version
+#def find_offset_one_image(filename, save=True, display=True, verbose=True):
+#    if verbose:
+#        print 'Finding offset for', filename
+#
+#    offset_limit = 10#20#85
+##    if filename.find('/W') != -1:
+##        offset_limit = 8
+#
+#    full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
+#    obs = file_read_iss_file(full_filename)
+#    orig_fov = obs.fov
+#
+#    best_offset = None
+#    best_rms = 1e38
+#    best_overlay = None
+#    orig_overlay = None
+#
+#    bp = oops.Backplane(obs)
+#    
+#    if verbose:
+#        print 'Computing backplanes'
+#    
+#    bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE') * oops.DPR
+#    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE') * oops.DPR
+#    bp_phase = bp.phase_angle('TITAN+ATMOSPHERE') * oops.DPR
+#    
+#    full_mask = bp_incidence.mask
+##    full_mask[bp_emission.vals < 0.80] = True
+#    full_mask[:offset_limit,:] = True
+#    full_mask[-offset_limit:,:] = True
+#    full_mask[:,:offset_limit] = True
+#    full_mask[:,-offset_limit:] = True
+#
+#    bp_incidence.vals[full_mask] = 0.
+#    bp_emission.vals[full_mask] = 0.
+#
+#    lambert = bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
+#    plt.imshow(lambert)
+#    plt.show()
+#
+#    offset_list = find_correlation_and_offset(obs.data, lambert,
+#                                search_size_max=85)
+#    model_offset = offset_list[0][0]
+#    if verbose:
+#        print 'MODEL OFFSET', model_offset
+#    
+#    std_value = np.std(obs.data[full_mask])
+#    median_value = np.median(obs.data[full_mask])
+#    diff_threshold = std_value * 5
+#    if verbose:
+#        print 'DIFF THRESHOLD', diff_threshold
+#    min_threshold = median_value / 10
+#    
+#    total_intersect = None
+#    inc_list = []
+#    for inc_ang in np.arange(0, 180., 10):
+#        intersect = bp.border_atop(('incidence_angle', 'TITAN+ATMOSPHERE'), inc_ang * oops.RPD).vals.astype('float')
+#        intersect[full_mask] = ma.masked
+#        inc_list.append(intersect)
+#        if total_intersect is None:
+#            total_intersect = intersect
+#        else:
+#            total_intersect = np.logical_or(total_intersect, intersect)
+#        
+#    em_list = []
+#    for em_ang in np.arange(2.5, 90., 5):
+#        intersect = bp.border_atop(('emission_angle', 'TITAN+ATMOSPHERE'), em_ang * oops.RPD).vals.astype('float')
+#        intersect[full_mask] = ma.masked
+#        em_list.append(intersect)
+#        total_intersect = np.logical_or(total_intersect, intersect)
+#
+##    plt.imshow(total_intersect)
+##    plt.show()
+#    
+#    ie_list = []
+#    
+#    threshold = 10
+#    
+#    for inc_int in inc_list:
+#        for em_int in em_list:
+#            joint_intersect = np.logical_and(inc_int, em_int)
+##            plt.imshow(joint_intersect)
+##            plt.show()
+#            pixels = np.where(joint_intersect) # in Y,X
+#            pixels = zip(*pixels)
+#            if len(pixels) < 2:
+#                continue
+#            pixels.sort()
+#            if verbose:
+#                print pixels
+#            # There has to be a gap of "threshold" in either x or y coords
+#            gap_y = None
+#            gap_x_pos = False
+#            last_x = None
+#            last_y = None
+#            cluster_xy = None
+#            for y, x in pixels:
+#                if last_y is not None:
+#                    if y-last_y >= threshold:
+#                        gap_y = True
+#                        cluster_xy = y
+#                        break
+#                if last_x is not None:
+#                    if abs(x-last_x) >= threshold:
+#                        gap_y = False
+#                        cluster_xy = x
+#                        gap_x_pos = x-last_x > 0
+#                        break
+#                last_x = x
+#                last_y = y
+#            if verbose:
+#                print gap_y, cluster_xy
+#            if gap_y is None:
+#                # No gap!
+#                continue
+#            cluster1_list = []
+#            cluster2_list = []
+#            for pix in pixels:
+#                if ((gap_y and pix[0] >= cluster_xy) or 
+#                    (not gap_y and gap_x_pos and pix[1] >= cluster_xy) or
+#                    (not gap_y and not gap_x_pos and pix[1] <= cluster_xy)):
+#                    cluster2_list.append(pix)
+#                else:
+#                    cluster1_list.append(pix)
+#            if verbose:
+#                print cluster1_list
+#                print cluster2_list
+#            ie_list.append((cluster1_list, cluster2_list))
+#
+#    data = obs.data
+#    best_rms = 1e38
+#    best_offset = None
+#    
+#    for u_offset in xrange(-offset_limit,offset_limit+1):
+#        u_offset += model_offset[0]
+#        for v_offset in xrange(-offset_limit,offset_limit+1):
+#            v_offset += model_offset[1]
+#            if verbose:
+#                print 'Trying offset', u_offset, v_offset
+#
+#            diff_list = []
+#            
+#            for cluster1_list, cluster2_list in ie_list:
+#                mean1_list = []
+#                mean2_list = []
+#                for pix in cluster1_list:
+#                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
+#                        not 0 <= pix[1]+u_offset < data.shape[1]):
+#                        continue
+#                    mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+#                for pix in cluster2_list:
+#                    if (not 0 <= pix[0]+v_offset < data.shape[0] or
+#                        not 0 <= pix[1]+u_offset < data.shape[1]):
+#                        continue
+#                    mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+#                if len(mean1_list) == 0 or len(mean2_list) == 0:
+#                    continue
+#                mean1 = np.mean(mean1_list)
+#                mean2 = np.mean(mean2_list)
+#                if mean1 < min_threshold or mean2 < min_threshold:
+#                    continue
+#                diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list))
+#                diff_list.append(diff)
+#                
+#            diff_list = np.array(diff_list)
+#
+#            if verbose:
+#                print 'DIFF MIN MAX MEAN STD', np.min(diff_list), np.max(diff_list), np.mean(diff_list), np.std(diff_list)
+#            
+##            if np.max(diff_list) > diff_threshold:
+##                print 'DIFF TOO LARGE'
+##                continue
+#            
+#            rms = np.sqrt(np.sum(diff_list**2))
+#            
+#            if verbose:
+#                print 'RMS', rms
+#                
+#            if rms < best_rms:
+#                best_rms = rms
+#                best_offset = (u_offset, v_offset)
+#
+#    if verbose:
+#        print 'FINAL RESULT', best_offset, best_rms
+#
+#    if display:
+#        full_mask = bp.incidence_angle('TITAN+ATMOSPHERE').mask
+#        orig_overlay = np.zeros(obs.data.shape+(3,))
+#        orig_overlay[:,:,0] = np.logical_not(full_mask)
+#        best_overlay = np.zeros(obs.data.shape+(3,))
+#        best_overlay[:,:,0] = shift_image(np.logical_not(full_mask), -best_offset[0], -best_offset[1])
+#
+#        im = imgdisp.ImageDisp([obs.data, obs.data], [orig_overlay, best_overlay],
+#                               canvas_size=None,
+#                               title=filename, allow_enlarge=True,
+#                               one_zoom=True, auto_update=True)
+#        tk.mainloop()
+#
+#    if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
+#        filter = 'CLEAR'
+#    else:
+#        filter = obs.filter1
+#        if filter == 'CL1':
+#            filter = obs.filter2
+#        elif obs.filter2 != 'CL2':
+#            filter += '+' + obs.filter2
+#    
+#    return best_offset, best_rms, model_offset, filter, np.mean(bp_phase.mvals)
