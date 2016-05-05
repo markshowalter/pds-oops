@@ -83,7 +83,7 @@ NUM_FILTERS = 24
 #
 #===============================================================================
 
-def process_image(filename, force=False):
+def process_image(filename, force=False, recompute=False):
     print '>>> Computing profile for', filename
 
     _, filespec = os.path.split(filename)
@@ -91,10 +91,18 @@ def process_image(filename, force=False):
     
     pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
 
-    if not force and os.path.exists(pickle_path):
+    if not force and not recompute and os.path.exists(pickle_path):
         print 'Pickle file already exists'
         return
     
+    if recompute and os.path.exists(pickle_path):
+        fp = open(pickle_path, 'rb')
+        phase_angle = pickle.load(fp)
+        fp.close()
+        if type(phase_angle) == type(''):
+            print 'Skipping due to previous error', phase_angle
+            return
+        
     full_filename = os.path.join(COISS_2XXX_DERIVED_ROOT, filename)
     obs = file_read_iss_file(full_filename)
     if obs.data.shape[0] < 512:
@@ -150,25 +158,24 @@ def process_image(filename, force=False):
     # Titan's disc.
     phase_angle = bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     
-    plt.imshow(bp_incidence.mvals)
-    plt.show()
-    
     if phase_angle < oops.HALFPI:
         extreme_pos = np.argmin(bp_incidence.mvals)
     else:
         extreme_pos = np.argmax(bp_incidence.mvals)
     extreme_pos = np.unravel_index(extreme_pos, bp_incidence.mvals.shape)
     extreme_uv = (extreme_pos[1], extreme_pos[0])
-    print 'EXTREMUM', extreme_uv
     
     sun_angle = np.arctan2(extreme_uv[1]-titan_center[1], 
-                           extreme_uv[0]-titan_center[0]) % oops.PI
+                           extreme_uv[0]-titan_center[0])
 
     print 'PHASE', phase_angle * oops.DPR,
     print 'FILTER', filter, 'CENTER', titan_center, 'RADIUS', titan_radius,
     print 'RES', titan_resolution, 'RADIUS PIX', titan_radius_pix,
     print 'SUN ANGLE', sun_angle * oops.DPR
 
+#    plt.imshow(bp_incidence.mvals)
+#    plt.show()
+    
     bp_emission = bp.emission_angle('TITAN+ATMOSPHERE')
     
     cluster_gap_threshold = 10
@@ -203,8 +210,8 @@ def process_image(filename, force=False):
     
 #     plt.imshow(obs.data)
 #     plt.figure()
-#     plt.plot(profile_x, profile_y)
-#     plt.show()
+#    plt.plot(profile_x, profile_y)
+#    plt.show()
 
     interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
                                   fill_value=0., kind='cubic')
@@ -257,11 +264,6 @@ def add_profile_to_list(filename, reinterp=False):
         reinterp = True
     fp.close()
 
-    if filter == 'CLEAR' and (90 < phase_angle*oops.DPR < 100):
-        print 'BAD?', filename
-        plt.plot(profile_x, profile_y)
-        plt.show()
-        
     if reinterp:
         print 'Interpolating', filename
         interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
@@ -280,10 +282,8 @@ def add_profile_to_list(filename, reinterp=False):
         pickle.dump(profile, fp)
         fp.close()
 
-    print best_offset
-    
     if profile[10] > 0.1:
-        print 'HIGH I/F VALUE', filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
+#        print 'HIGH I/F VALUE', filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
         return
 #        profile -= np.min(profile[100:-100])
 #        profile = np.clip(profile, 0, 1e38)
@@ -294,10 +294,11 @@ def add_profile_to_list(filename, reinterp=False):
 #        plt.plot(profile)
 #        plt.show()
     
-    if abs(best_offset[0]) > 10:
-        print filename
-        return
-    
+#    if abs(best_offset[0]) > 10:
+#        print best_offset, filename
+#        return
+
+    OFFSET_LIST.append(best_offset)    
     PROFILE_LIST.append((filter, phase_angle, profile))
 
 def bin_profiles(plot=False):
@@ -430,9 +431,13 @@ TITAN_SCAN_RADIUS = titan_atmos.radius
 TITAN_X = np.arange(-TITAN_SCAN_RADIUS, TITAN_SCAN_RADIUS+TITAN_INCR, 
                     TITAN_INCR)        
 
-process_image('COISS_2023/data/1526706719_1526797307/W1526778201_1_CALIB.IMG', force=True)
+#process_image('COISS_2023/data/1526706719_1526797307/W1526778201_1_CALIB.IMG', force=True)
 #process_image('COISS_2049/data/1604402501_1604469049/W1604464865_1_CALIB.IMG', force=True)
-assert False
+#process_image('COISS_2049/data/1604402501_1604469049/W1604466257_1_CALIB.IMG', force=True)
+#process_image('COISS_2049/data/1604402501_1604469049/W1604467653_1_CALIB.IMG', force=True)
+#process_image('COISS_2049/data/1604402501_1604469049/W1604469049_1_CALIB.IMG', force=True)
+
+#assert False
 
 # VIO
 # process_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG') # 16    
@@ -484,7 +489,7 @@ if len(sys.argv) == 2:
 if True:
     for filename in image_list[int(start_frac*len(image_list)):]:
         try:
-            process_image(filename)
+            process_image(filename, recompute=True)
         except RuntimeError:
             print 'Missing SPICE data'
 
@@ -492,17 +497,25 @@ PROFILE_LIST = []
 BY_FILTER_DB = {}    
 PHASE_BIN_GRANULARITY = 10. * oops.RPD
 NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
+OFFSET_LIST = []
 
-if False:
+if True:
     for filename in image_list:#[:10]:
         add_profile_to_list(filename)
-    bin_profiles(plot=True)
+    bin_profiles(plot=False)
+
+offset_list_x = [x[0] for x in OFFSET_LIST]
+offset_list_y = [x[1] for x in OFFSET_LIST]
+
+print 'TOTAL IMAGES', len(offset_list_x)
+print 'MEAN OFFSET X', np.mean(offset_list_x)
+print 'MEAN OFFSET Y', np.mean(offset_list_y)
 
 #plot_profiles_by_phase_filter()
 #plot_rescaled_filters()
 
-#pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
-#fp = open(pickle_file, 'wb')
-#pickle.dump(PHASE_BIN_GRANULARITY, fp)
-#pickle.dump(BY_FILTER_DB, fp)
-#fp.close()
+pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
+fp = open(pickle_file, 'wb')
+pickle.dump(PHASE_BIN_GRANULARITY, fp)
+pickle.dump(BY_FILTER_DB, fp)
+fp.close()

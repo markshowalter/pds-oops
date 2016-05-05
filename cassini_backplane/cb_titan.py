@@ -26,7 +26,6 @@ from cb_config import *
 from cb_correlate import *
 from cb_util_image import *
 from cb_util_oops import *
-from audioop import rms
 
 
 _LOGGING_NAME = 'cb.' + __name__
@@ -185,7 +184,7 @@ def titan_find_symmetry_offset(
     best_along_path_dist = None
     
     # Across Sun angle is perpendicular to main sun angle    
-    a_sun_angle = (sun_angle + oops.HALFPI) % oops.PI
+    a_sun_angle = sun_angle + oops.HALFPI
 
     for along_path_dist in xrange(-offset_limit,offset_limit+1):
         u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
@@ -413,7 +412,7 @@ def titan_navigate(obs, other_model, titan_config=None):
     extreme_uv = (extreme_pos[1], extreme_pos[0])
     
     sun_angle = np.arctan2(extreme_uv[1]-titan_center[1], 
-                           extreme_uv[0]-titan_center[0]) % oops.PI
+                           extreme_uv[0]-titan_center[0])
 
     logger.debug('Sun illumination angle %.2f', sun_angle*oops.DPR)
 
