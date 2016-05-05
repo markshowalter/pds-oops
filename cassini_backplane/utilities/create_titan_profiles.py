@@ -42,25 +42,40 @@ FILTER_COLOR = {
     'CB3': (1,.3,1),
 }    
 
-FILTER_NUMBER = {
-    'CLEAR': 0,
-    
-    'IR1': 1,
-    'IR2': 2,
-    'IR3': 3,
-    'IR5': 4,
-    'RED': 5,
-    'GRN': 6,
-    'BL1': 7,
-    'VIO': 8,
-    
-    'MT2': 9,
-    'CB2': 10,
-
-    'MT3': 11,
-    'CB3': 12,
+FILTER_NUMBER = { # Table VIII
+    'CLEAR': 0,         #  611 NAC  635 WAC
+                # UV1-UV3  258-338 NAC
+    'VIO': 1,           #           420 WAC
+                    # BL2  440 NAC
+    'BL1': 2,           #  451 NAC  460 WAC
+    'GRN': 3,           #  568 NAC  567 WAC
+                    # MT1  619 NAC
+                    # CB1  619 NAC
+                   # CB1a  635 NAC
+                   # CB1b  603 NAC
+    'RED': 4,           #  650 NAC  648 WAC
+    'HAL': 5,           #  656 NAC  656 WAC
+    'MT2': 6,           #  727 NAC  728 WAC
+    'MT2+IRP0': 7,      #  727 NAC  728 WAC + 746 NAC 705 WAC
+    'MT2+IRP90': 8,     #  727 NAC  728 WAC +         705 WAC
+    'CB2': 9,           #  750 NAC  752 WAC
+    'CB2+IRP0': 10,     #  750 NAC  752 WAC + 746 NAC 705 WAC
+    'CB2+IRP90': 11,    #  750 NAC  752 WAC +         705 WAC
+    'IR1': 12,          #  752 NAC  742 WAC
+    'IR2': 13,          #  862 NAC  853 WAC
+    'IR2+IR1': 14,      #  827 NAC  826 WAC (Table IX) 
+    'MT3': 15,          #  889 NAC  890 WAC
+    'MT3+IRP0': 16,     #  889 NAC  890 WAC + 746 NAC 705 WAC
+    'MT3+IRP90': 17,    #  889 NAC  890 WAC +         705 WAC
+    'CB3': 18,          #  938 NAC  939 WAC
+    'CB3+IRP0': 19,     #  938 NAC  939 WAC + 746 NAC 705 WAC
+    'CB3+IRP90': 20,    #  938 NAC  939 WAC +         705 WAC
+    'IR3': 21,          #  930 NAC  918 WAC
+    'IR4': 22,          # 1002 NAC 1001 WAC
+    'IR5': 23,          #          1028 WAC    
 }    
 
+NUM_FILTERS = 24
     
 #===============================================================================
 # 
@@ -68,7 +83,7 @@ FILTER_NUMBER = {
 #
 #===============================================================================
 
-def process_image(filename):
+def process_image(filename, force=False):
     print '>>> Computing profile for', filename
 
     _, filespec = os.path.split(filename)
@@ -76,7 +91,7 @@ def process_image(filename):
     
     pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
 
-    if os.path.exists(pickle_path):
+    if not force and os.path.exists(pickle_path):
         print 'Pickle file already exists'
         return
     
@@ -135,12 +150,16 @@ def process_image(filename):
     # Titan's disc.
     phase_angle = bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     
+    plt.imshow(bp_incidence.mvals)
+    plt.show()
+    
     if phase_angle < oops.HALFPI:
         extreme_pos = np.argmin(bp_incidence.mvals)
     else:
         extreme_pos = np.argmax(bp_incidence.mvals)
     extreme_pos = np.unravel_index(extreme_pos, bp_incidence.mvals.shape)
     extreme_uv = (extreme_pos[1], extreme_pos[0])
+    print 'EXTREMUM', extreme_uv
     
     sun_angle = np.arctan2(extreme_uv[1]-titan_center[1], 
                            extreme_uv[0]-titan_center[0]) % oops.PI
@@ -233,6 +252,11 @@ def add_profile_to_list(filename, reinterp=False):
         reinterp = True
     fp.close()
 
+    if filter == 'CLEAR' and (90 < phase_angle*oops.DPR < 100):
+        print 'BAD?', filename
+        plt.plot(profile_x, profile_y)
+        plt.show()
+        
     if reinterp:
         print 'Interpolating', filename
         interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
@@ -286,6 +310,7 @@ def bin_profiles(plot=False):
             plt.figure()
         for bin_no, bin in enumerate(BY_FILTER_DB[filter]):
             if len(bin) == 0:
+                BY_FILTER_DB[filter][bin_no] = None
                 continue
             phase = bin_no*PHASE_BIN_GRANULARITY*oops.DPR
             if len(bin) == 1:
@@ -305,6 +330,74 @@ def bin_profiles(plot=False):
 
     if plot:
         plt.show()
+
+def plot_profiles_by_phase_filter():
+    num_filters = len(BY_FILTER_DB)
+    for bin_no in xrange(NUM_PHASE_BINS):
+        phase = bin_no*PHASE_BIN_GRANULARITY*oops.DPR
+        first_plot = True
+        for filter_num, filter in sorted([(FILTER_NUMBER[x], x) for x in BY_FILTER_DB]):
+            if filter[:2] != 'CB' and filter[:2] != 'MT':
+                continue
+            bin_contents = BY_FILTER_DB[filter][bin_no]
+            if bin_contents is None:
+                continue
+            x, med_res, num_bins = bin_contents
+            color = colorsys.hsv_to_rgb(
+                     float(filter_num)/NUM_FILTERS, 1, 1)
+            if first_plot:
+                plt.figure()
+                first_plot = False
+            plt.plot(x, med_res, label=('%s (%d)'%(filter, num_bins)), color=color)
+
+        plt.legend()
+        plt.title('Phase %.2f' % phase)
+
+    plt.show()
+
+def plot_rescaled_filters():
+    for filters in [('MT2', 'MT2+IRP0', 'MT2+IRP90'),
+                    ('CB2', 'CB2+IRP0', 'CB2+IRP90'),
+                    ('MT3', 'MT3+IRP0', 'MT3+IRP90'),
+                    ('CB3', 'CB3+IRP0', 'CB3+IRP90')]:
+        for bin_no in xrange(NUM_PHASE_BINS):
+            phase = bin_no*PHASE_BIN_GRANULARITY*oops.DPR
+            master = BY_FILTER_DB[filters[0]][bin_no]
+            if master is None:
+                continue
+            master_x, master_y, master_num = master
+            bad = False
+            first_plot = True            
+            for filter in filters[1:]:
+                slave = BY_FILTER_DB[filter][bin_no]
+                if slave is None:
+                    bad = True
+                    break
+            if bad:
+                continue
+            plt.figure()
+            color = colorsys.hsv_to_rgb(
+                 float(FILTER_NUMBER[filters[0]])/NUM_FILTERS, 1, 1)
+            plt.plot(master_x, master_y, 
+                     label=('%s (%d)'%(filters[0], master_num)), 
+                     color=color)
+            for filter in filters[1:]:
+                slave = BY_FILTER_DB[filter][bin_no]
+                slave_x, slave_y, slave_num = slave
+                scale = np.mean(master_y)/np.mean(slave_y)
+                slave_y = slave_y * scale
+                color = colorsys.hsv_to_rgb(
+                     float(FILTER_NUMBER[filter])/NUM_FILTERS, 1, 1)
+                plt.plot(slave_x, slave_y, 
+                         label=('%s (%d)'%(filter, slave_num)), 
+                         color=color)
+                    
+            plt.legend()
+            plt.title('Phase %.2f' % phase)
+
+    plt.show()
+                    
+
 
 
 #==============================================================================
@@ -331,6 +424,10 @@ TITAN_INCR = 1.
 TITAN_SCAN_RADIUS = titan_atmos.radius
 TITAN_X = np.arange(-TITAN_SCAN_RADIUS, TITAN_SCAN_RADIUS+TITAN_INCR, 
                     TITAN_INCR)        
+
+process_image('COISS_2023/data/1526706719_1526797307/W1526778201_1_CALIB.IMG', force=True)
+#process_image('COISS_2049/data/1604402501_1604469049/W1604464865_1_CALIB.IMG', force=True)
+assert False
 
 # VIO
 #process_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG') # 16    
@@ -388,16 +485,19 @@ if False:
 
 PROFILE_LIST = []
 BY_FILTER_DB = {}    
-PHASE_BIN_GRANULARITY = 5. * oops.RPD
+PHASE_BIN_GRANULARITY = 10. * oops.RPD
 NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
 
 if True:
     for filename in image_list:#[:10]:
         add_profile_to_list(filename)
-    bin_profiles()
+    bin_profiles(plot=True)
 
-pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
-fp = open(pickle_file, 'wb')
-pickle.dump(PHASE_BIN_GRANULARITY, fp)
-pickle.dump(BY_FILTER_DB, fp)
-fp.close()
+#plot_profiles_by_phase_filter()
+#plot_rescaled_filters()
+
+#pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
+#fp = open(pickle_file, 'wb')
+#pickle.dump(PHASE_BIN_GRANULARITY, fp)
+#pickle.dump(BY_FILTER_DB, fp)
+#fp.close()

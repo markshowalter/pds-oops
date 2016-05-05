@@ -697,6 +697,7 @@ def master_find_offset(obs,
                 model_offset = None
                 peak = None
 
+    model_offset = None
     if (model_offset is None and star_offset is None and 
         titan_body_metadata is not None and 
         titan_body_metadata['curvature_ok']):
