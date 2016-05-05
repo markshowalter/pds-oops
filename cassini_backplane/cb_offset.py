@@ -270,6 +270,7 @@ def master_find_offset(obs,
     bodies_model_list = []
     rings_model = None
     rings_overlay_text = None
+    titan_model = None
     final_model = None
     
     if create_overlay:
@@ -313,6 +314,7 @@ def master_find_offset(obs,
     bodies_metadata = {}
     metadata['bodies_metadata'] = bodies_metadata
     metadata['rings_metadata'] = None
+    metadata['titan_metadata'] = None
     metadata['model_offset'] = None
     metadata['secondary_corr_ok'] = None
     # Large
@@ -527,7 +529,7 @@ def master_find_offset(obs,
 
     model_list = []
     used_model_str_list = []
-    titan_metadata = None
+    titan_body_metadata = None
 
     # XXX Deal with moons on the far side of the rings
     if (rings_model is not None and rings_curvature_ok and 
@@ -557,7 +559,7 @@ def master_find_offset(obs,
                 continue
             if body_name == 'TITAN':
                 # Titan can't be used for primary model navigation
-                titan_metadata = body_metadata
+                titan_body_metadata = body_metadata
                 continue
             if ((bodies_cartographic_data is None or
                  body_name not in bodies_cartographic_data) and
@@ -695,15 +697,18 @@ def master_find_offset(obs,
                 model_offset = None
                 peak = None
 
-#    model_offset = None #XXX
     if (model_offset is None and star_offset is None and 
-        titan_metadata is not None and titan_metadata['curvature_ok']):
+        titan_body_metadata is not None and 
+        titan_body_metadata['curvature_ok']):
         logger.info('Model contains only TITAN and no stars - '+
                     'performing Titan photometric navigation')
         main_final_model = None
         if final_model is not None:
             main_final_model = unpad_image(final_model, extend_fov)
-        titan_offset = titan_navigate(obs, main_final_model, titan_config=titan_config)
+        titan_metadata = titan_navigate(obs, main_final_model, 
+                                        titan_config=titan_config)
+        metadata['titan_metadata'] = titan_metadata
+        titan_offset = titan_metadata['offset']
         if titan_offset is not None:
             model_offset = titan_offset
 

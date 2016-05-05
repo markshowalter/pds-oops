@@ -44,14 +44,14 @@ def shift_image(image, offset_u, offset_v):
 
     if offset_u != 0:    
         if offset_u < 0:
-            image[:,:offset_u] = 0
-        else:
             image[:,offset_u:] = 0
+        else:
+            image[:,:offset_u] = 0
     if offset_v != 0:
         if offset_v < 0:
-            image[:offset_v,:] = 0
-        else:
             image[offset_v:,:] = 0
+        else:
+            image[:offset_v,:] = 0
     
     return image
 

@@ -12,11 +12,13 @@ import logging
 
 import copy
 import os
+import pickle
 import time
 
 import numpy as np
 import numpy.ma as ma
 import matplotlib.pyplot as plt
+import scipy.interpolate as interp
 
 import oops
 
@@ -28,37 +30,289 @@ from cb_util_oops import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
+_BASELINE_DB = None
+_PHASE_BIN_GRANULARITY = None
 
-
-
-def _titan_test_offset(data, ie_list, u_offset, v_offset):
-    diff_list = []
+def titan_find_symmetry_offset(
+           obs, sun_angle,
+           min_emission_angle, max_emission_angle, incr_emission_angle,
+           min_incidence_angle, max_incidence_angle, incr_incidence_angle,
+           cluster_gap_threshold, cluster_max_pixels, 
+           offset_limit, mask=None,
+           display_total_intersect=True):
+    """Find the axis of symmetry along the solar angle.
     
-    for cluster1_list, cluster2_list in ie_list:
-        mean1_list = []
-        mean2_list = []
-        for pix in cluster1_list:
-            if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                not 0 <= pix[1]+u_offset < data.shape[1]):
-                return None
-            mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-        for pix in cluster2_list:
-            if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                not 0 <= pix[1]+u_offset < data.shape[1]):
-                return None
-            mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-        mean1 = np.mean(mean1_list)
-        mean2 = np.mean(mean2_list)
-#                if mean1 < min_threshold or mean2 < min_threshold:
-#                    continue
-        diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list)) / np.mean(mean1_list)
-        diff_list.append(diff)
+    Inputs:
+        obs                    The Observation.
         
-    diff_list = np.array(diff_list)
+        sun_angle              The projected angle of the solar illumination
+                               towards the center of Titan. 0 means direct
+                               right-ward illumination and the angle moves
+                               clockwise.
+        
+        min_emission_angle     The series of emission angles used to find
+        max_emission_angle     intersection points.
+        incr_emission_angle
+        
+        min_incidence_angle    The series of incidence angles used to find
+        max_incidence_angle    intersection points.
+        incr_incidence_angle
+        
+        cluster_gap_threshold  The minimum number of pixels required to 
+                               separate two clusters of emission/incidence
+                               intersection points.
+                               
+        cluster_max_pixels     The maximum number of pixels allowed in a 
+                               cluster.
+                               
+        offset_limit           The number of pixels to search on each side
+                               of the centerline.
+                               
+        mask                   A mask of pixels to avoid when looking for
+                               intersect points.
+                               
+    Returns:
+        None if offset finding failed.
+        
+        Otherwise the offset as (u_offset, v_offset), RMS
+    """ 
+    set_obs_bp(obs)
+    data = obs.data
 
-    rms = np.sqrt(np.sum(diff_list**2))
+    bp_incidence = obs.bp.incidence_angle('TITAN+ATMOSPHERE')
+    min_inc = bp_incidence.min()
+    max_inc = bp_incidence.max()
 
-    return rms
+    full_mask = ma.getmaskarray(bp_incidence.mvals)
+    if mask is not None:
+        full_mask = np.logical_or(full_mask, mask != 0.)    
+    
+    # Create circles of incidence and emission
+    total_intersect = None
+    inc_list = []
+    for inc_ang in np.arange(min_incidence_angle,
+                             min(max_inc, max_incidence_angle),
+                             incr_incidence_angle):
+        if inc_ang < min_inc:
+            continue
+        intersect = obs.bp.border_atop(('incidence_angle', 'TITAN+ATMOSPHERE'), 
+                                       inc_ang).vals
+        intersect[full_mask] = 0
+        inc_list.append(intersect)
+        if total_intersect is None:
+            total_intersect = intersect
+        else:
+            total_intersect = np.logical_or(total_intersect, intersect)
+        
+    em_list = []
+    for em_ang in np.arange(min_emission_angle,
+                            max_emission_angle,
+                            incr_emission_angle):
+        intersect = obs.bp.border_atop(('emission_angle', 'TITAN+ATMOSPHERE'), 
+                                       em_ang).vals
+        intersect[full_mask] = 0
+        em_list.append(intersect)
+        if total_intersect is None:
+            total_intersect = intersect
+        else:
+            total_intersect = np.logical_or(total_intersect, intersect)
+
+    if display_total_intersect:
+        plt.figure()
+        plt.imshow(total_intersect)
+        plt.show()
+                
+    # Find the intersections of the circles of I and E. We need two distinct
+    # clusters of points so we can make comparisons between them. The clusters
+    # have to be separated by at least cluster_gap_threshold pixels and there
+    # can be at most cluster_max_pixels in each cluster. These limits to take
+    # of the cases where the circles are almost directly on top of each other.
+    ie_list = []
+
+    for inc_int in inc_list:
+        for em_int in em_list:
+            joint_intersect = np.logical_and(inc_int, em_int)
+            pixels = np.where(joint_intersect) # in Y,X
+            pixels = zip(*pixels) # List of (y,x) pairs
+            # There have to be at least two points of intewunrsection
+            if len(pixels) < 2:
+                continue
+            pixels.sort() # Sort by increasing y then increasing x
+            # There has to be a gap of "gap_threshold" in either x or y coords
+            gap_y = None
+            last_x = None
+            last_y = None
+            cluster_xy = None
+            for y, x in pixels:
+                if last_y is not None:
+                    if y-last_y >= cluster_gap_threshold:
+                        gap_y = True
+                        cluster_xy = y
+                        break
+                last_y = y
+            if gap_y is None:
+                pixels.sort(key=lambda x: (x[1], x[0])) # Now sort by x then y
+                for y, x in pixels:
+                    if last_x is not None:
+                        if abs(x-last_x) >= cluster_gap_threshold:
+                            gap_y = False
+                            cluster_xy = x
+                            break
+                    last_x = x
+            if gap_y is None:
+                # No gap!
+                continue
+            cluster1_list = []
+            cluster2_list = []
+            # pixels is sorted in the correct direction
+            for pix in pixels:
+                if ((gap_y and pix[0] >= cluster_xy) or 
+                    (not gap_y and pix[1] >= cluster_xy)):
+                    cluster2_list.append(pix)
+                else:
+                    cluster1_list.append(pix)
+            if (len(cluster1_list) > cluster_max_pixels or 
+                len(cluster2_list) > cluster_max_pixels):
+                continue
+            ie_list.append((cluster1_list, cluster2_list))
+#            print cluster1_list
+#            print cluster2_list
+#            print
+            
+    best_rms = 1e38
+    best_offset = None
+    best_along_path_dist = None
+    
+    # Across Sun angle is perpendicular to main sun angle    
+    a_sun_angle = (sun_angle + oops.HALFPI) % oops.PI
+
+    for along_path_dist in xrange(-offset_limit,offset_limit+1):
+        u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
+        v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
+
+        diff_list = []
+        
+        for cluster1_list, cluster2_list in ie_list:
+            mean1_list = []
+            mean2_list = []
+            for pix in cluster1_list:
+                if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                    not 0 <= pix[1]+u_offset < data.shape[1]):
+                    # We need to be able to analyze all the data
+                    break
+                mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            for pix in cluster2_list:
+                if (not 0 <= pix[0]+v_offset < data.shape[0] or
+                    not 0 <= pix[1]+u_offset < data.shape[1]):
+                    break
+                mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            if len(mean1_list) == 0 or len(mean2_list) == 0:
+                continue
+            mean1 = np.mean(mean1_list)
+            mean2 = np.mean(mean2_list)
+            diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list)) / np.mean(mean1_list)
+            diff_list.append(diff)
+        else:
+            # All of the pixels were in the image
+            diff_list = np.array(diff_list)
+            rms = np.sqrt(np.sum(diff_list**2))
+            if rms < best_rms:
+                best_rms = rms
+                best_offset = (u_offset, v_offset)
+                best_along_path_dist = along_path_dist
+
+    if (best_along_path_dist is None or 
+        abs(best_along_path_dist) == offset_limit):
+        return None, None
+    
+    return best_offset, best_rms
+    
+def titan_along_track_profile(obs, offset, sun_angle, titan_center,
+                              titan_radius_pix, titan_resolution):
+    """Create a profile along the axis of symmetry.
+    
+    Inputs:
+        obs                The Observation.
+
+        offset             The image offset used to find the axis of symmetry.
+
+        sun_angle          The projected angle of the solar illumination
+                           towards the center of Titan. 0 means direct
+                           right-ward illumination and the angle moves
+                           clockwise.
+
+        titan_center       The center of Titan (U,V) before the offset is
+                           applied.
+                           
+        titan_radius_pix   The radius of Titan in pixels.
+        
+        titan_resolution   The image resolution of titan in km/pix.
+        
+    Returns:
+        profile_x, profile_y
+        
+        profile_x          An array of distances in km from the center of 
+                           Titan.
+                           
+        profile_y          The data values along the track.
+    """
+    data = obs.data
+    
+    profile_x = []
+    profile_y = []
+    
+    for along_path_dist in xrange(-titan_radius_pix,titan_radius_pix+1):
+        # We want to go along the Sun angle
+        u = (int(np.round(along_path_dist * np.cos(sun_angle))) + 
+             offset[0] + titan_center[0])
+        v = (int(np.round(along_path_dist * np.sin(sun_angle))) + 
+             offset[1] + titan_center[1])
+        if (not 0 <= u < data.shape[1] or
+            not 0 <= v < data.shape[0]):
+            continue
+        
+        profile_x.append(along_path_dist * titan_resolution)
+        profile_y.append(data[v,u])
+    
+    profile_x = np.array(profile_x)
+    profile_y = np.array(profile_y)
+    
+    return profile_x, profile_y
+
+def _moving_average(a, n):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    ret[n-1:] /= n
+    ret[:n-1] /= np.arange(1., n)
+    return ret
+
+def _find_min_correlation(a, b, n):
+    best_amt = None
+    best_rms = 1e38
+    pad_a = np.zeros(a.shape[0]+2*n)
+    pad_a[n:a.shape[0]+n] = a
+    for amt in xrange(-n, n+1):
+        a2 = pad_a[amt+n:amt+n+a.shape[0]]
+        rms = np.sum((a2-b)**2)
+        if rms < best_rms:
+            best_rms = rms
+            best_amt = amt
+    return best_amt
+
+def _find_baseline(filter, phase_angle):
+    global _BASELINE_DB, _PHASE_BIN_GRANULARITY
+    if _BASELINE_DB is None:
+        filename = os.path.join(SUPPORT_FILES_ROOT,
+                                'titan-profiles.pickle')
+        fp = open(filename, 'rb')
+        _PHASE_BIN_GRANULARITY = pickle.load(fp)
+        _BASELINE_DB = pickle.load(fp)
+        fp.close()
+    
+    phase_bin = int(phase_angle / _PHASE_BIN_GRANULARITY)
+    profile_x, profile_y, num_images = _BASELINE_DB[filter][phase_bin]
+    
+    return profile_x, profile_y
 
 def titan_navigate(obs, other_model, titan_config=None):
     """Navigate Titan photometrically.
@@ -88,10 +342,22 @@ def titan_navigate(obs, other_model, titan_config=None):
         
     metadata = {}
     metadata['start_time'] = start_time 
-
+    metadata['symmetry_offset'] = None
+    metadata['offset'] = None
+    
     set_obs_bp(obs)
     data = obs.data
-        
+
+    if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
+        filter = 'CLEAR'
+    else:
+        filter = obs.filter1
+        if filter == 'CL1':
+            filter = obs.filter2
+        elif obs.filter2 != 'CL2':
+            filter += '+' + obs.filter2
+
+    # Create the enlarged Titan
     atmos_height = titan_config['atmosphere_height']
     
     logger.info('Performing Titan photometric navigation, '+
@@ -112,196 +378,102 @@ def titan_navigate(obs, other_model, titan_config=None):
     body_atmos.surface = oops.surface.Spheroid(surface.origin, surface.frame, 
                                                (radius, radius))
 
-    ext_bp_lambert = obs.ext_bp.lambert_law('TITAN+ATMOSPHERE')
-    lambert = ext_bp_lambert.vals.astype('float')
-    lambert[ma.getmaskarray(ext_bp_lambert.mvals)] = 0
+    # Titan parameters
+    titan_inv_list = obs.inventory(['TITAN+ATMOSPHERE'], return_type='full')
+    titan_inv = titan_inv_list['TITAN+ATMOSPHERE']
+    titan_center = titan_inv['center_uv']
+    titan_resolution = (titan_inv['resolution'][0]+
+                        titan_inv['resolution'][1])/2
+    titan_radius = titan_inv['outer_radius'] 
+    titan_radius_pix = int(titan_radius / titan_resolution)
 
+    logger.debug('Titan center U,V %d,%d / Resolution %.2f / Radius (km) %.2f / '+
+                 'Radius (pix) %d', titan_center[0], titan_center[1],
+                 titan_resolution, titan_radius, titan_radius_pix)
+    
+    # Find the projected angle of the solar illumination to the center of
+    # Titan's disc.
     bp_incidence = obs.bp.incidence_angle('TITAN+ATMOSPHERE')
-    bp_emission = obs.bp.emission_angle('TITAN+ATMOSPHERE')
-    if other_model is not None:
-        other_model_mask = other_model != 0.    
-        bp_incidence = bp_incidence.mask_where(other_model_mask)
-        bp_emission = bp_emission.mask_where(other_model_mask)
-    full_mask = ma.getmaskarray(bp_incidence.mvals)
-#    print 'Full mask', np.min(full_mask), np.max(full_mask)
-#    plt.imshow(full_mask)
-#    plt.show()
-#    print 'Incudence'
-#    plt.imshow(bp_incidence.mvals)
-#    plt.show()
-#    print 'Emission'
-#    plt.imshow(bp_emission.mvals)
-#    plt.show()
+    phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     
-#    full_mask[:offset_limit,:] = True
-#    full_mask[-offset_limit:,:] = True
-#    full_mask[:,:offset_limit] = True
-#    full_mask[:,-offset_limit:] = True
-#
-#    bp_incidence.vals[full_mask] = 0.
-#    bp_emission.vals[full_mask] = 0.
+    if phase_angle < oops.HALFPI:
+        extreme_pos = np.argmin(bp_incidence.mvals)
+    else:
+        extreme_pos = np.argmax(bp_incidence.mvals)
+    extreme_pos = np.unravel_index(extreme_pos, bp_incidence.mvals.shape)
+    extreme_uv = (extreme_pos[1], extreme_pos[0])
+    
+    sun_angle = np.arctan2(extreme_uv[1]-titan_center[1], 
+                           extreme_uv[0]-titan_center[0]) % oops.PI
 
-    inc_incr = titan_config['incidence_increment']
+    logger.debug('Sun illumination angle %.2f', sun_angle*oops.DPR)
+
+    em_min = titan_config['emission_min']
+    em_max = titan_config['emission_max']
     em_incr = titan_config['emission_increment']
+    inc_min = titan_config['incidence_min']
+    inc_max = titan_config['incidence_max']
+    inc_incr = titan_config['incidence_increment']
     
-    min_inc = bp_incidence.min()
-    max_inc = bp_incidence.max()
+    cluster_gap_threshold = titan_config['cluster_gap_threshold']
+    cluster_max_pixels = titan_config['cluster_max_pixels']
     
-    print 'Inc', min_inc, max_inc
+    max_error_u, max_error_v = MAX_POINTING_ERROR[(obs.data.shape, 
+                                                   obs.detector)]
     
-    show_intersect = True
-    total_intersect = None
-    inc_list = []
-    for inc_ang in np.arange(0, oops.PI, inc_incr):
-        if inc_ang < min_inc:
-            continue
-        if inc_ang > max_inc:
-            break
-        intersect = obs.bp.border_atop(('incidence_angle', 'TITAN+ATMOSPHERE'), 
-                                       inc_ang).vals
-        intersect[full_mask] = 0
-        print 'I', inc_ang
-#        plt.imshow(intersect)
-#        plt.show()
-        inc_list.append(intersect)
-        if show_intersect:
-            if total_intersect is None:
-                total_intersect = intersect
-            else:
-                total_intersect = np.logical_or(total_intersect, intersect)
+    offset_limit = int(np.ceil(np.sqrt(max_error_u**2+max_error_v**2)))+1
+    
+    model_mask = None
+    if other_model is not None:
+        model_mask = other_model != 0
         
-    em_list = []
-    max_emission = titan_config['max_emission_angle']
-    for em_ang in np.arange(em_incr/2, max_emission, em_incr):
-        intersect = obs.bp.border_atop(('emission_angle', 'TITAN+ATMOSPHERE'), 
-                                       em_ang).vals
-        intersect[full_mask] = 0
-        em_list.append(intersect)
-        if show_intersect:
-            total_intersect = np.logical_or(total_intersect, intersect)
-
-    if show_intersect:
-        plt.imshow(total_intersect)
-        plt.show()
+    offset, rms = titan_find_symmetry_offset(
+                     obs, sun_angle,
+                     em_min, em_max, em_incr, inc_min, inc_max, inc_incr,
+                     cluster_gap_threshold, cluster_max_pixels,
+                     offset_limit, mask=model_mask)
     
-    ie_list = []
+    if offset is None:
+        logger.debug('No axis of symmetry found - aborting')
+        metadata['end_time'] = time.time()
+        return metadata
     
-    gap_threshold = titan_config['min_gap_pixels']
-    max_cluster_size = titan_config['max_cluster_size']
+    metadata['symmetry_offset'] = offset
+    logger.debug('Max symmetry offset U,V %d,%d', offset[0], offset[1])
+
+    baseline_x, baseline_profile = _find_baseline(filter, phase_angle)
     
-    for inc_int in inc_list:
-        for em_int in em_list:
-            joint_intersect = np.logical_and(inc_int, em_int)
-            pixels = np.where(joint_intersect) # in Y,X
-            pixels = zip(*pixels)
-            if len(pixels) < 2:
-                continue
-            pixels.sort()
-            # There has to be a gap of "gap_threshold" in either x or y coords
-            gap_y = None
-            gap_x_pos = False
-            last_x = None
-            last_y = None
-            cluster_xy = None
-            for y, x in pixels:
-                if last_y is not None:
-                    if y-last_y >= gap_threshold:
-                        gap_y = True
-                        cluster_xy = y
-                        break
-                if last_x is not None:
-                    if abs(x-last_x) >= gap_threshold:
-                        gap_y = False
-                        cluster_xy = x
-                        gap_x_pos = x-last_x > 0
-                        break
-                last_x = x
-                last_y = y
-            if gap_y is None:
-                # No gap!
-                continue
-            cluster1_list = []
-            cluster2_list = []
-            for pix in pixels:
-                if ((gap_y and pix[0] >= cluster_xy) or 
-                    (not gap_y and gap_x_pos and pix[1] >= cluster_xy) or
-                    (not gap_y and not gap_x_pos and pix[1] <= cluster_xy)):
-                    cluster2_list.append(pix)
-                else:
-                    cluster1_list.append(pix)
-            if (len(cluster1_list) > max_cluster_size or 
-                len(cluster2_list) > max_cluster_size):
-                continue
-            ie_list.append((cluster1_list, cluster2_list))
+    profile_x, profile_y = titan_along_track_profile(
+                     obs, offset, sun_angle, titan_center,
+                     titan_radius_pix, titan_resolution)
 
-    if obs.detector == 'NAC':
-        search_size_max = titan_config['search_size_max'][obs.detector]
-        offset_list = find_correlation_and_offset(
-                                  obs.ext_data, lambert,
-                                  search_size_max=search_size_max)
-        
-        if len(offset_list) == 0:
-            logger.info('Failed to find Titan+atmosphere model offset - aborting')
-            metadata['end_time'] = time.time()
-            return None
-
-        starting_offset = offset_list[0][0]
-        
-        logger.info('Titan+atmosphere seed model offset U,V %d,%d', 
-                    starting_offset[0], starting_offset[1])
-
-        offset_limit_frac = titan_config['offset_limit'][obs.detector]
-        titan_area = bp_incidence.mvals.count()
-        titan_diameter = np.sqrt(titan_area / oops.PI)*2
-        offset_limit1 = max(int(np.ceil(titan_diameter * offset_limit_frac)), 5)
-        offset_limit = (offset_limit1, offset_limit1)
-    else:
-        starting_offset = (0,0)
-        offset_limit = MAX_POINTING_ERROR_WAC
-
-    starting_offset=(0,0)#XXX
-    offset_limit=(15,15)#XXX
-    logger.debug('Photometric search limit size U,V %d,%d', offset_limit[0], offset_limit[1])
+    interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
+                                  fill_value=0., kind='cubic')
+    profile = interp_func(baseline_x)
     
-    search_granularity = titan_config['search_granularity']
+    along_track_distance = _find_min_correlation(baseline_profile, 
+                                                 profile, 
+                                                 offset_limit)
+    along_track_pixel = int(np.round(along_track_distance / titan_resolution))
 
-    offset_boundary_u = (starting_offset[0]-offset_limit[0],
-                         starting_offset[0]+offset_limit[0]+1)
-    offset_boundary_v = (starting_offset[1]-offset_limit[1],
-                         starting_offset[1]+offset_limit[1]+1)
+    logger.debug('Along symmetry distance %.f km, %d pixels',
+                 along_track_distance, along_track_pixel)
     
-    for cur_granularity in [1]:#[search_granularity, 1]: 
-        best_rms = 1e38
-        best_offset = None
-        u_min = max(starting_offset[0]-offset_limit[0], offset_boundary_u[0])
-        u_max = min(starting_offset[0]+offset_limit[0]+1, offset_boundary_u[1])
-        v_min = max(starting_offset[1]-offset_limit[1], offset_boundary_v[0])
-        v_max = min(starting_offset[1]+offset_limit[1]+1, offset_boundary_v[1])
-        res = np.zeros((v_max-v_min+1, u_max-u_min+1))
-        for u_offset in xrange(u_min, u_max, cur_granularity):
-            for v_offset in xrange(v_min, v_max, cur_granularity):
-                rms = _titan_test_offset(data, ie_list, u_offset, v_offset)
-                res[v_offset-v_min, u_offset-u_min] = rms
-                if rms is not None and rms < best_rms:
-                    best_rms = rms
-                    best_offset = (u_offset, v_offset)
+    new_offset = (int(offset[0] - np.cos(sun_angle)*along_track_pixel),
+                  int(offset[1] - np.sin(sun_angle)*along_track_pixel))
 
-        plt.imshow(res)
-        plt.show()
-        
-        if best_rms is None:
-            break
+    logger.info('Final Titan offset U,V %d,%d', 
+                new_offset[0], new_offset[1])
+    metadata['offset'] = new_offset
 
-        starting_offset = best_offset
-        offset_limit = (cur_granularity, cur_granularity)
+    plt.plot(baseline_x, baseline_profile, '-', color='black')
+    plt.plot(baseline_x, profile, '-', color='red')
+    new_titan_x = np.roll(baseline_x, -along_track_distance)
+    new_titan_x = new_titan_x[:-abs(along_track_distance)]
+    new_profile = profile[:-abs(along_track_distance)]
+    plt.plot(new_titan_x, new_profile, '-', color='green')
+    plt.show()
 
-    if best_rms is None:
-        logger.info('No final Titan offset found')
-        best_offset = None
-    else:
-        logger.info('Final Titan offset U,V %d,%d RMS %f', 
-                    best_offset[0], best_offset[1], best_rms)
-    
     metadata['end_time'] = time.time()
 
-    return best_offset
+    return metadata

@@ -1,3 +1,4 @@
+import colorsys
 import copy
 import os
 import pickle
@@ -15,6 +16,7 @@ import oops.inst.cassini.iss as iss
 
 from cb_config import *
 from cb_offset import *
+from cb_titan import *
 from cb_util_file import *
 from cb_util_image import *
 
@@ -109,19 +111,28 @@ def process_image(filename):
     set_obs_bp(obs)
     bp = obs.bp
 
-    bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE') * oops.DPR
+    bp_incidence = bp.incidence_angle('TITAN+ATMOSPHERE')
     full_mask = ma.getmaskarray(bp_incidence.mvals)
     
-    # If the angles touch the edge, skip this image
+    # If the angles touch or are near the edge, skip this image
     inv_mask = np.logical_not(full_mask)
-    if (np.any(inv_mask[0,:]) or np.any(inv_mask[-1,:]) or
-        np.any(inv_mask[:,0]) or np.any(inv_mask[:,-1])):
+    if (np.any(inv_mask[0:6,:]) or np.any(inv_mask[-6:-1,:]) or
+        np.any(inv_mask[:,0:6]) or np.any(inv_mask[:,-6:-1])):
         print 'Skipping due to Titan off edge'
         fp = open(pickle_path, 'wb')
         pickle.dump('Titan off edge', fp)
         fp.close()
         return
 
+    if np.any(obs.data[inv_mask] == 0.):
+        print 'Skipping due to bad image data encroaching on Titan'
+        fp = open(pickle_path, 'wb')
+        pickle.dump('Bad image data', fp)
+        fp.close()
+        return
+
+    # Find the projected angle of the solar illumination to the center of
+    # Titan's disc.
     phase_angle = bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     
     if phase_angle < oops.HALFPI:
@@ -139,154 +150,42 @@ def process_image(filename):
     print 'RES', titan_resolution, 'RADIUS PIX', titan_radius_pix,
     print 'SUN ANGLE', sun_angle * oops.DPR
 
-    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE') * oops.DPR
+    bp_emission = bp.emission_angle('TITAN+ATMOSPHERE')
     
-    bp_incidence.vals[full_mask] = 0.
-    bp_emission.vals[full_mask] = 0.
-
-    # Create circles of incidence and emission
-    total_intersect = None
-    inc_list = []
-    for inc_ang in np.arange(0, 180., 10):
-        intersect = bp.border_atop(('incidence_angle', 'TITAN+ATMOSPHERE'), 
-                                   inc_ang * oops.RPD).vals.astype('float')
-        intersect[full_mask] = ma.masked
-        inc_list.append(intersect)
-        
-    em_list = []
-    for em_ang in np.arange(2.5, 90., 5):
-        intersect = bp.border_atop(('emission_angle', 'TITAN+ATMOSPHERE'), 
-                                   em_ang * oops.RPD).vals.astype('float')
-        intersect[full_mask] = ma.masked
-        em_list.append(intersect)
-
-    ie_list = []
-
-    gap_threshold = 10
-    max_pixels = 10
-
-    for inc_int in inc_list:
-        for em_int in em_list:
-            joint_intersect = np.logical_and(inc_int, em_int)
-            pixels = np.where(joint_intersect) # in Y,X
-            pixels = zip(*pixels) # List of (y,x) pairs
-            # There have to be at least two points of intersection
-            if len(pixels) < 2:
-                continue
-            pixels.sort() # Sort by increasing y then increasing x
-            # There has to be a gap of "gap_threshold" in either x or y coords
-            gap_y = None
-            last_x = None
-            last_y = None
-            cluster_xy = None
-            for y, x in pixels:
-                if last_y is not None:
-                    if y-last_y >= gap_threshold:
-                        gap_y = True
-                        cluster_xy = y
-                        break
-                last_y = y
-            if gap_y is None:
-                pixels.sort(key=lambda x: (x[1], x[0])) # Now sort by x then y
-                for y, x in pixels:
-                    if last_x is not None:
-                        if abs(x-last_x) >= gap_threshold:
-                            gap_y = False
-                            cluster_xy = x
-                            break
-                    last_x = x
-            if gap_y is None:
-                # No gap!
-                continue
-            cluster1_list = []
-            cluster2_list = []
-            # pixels is sorted in the correct direction
-            for pix in pixels:
-                if ((gap_y and pix[0] >= cluster_xy) or 
-                    (not gap_y and pix[1] >= cluster_xy)):
-                    cluster2_list.append(pix)
-                else:
-                    cluster1_list.append(pix)
-#            print cluster1_list
-#            print cluster2_list
-            if (len(cluster1_list) > max_pixels or 
-                len(cluster2_list) > max_pixels):
-                continue
-            ie_list.append((cluster1_list, cluster2_list))
-
-    data = obs.data
-    best_rms = 1e38
-    best_offset = None
-
-    # Across Sun angle is perpendicular to main sun angle    
-    a_sun_angle = (sun_angle + oops.HALFPI) % oops.PI
+    cluster_gap_threshold = 10
+    cluster_max_pixels = 10
+    wac_offset_limit = 10
+    offset_limit = int(np.ceil(wac_offset_limit*np.sqrt(2)))+1
     
-    for along_path_dist in xrange(-titan_radius_pix,titan_radius_pix+1):
-        u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
-        v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
-
-        diff_list = []
-        
-        for cluster1_list, cluster2_list in ie_list:
-            mean1_list = []
-            mean2_list = []
-            for pix in cluster1_list:
-                if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                    not 0 <= pix[1]+u_offset < data.shape[1]):
-                    continue
-                mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-            for pix in cluster2_list:
-                if (not 0 <= pix[0]+v_offset < data.shape[0] or
-                    not 0 <= pix[1]+u_offset < data.shape[1]):
-                    continue
-                mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
-            if len(mean1_list) == 0 or len(mean2_list) == 0:
-                continue
-            mean1 = np.mean(mean1_list)
-            mean2 = np.mean(mean2_list)
-            diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list))
-            diff_list.append(diff)
-            
-        diff_list = np.array(diff_list)
-
-        rms = np.sqrt(np.sum(diff_list**2))
-        
-        if rms < best_rms:
-            best_rms = rms
-            best_offset = (u_offset, v_offset)
-
-#        print along_path_dist, u_offset, v_offset, rms
+    best_offset, best_rms = titan_find_symmetry_offset(
+                obs, sun_angle,
+                2.5*oops.RPD, oops.HALFPI, 5*oops.RPD,
+                5., oops.PI, 5*oops.RPD,
+                cluster_gap_threshold, cluster_max_pixels,
+                offset_limit)
+    
+    if best_offset is None:
+        print 'Symmetry offset finding failed'
+        fp = open(pickle_path, 'wb')
+        pickle.dump('Symmetry offset finding failed', fp)
+        fp.close()
+        return
         
     print 'FINAL RESULT', best_offset, best_rms
 
-    # Now get the slice along the sun angle
-
-    slice_x = []
-    slice_y = []
+    # Now get the profile along the sun angle
+    profile_x, profile_y = titan_along_track_profile(obs, best_offset,
+                                                 sun_angle, titan_center,
+                                                 titan_radius_pix,
+                                                 titan_resolution)
     
-    for along_path_dist in xrange(-titan_radius_pix,titan_radius_pix+1):
-        # We want to go along the Sun angle
-        u = (int(np.round(along_path_dist * np.cos(sun_angle))) + 
-             best_offset[0] + titan_center[0])
-        v = (int(np.round(along_path_dist * np.sin(sun_angle))) + 
-             best_offset[1] + titan_center[1])
-        if (not 0 <= u < data.shape[1] or
-            not 0 <= v < data.shape[0]):
-            continue
-        
-        slice_x.append(along_path_dist * titan_resolution)
-        slice_y.append(data[v,u])
-    
-    slice_x = np.array(slice_x)
-    slice_y = np.array(slice_y)
-    
-#    interp_func = interp.interp1d(slice_x, slice_y, bounds_error=False, fill_value=0., kind='cubic')
+#    interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, fill_value=0., kind='cubic')
 #    res_y = interp_func(TITAN_X)
     
-#    plt.imshow(obs.data)
-#    plt.figure()
-#    plt.plot(slice_x, slice_y)
-#    plt.show()
+    plt.imshow(obs.data)
+    plt.figure()
+    plt.plot(profile_x, profile_y)
+    plt.show()
 
     fp = open(pickle_path, 'wb')
     pickle.dump(phase_angle, fp)
@@ -296,11 +195,116 @@ def process_image(filename):
     pickle.dump(sun_angle, fp)
     pickle.dump(titan_center, fp)
     pickle.dump(best_offset, fp)
-    pickle.dump(slice_x, fp)
-    pickle.dump(slice_y, fp)
+    pickle.dump(profile_x, fp)
+    pickle.dump(profile_y, fp)
     fp.close()
     
     return
+
+
+def add_profile_to_list(filename, reinterp=False):
+    _, filespec = os.path.split(filename)
+    filespec = filespec.replace('_CALIB.IMG', '')
+    
+    pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
+
+    if not os.path.exists(pickle_path):
+        return
+    
+#    print '>>> Reading profile for', filename
+
+    fp = open(pickle_path, 'rb')
+    phase_angle = pickle.load(fp)
+    if type(phase_angle) == type(''):
+#        print 'Error:', phase_angle
+        fp.close()
+        return
+    filter = pickle.load(fp)
+    titan_resolution = pickle.load(fp)
+    titan_radius = pickle.load(fp)
+    sun_angle = pickle.load(fp)
+    titan_center = pickle.load(fp)
+    best_offset = pickle.load(fp)
+    profile_x = pickle.load(fp)
+    profile_y = pickle.load(fp)
+    try:
+        profile = pickle.load(fp)
+    except:
+        reinterp = True
+    fp.close()
+
+    if reinterp:
+        print 'Interpolating', filename
+        interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
+                                      fill_value=0., kind='cubic')
+        profile = interp_func(TITAN_X)
+        fp = open(pickle_path, 'wb')
+        pickle.dump(phase_angle, fp)
+        pickle.dump(filter, fp)
+        pickle.dump(titan_resolution, fp)
+        pickle.dump(titan_radius, fp)
+        pickle.dump(sun_angle, fp)
+        pickle.dump(titan_center, fp)
+        pickle.dump(best_offset, fp)
+        pickle.dump(profile_x, fp)
+        pickle.dump(profile_y, fp)
+        pickle.dump(profile, fp)
+        fp.close()
+
+    print best_offset
+    
+    if profile[10] > 0.1:
+        print 'HIGH I/F VALUE', filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
+        return
+#        profile -= np.min(profile[100:-100])
+#        profile = np.clip(profile, 0, 1e38)
+#        plt.plot(profile)
+#        plt.show()
+    
+#    if abs(best_offset[0]) > 10:
+#        plt.plot(profile)
+#        plt.show()
+    
+    if abs(best_offset[0]) > 10:
+        print filename
+        return
+    
+    PROFILE_LIST.append((filter, phase_angle, profile))
+
+def bin_profiles(plot=False):
+    for profile in PROFILE_LIST:
+        filter, phase_angle, profile = profile
+        if filter not in BY_FILTER_DB:
+            entry = [[] for x in xrange(NUM_PHASE_BINS)]
+            BY_FILTER_DB[filter] = entry
+        entry = BY_FILTER_DB[filter]
+        bin_num = int(phase_angle / PHASE_BIN_GRANULARITY)
+        entry[bin_num].append(profile)
+        
+    for filter in sorted(BY_FILTER_DB):
+        if plot:
+            plt.figure()
+        for bin_no, bin in enumerate(BY_FILTER_DB[filter]):
+            if len(bin) == 0:
+                continue
+            phase = bin_no*PHASE_BIN_GRANULARITY*oops.DPR
+            if len(bin) == 1:
+                med_res = bin[0]
+            else:
+                med_res = np.median(zip(*bin), axis=1)
+            BY_FILTER_DB[filter][bin_no] = (TITAN_X, med_res, len(bin))
+            print filter, bin_no*PHASE_BIN_GRANULARITY*oops.DPR, len(bin)
+            if plot:
+                color = colorsys.hsv_to_rgb(
+                         phase/180, 1, 1)
+                plt.plot(TITAN_X, med_res, label=('%.1f (%d)'%(phase, len(bin))), color=color)
+
+        if plot:
+            plt.legend()
+            plt.title(filter)
+
+    if plot:
+        plt.show()
 
 
 #==============================================================================
@@ -375,9 +379,25 @@ start_frac = 0
 if len(sys.argv) == 2:
     start_frac = float(sys.argv[1])
     
-for filename in image_list[int(start_frac*len(image_list)):]:
-    try:
-        process_image(filename)
-    except RuntimeError:
-        print 'Missing SPICE data'
-    
+if False:
+    for filename in image_list[int(start_frac*len(image_list)):]:
+        try:
+            process_image(filename)
+        except RuntimeError:
+            print 'Missing SPICE data'
+
+PROFILE_LIST = []
+BY_FILTER_DB = {}    
+PHASE_BIN_GRANULARITY = 5. * oops.RPD
+NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
+
+if True:
+    for filename in image_list:#[:10]:
+        add_profile_to_list(filename)
+    bin_profiles()
+
+pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
+fp = open(pickle_file, 'wb')
+pickle.dump(PHASE_BIN_GRANULARITY, fp)
+pickle.dump(BY_FILTER_DB, fp)
+fp.close()
