@@ -160,7 +160,7 @@ def process_image(filename):
     best_offset, best_rms = titan_find_symmetry_offset(
                 obs, sun_angle,
                 2.5*oops.RPD, oops.HALFPI, 5*oops.RPD,
-                5., oops.PI, 5*oops.RPD,
+                5.*oops.RPD, oops.PI, 5*oops.RPD,
                 cluster_gap_threshold, cluster_max_pixels,
                 offset_limit)
     
@@ -182,10 +182,14 @@ def process_image(filename):
 #    interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, fill_value=0., kind='cubic')
 #    res_y = interp_func(TITAN_X)
     
-    plt.imshow(obs.data)
-    plt.figure()
-    plt.plot(profile_x, profile_y)
-    plt.show()
+#     plt.imshow(obs.data)
+#     plt.figure()
+#     plt.plot(profile_x, profile_y)
+#     plt.show()
+
+    interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
+                                  fill_value=0., kind='cubic')
+    interp_profile = interp_func(TITAN_X)
 
     fp = open(pickle_path, 'wb')
     pickle.dump(phase_angle, fp)
@@ -197,6 +201,7 @@ def process_image(filename):
     pickle.dump(best_offset, fp)
     pickle.dump(profile_x, fp)
     pickle.dump(profile_y, fp)
+    pickle.dump(interp_profile, fp)
     fp.close()
     
     return
@@ -333,7 +338,7 @@ TITAN_X = np.arange(-TITAN_SCAN_RADIUS, TITAN_SCAN_RADIUS+TITAN_INCR,
                     TITAN_INCR)        
 
 # VIO
-#process_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG') # 16    
+# process_image('COISS_2068/data/1680805782_1681997642/W1681926856_1_CALIB.IMG') # 16    
 #process_image('COISS_2063/data/1655742537_1655905033/W1655808265_1_CALIB.IMG') # 30
 #process_image('COISS_2068/data/1683372651_1683615321/W1683615178_1_CALIB.IMG') # 45
 #process_image('COISS_2030/data/1552197101_1552225837/W1552216646_1_CALIB.IMG') # 60
@@ -379,7 +384,7 @@ start_frac = 0
 if len(sys.argv) == 2:
     start_frac = float(sys.argv[1])
     
-if False:
+if True:
     for filename in image_list[int(start_frac*len(image_list)):]:
         try:
             process_image(filename)
@@ -391,7 +396,7 @@ BY_FILTER_DB = {}
 PHASE_BIN_GRANULARITY = 5. * oops.RPD
 NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
 
-if True:
+if False:
     for filename in image_list:#[:10]:
         add_profile_to_list(filename)
     bin_profiles()
