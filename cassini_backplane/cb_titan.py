@@ -26,6 +26,7 @@ from cb_config import *
 from cb_correlate import *
 from cb_util_image import *
 from cb_util_oops import *
+from audioop import rms
 
 
 _LOGGING_NAME = 'cb.' + __name__
@@ -39,7 +40,7 @@ def titan_find_symmetry_offset(
            min_incidence_angle, max_incidence_angle, incr_incidence_angle,
            cluster_gap_threshold, cluster_max_pixels, 
            offset_limit, mask=None,
-           display_total_intersect=True):
+           display_total_intersect=False):
     """Find the axis of symmetry along the solar angle.
     
     Inputs:
@@ -189,37 +190,45 @@ def titan_find_symmetry_offset(
     for along_path_dist in xrange(-offset_limit,offset_limit+1):
         u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
         v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
+#         print along_path_dist, u_offset, v_offset
 
         diff_list = []
         
         for cluster1_list, cluster2_list in ie_list:
             mean1_list = []
             mean2_list = []
+            bad_cluster = False
             for pix in cluster1_list:
                 if (not 0 <= pix[0]+v_offset < data.shape[0] or
                     not 0 <= pix[1]+u_offset < data.shape[1]):
                     # We need to be able to analyze all the data
+                    bad_cluster = True
                     break
                 mean1_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            if bad_cluster:
+                continue
             for pix in cluster2_list:
                 if (not 0 <= pix[0]+v_offset < data.shape[0] or
                     not 0 <= pix[1]+u_offset < data.shape[1]):
+                    bad_cluster = True
                     break
                 mean2_list.append(data[pix[0]+v_offset, pix[1]+u_offset])
+            if bad_cluster:
+                continue
             if len(mean1_list) == 0 or len(mean2_list) == 0:
                 continue
             mean1 = np.mean(mean1_list)
             mean2 = np.mean(mean2_list)
             diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list)) / np.mean(mean1_list)
             diff_list.append(diff)
-        else:
-            # All of the pixels were in the image
-            diff_list = np.array(diff_list)
-            rms = np.sqrt(np.sum(diff_list**2))
-            if rms < best_rms:
-                best_rms = rms
-                best_offset = (u_offset, v_offset)
-                best_along_path_dist = along_path_dist
+
+        diff_list = np.array(diff_list)
+        rms = np.sqrt(np.sum(diff_list**2))
+#         print rms
+        if rms < best_rms:
+            best_rms = rms
+            best_offset = (u_offset, v_offset)
+            best_along_path_dist = along_path_dist
 
     if (best_along_path_dist is None or 
         abs(best_along_path_dist) == offset_limit):
