@@ -158,10 +158,12 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     if body_v+body_v_size <= obs.ext_data.shape[0]:
         dist_from_center[body_v+body_v_size:,:] = 1e38    
 
-    # Don't do anything too close to the top or bottom edges because text
-    # has height
-    dist_from_center[:5,:] = 1e38
-    dist_from_center[-5:,:] = 1e38
+    # Don't do anything too close to the edges (and text
+    # has height)
+    dist_from_center[:extend_fov[1]+5,:] = 1e38
+    dist_from_center[-extend_fov[1]-5:,:] = 1e38
+    dist_from_center[:,:extend_fov[0]+1] = 1e38
+    dist_from_center[:,-extend_fov[0]:] = 1e38
     
     # Mask out the areas where bodies are sitting so we don't draw text over
     # them
@@ -292,6 +294,8 @@ def bodies_create_model(obs, body_name, inventory,
                            correlation.
         'limb_ok'          True if the limb is sufficiently sharp to permit
                            correlation.
+        'entirely_visible' True if the body is entirely visible even if shifted
+                           to the maximum extent.
         'latlon_mask'      A mask showing which lat/lon are visible in the
                            image.
         'start_time'       The time (s) when bodies_create_model was called.
@@ -311,6 +315,7 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['size_ok'] = None
     metadata['curvature_ok'] = None
     metadata['limb_ok'] = None
+    metadata['entirely_visible'] = None
     metadata['latlon_mask'] = None
     metadata['start_time'] = start_time 
 
@@ -347,7 +352,8 @@ def bodies_create_model(obs, body_name, inventory,
         # Body is entirely visible - no part is off the edge even when shifting
         # the extended FOV
         entirely_visible = True
-        
+    metadata['entirely_visible'] = entirely_visible
+    
     curvature_threshold_frac = bodies_config['curvature_threshold_frac']
     curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
     u_center = (u_min+u_max)/2

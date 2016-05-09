@@ -1036,34 +1036,40 @@ def offset_create_overlay_image(obs, metadata,
                                  cspice.et2utc(obs.midtime, 'C', 0)))
     data_lines.append('%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2))
     data_line = ''
-    stars_ok = False
-    model_ok = False
-    if (metadata['stars_metadata'] is not None and
+    offset_winner = metadata['offset_winner']
+    star_offset = None
+    if (metadata['stars_metadata'] is not None and 
         metadata['stars_metadata']['offset'] is not None):
-        if metadata['offset_winner'] == 'STARS':
-            data_line += 'Stars *YES*'
-        else:
-            data_line += 'Stars YES'
-        stars_ok = True
+        star_offset = metadata['stars_metadata']['offset']
+    model_offset = metadata['model_offset']
+    titan_offset = metadata['titan_offset']
+    
+    titan_offset = None
+    if star_offset is None:
+        data_line += 'Stars N/A'
     else:
-        data_line += 'Stars NO'
-    if metadata['model_offset'] is not None:
-        model_ok = True
-        if (metadata['offset_winner'] != 'STARS' and
-            metadata['offset_winner'] != 'TITAN'):
-            data_line += ' / Model *YES*'
+        if offset_winner == 'STARS':
+            data_line += 'STARS'
         else:
-            data_line += ' / Model YES'
+            data_line += 'Stars'
+        data_line += ' %.2f,%.2f' % star_offset
+    if model_offset is None:
+        data_line += ' | Model N/A'
     else:
-        data_line += ' / Model NO'
-    if metadata['titan_offset'] is not None:
-        model_ok = True
-        if metadata['offset_winner'] == 'TITAN':
-            data_line += ' / Titan *YES*'
+        if (offset_winner != 'STARS' and
+            offset_winner != 'TITAN'):
+            data_line += ' | MODEL'
         else:
-            data_line += ' / Titan YES'
+            data_line += ' | Model'
+        data_line += ' %d,%d' % model_offset
+    if titan_offset is None:
+        data_line += ' | Titan N/A'
     else:
-        data_line += ' / Titan NO'
+        if offset_winner == 'TITAN':
+            data_line += ' | TITAN'
+        else:
+            data_line += ' | Titan'
+        data_line += ' %d,%d' % titan_offset
     data_lines.append(data_line)
     model_contents = metadata['model_contents']
     if model_contents is not None and model_contents != []:
