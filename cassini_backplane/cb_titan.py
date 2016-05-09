@@ -310,6 +310,9 @@ def _find_baseline(filter, phase_angle):
         _BASELINE_DB = pickle.load(fp)
         fp.close()
     
+    if filter not in _BASELINE_DB:
+        return None
+    
     phase_bin = int(phase_angle / _PHASE_BIN_GRANULARITY)
     entry = _BASELINE_DB[filter][phase_bin]
     if entry is None:
@@ -370,11 +373,24 @@ def titan_navigate(obs, other_model, titan_config=None):
         elif obs.filter2 != 'CL2':
             filter += '+' + obs.filter2
 
+    ret = _find_baseline(filter, phase_angle)
+
+    if ret is None:
+        logger.info('No baseline profile for filter %s and '+
+                    'phase angle %.2f', filter, phase_angle*oops.DPR)
+        metadata['end_time'] = time.time()
+        return metadata
+
+    baseline_x, baseline_profile, num_images = ret
+    metadata['num_images'] = num_images
+    
+    logger.info('Baseline profile for filter %s phase angle %.2f was '+
+                'constructed from %d images', filter, phase_angle*oops.DPR,
+                num_images)
+    
     # Create the enlarged Titan
     atmos_height = titan_config['atmosphere_height']
-    
-    logger.info('Performing Titan photometric navigation, '+
-                'atmosphere height %.0f', atmos_height)
+    logger.info('Atmosphere height %.0f', atmos_height)
 
     body_titan = oops.Body.lookup('TITAN')
     try:
@@ -457,21 +473,6 @@ def titan_navigate(obs, other_model, titan_config=None):
     metadata['symmetry_offset'] = offset
     logger.debug('Max symmetry offset U,V %d,%d', offset[0], offset[1])
 
-    ret = _find_baseline(filter, phase_angle)
-
-    if ret is None:
-        logger.info('No baseline profile information for filter %s and '+
-                    'phase angle %.2f', filter, phase_angle*oops.DPR)
-        metadata['end_time'] = time.time()
-        return metadata
-
-    baseline_x, baseline_profile, num_images = ret
-    metadata['num_images'] = num_images
-    
-    logger.info('Baseline profile for filter %s phase angle %.2f was '+
-                'constructed from %d images', filter, phase_angle*oops.DPR,
-                num_images)
-    
     profile_x, profile_y = titan_along_track_profile(
                      obs, offset, sun_angle, titan_center,
                      titan_radius_pix, titan_resolution)
