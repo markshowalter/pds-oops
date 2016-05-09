@@ -496,13 +496,16 @@ def titan_navigate(obs, other_model, titan_config=None):
                 new_offset[0], new_offset[1])
     metadata['offset'] = new_offset
 
-#    plt.plot(baseline_x, baseline_profile, '-', color='black')
-#    plt.plot(baseline_x, profile, '-', color='red')
     new_titan_x = np.roll(baseline_x, -along_track_distance)
     new_titan_x = new_titan_x[:-abs(along_track_distance)]
     new_profile = profile[:-abs(along_track_distance)]
-#    plt.plot(new_titan_x, new_profile, '-', color='green')
-#    plt.show()
+    
+    if True:
+        plt.figure()
+        plt.plot(baseline_x, baseline_profile, '-', color='black')
+        plt.plot(baseline_x, profile, '-', color='red')
+        plt.plot(new_titan_x, new_profile, '-', color='green')
+        plt.show()
 
     metadata['end_time'] = time.time()
 

@@ -232,7 +232,20 @@ def process_image(filename, force=False, recompute=False):
     
     return
 
-
+def del_pickle_if_previously_computed(filename):
+    _, filespec = os.path.split(filename)
+    filespec = filespec.replace('_CALIB.IMG', '')
+    
+    pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
+    if not os.path.exists(pickle_path):
+        return
+    fp = open(pickle_path, 'rb')
+    phase_angle = pickle.load(fp)
+    fp.close()
+    if type(phase_angle) == type(''):
+        return
+    os.remove(pickle_path)
+    
 def add_profile_to_list(filename, reinterp=False):
     _, filespec = os.path.split(filename)
     filespec = filespec.replace('_CALIB.IMG', '')
@@ -530,8 +543,9 @@ if len(sys.argv) == 2:
     
 if False:
     for filename in image_list[int(start_frac*len(image_list)):]:
+#         del_pickle_if_previously_computed(filename)
         try:
-            process_image(filename, recompute=True)
+            process_image(filename)
         except RuntimeError:
             print 'Missing SPICE data'
 
@@ -541,23 +555,23 @@ PHASE_BIN_GRANULARITY = 10. * oops.RPD
 NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
 OFFSET_LIST = []
 
-if True:
+if False:
     for filename in image_list:#[:10]:
         add_profile_to_list(filename)
     bin_profiles(plot=False)
 
-offset_list_x = [x[0] for x in OFFSET_LIST]
-offset_list_y = [x[1] for x in OFFSET_LIST]
-
-print 'TOTAL IMAGES', len(offset_list_x)
-print 'MEAN OFFSET X', np.mean(offset_list_x)
-print 'MEAN OFFSET Y', np.mean(offset_list_y)
-
-#plot_profiles_by_phase_filter()
-#plot_rescaled_filters()
-
-pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
-fp = open(pickle_file, 'wb')
-pickle.dump(PHASE_BIN_GRANULARITY, fp)
-pickle.dump(BY_FILTER_DB, fp)
-fp.close()
+    offset_list_x = [x[0] for x in OFFSET_LIST]
+    offset_list_y = [x[1] for x in OFFSET_LIST]
+    
+    print 'TOTAL IMAGES', len(offset_list_x)
+    print 'MEAN OFFSET X', np.mean(offset_list_x)
+    print 'MEAN OFFSET Y', np.mean(offset_list_y)
+    
+    #plot_profiles_by_phase_filter()
+    #plot_rescaled_filters()
+    
+    pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
+    fp = open(pickle_file, 'wb')
+    pickle.dump(PHASE_BIN_GRANULARITY, fp)
+    pickle.dump(BY_FILTER_DB, fp)
+    fp.close()

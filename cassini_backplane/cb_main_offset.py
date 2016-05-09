@@ -114,8 +114,9 @@ if len(command_list) == 0:
 #    command_line_str = 'N1702239215_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS 14,-6) (TITAN 13,-4)
 #    command_line_str = 'N1702240651_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 14,-3)
 #    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
-#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
+#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --disp1lay-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
 
+    command_line_str = 'W1491009791_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # TEST 
 
 
 
