@@ -19,12 +19,15 @@ import numpy as np
 import numpy.ma as ma
 import matplotlib.pyplot as plt
 import scipy.interpolate as interp
+import Tkinter as tk
 
+from imgdisp import *
 import oops
 
 from cb_config import *
 from cb_correlate import *
 from cb_util_image import *
+from cb_util_misc import *
 from cb_util_oops import *
 
 
@@ -38,7 +41,7 @@ def titan_find_symmetry_offset(
            min_emission_angle, max_emission_angle, incr_emission_angle,
            min_incidence_angle, max_incidence_angle, incr_incidence_angle,
            cluster_gap_threshold, cluster_max_pixels, 
-           offset_limit, mask=None,
+           offset_limit, titan_size_u=None, titan_size_v=None, mask=None,
            display_total_intersect=False):
     """Find the axis of symmetry along the solar angle.
     
@@ -70,6 +73,13 @@ def titan_find_symmetry_offset(
                                
         mask                   A mask of pixels to avoid when looking for
                                intersect points.
+                               
+        titan_size_u           The size of Titan's bounding box in pixels.
+        titan_size_v           This is used to make sure the symmetry finding
+                               doesn't search an area that is even bigger
+                               than Titan, making it more likely that the black
+                               void will show up as the symmetric axis. This
+                               is not a perfect solution to the problem.
                                
     Returns:
         None if offset finding failed.
@@ -189,6 +199,10 @@ def titan_find_symmetry_offset(
     for along_path_dist in xrange(-offset_limit,offset_limit+1):
         u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
         v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
+        if ((titan_size_u is not None and abs(u_offset) > titan_size_u) or
+            (titan_size_v is not None and abs(v_offset) > titan_size_v)):
+            continue
+            
 #         print along_path_dist, u_offset, v_offset
 
         diff_list = []
@@ -223,7 +237,6 @@ def titan_find_symmetry_offset(
 
         diff_list = np.array(diff_list)
         rms = np.sqrt(np.sum(diff_list**2))
-#         print rms
         if rms < best_rms:
             best_rms = rms
             best_offset = (u_offset, v_offset)
@@ -232,7 +245,7 @@ def titan_find_symmetry_offset(
     if (best_along_path_dist is None or 
         abs(best_along_path_dist) == offset_limit):
         return None, None
-    
+
     return best_offset, best_rms
     
 def titan_along_track_profile(obs, offset, sun_angle, titan_center,
@@ -287,26 +300,6 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
     
     return profile_x, profile_y
 
-def _moving_average(a, n):
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    ret[n-1:] /= n
-    ret[:n-1] /= np.arange(1., n)
-    return ret
-
-def _find_min_correlation(a, b, n):
-    best_amt = None
-    best_rms = 1e38
-    pad_a = np.zeros(a.shape[0]+2*n)
-    pad_a[n:a.shape[0]+n] = a
-    for amt in xrange(-n, n+1):
-        a2 = pad_a[amt+n:amt+n+a.shape[0]]
-        rms = np.sum((a2-b)**2)
-        if rms < best_rms:
-            best_rms = rms
-            best_amt = amt
-    return best_amt
-
 def _find_baseline(filter, phase_angle):
     global _BASELINE_DB, _PHASE_BIN_GRANULARITY
     if _BASELINE_DB is None:
@@ -318,12 +311,19 @@ def _find_baseline(filter, phase_angle):
         fp.close()
     
     phase_bin = int(phase_angle / _PHASE_BIN_GRANULARITY)
-    profile_x, profile_y, num_images = _BASELINE_DB[filter][phase_bin]
+    entry = _BASELINE_DB[filter][phase_bin]
+    if entry is None:
+        return None
     
-    return profile_x, profile_y
+    profile_x, profile_y, num_images = entry
+     
+    return profile_x, profile_y, num_images
 
 def titan_navigate(obs, other_model, titan_config=None):
     """Navigate Titan photometrically.
+    
+    We don't deal with models and text labels here; those are assumed to have 
+    been taken care of during the earlier general bodies pass.
     
     Inputs:
         obs                The Observation.
@@ -334,10 +334,14 @@ def titan_navigate(obs, other_model, titan_config=None):
         titan_config       Configuration parameters.
 
     Returns:
-        offset
+        metadata
         
         metadata is a dictionary containing
 
+        'offset'           The final navigated offset.
+        'symmetry_offset'  The offset used to create the axis of symmetry.
+        'num_images'       The number of WAC images that went into making the
+                           baseline profile used for navigation.
         'start_time'       The time (s) when titan_navigate was called.
         'end_time'         The time (s) when titan_navigate returned.
     """
@@ -352,6 +356,7 @@ def titan_navigate(obs, other_model, titan_config=None):
     metadata['start_time'] = start_time 
     metadata['symmetry_offset'] = None
     metadata['offset'] = None
+    metadata['num_images'] = None
     
     set_obs_bp(obs)
     data = obs.data
@@ -390,6 +395,8 @@ def titan_navigate(obs, other_model, titan_config=None):
     titan_inv_list = obs.inventory(['TITAN+ATMOSPHERE'], return_type='full')
     titan_inv = titan_inv_list['TITAN+ATMOSPHERE']
     titan_center = titan_inv['center_uv']
+    titan_size_u = titan_inv['u_pixel_size']
+    titan_size_v = titan_inv['v_pixel_size']
     titan_resolution = (titan_inv['resolution'][0]+
                         titan_inv['resolution'][1])/2
     titan_radius = titan_inv['outer_radius'] 
@@ -439,7 +446,8 @@ def titan_navigate(obs, other_model, titan_config=None):
                      obs, sun_angle,
                      em_min, em_max, em_incr, inc_min, inc_max, inc_incr,
                      cluster_gap_threshold, cluster_max_pixels,
-                     offset_limit, mask=model_mask)
+                     offset_limit, mask=model_mask,
+                     titan_size_u=titan_size_u, titan_size_v=titan_size_v)
     
     if offset is None:
         logger.debug('No axis of symmetry found - aborting')
@@ -449,7 +457,20 @@ def titan_navigate(obs, other_model, titan_config=None):
     metadata['symmetry_offset'] = offset
     logger.debug('Max symmetry offset U,V %d,%d', offset[0], offset[1])
 
-    baseline_x, baseline_profile = _find_baseline(filter, phase_angle)
+    ret = _find_baseline(filter, phase_angle)
+
+    if ret is None:
+        logger.info('No baseline profile information for filter %s and '+
+                    'phase angle %.2f', filter, phase_angle*oops.DPR)
+        metadata['end_time'] = time.time()
+        return metadata
+
+    baseline_x, baseline_profile, num_images = ret
+    metadata['num_images'] = num_images
+    
+    logger.info('Baseline profile for filter %s phase angle %.2f was '+
+                'constructed from %d images', filter, phase_angle*oops.DPR,
+                num_images)
     
     profile_x, profile_y = titan_along_track_profile(
                      obs, offset, sun_angle, titan_center,
@@ -459,9 +480,9 @@ def titan_navigate(obs, other_model, titan_config=None):
                                   fill_value=0., kind='cubic')
     profile = interp_func(baseline_x)
     
-    along_track_distance = _find_min_correlation(baseline_profile, 
-                                                 profile, 
-                                                 offset_limit)
+    along_track_distance = find_shift_1d(baseline_profile, 
+                                         profile, 
+                                         offset_limit)
     along_track_pixel = int(np.round(along_track_distance / titan_resolution))
 
     logger.debug('Along symmetry distance %.f km, %d pixels',
@@ -474,13 +495,13 @@ def titan_navigate(obs, other_model, titan_config=None):
                 new_offset[0], new_offset[1])
     metadata['offset'] = new_offset
 
-    plt.plot(baseline_x, baseline_profile, '-', color='black')
-    plt.plot(baseline_x, profile, '-', color='red')
+#    plt.plot(baseline_x, baseline_profile, '-', color='black')
+#    plt.plot(baseline_x, profile, '-', color='red')
     new_titan_x = np.roll(baseline_x, -along_track_distance)
     new_titan_x = new_titan_x[:-abs(along_track_distance)]
     new_profile = profile[:-abs(along_track_distance)]
-    plt.plot(new_titan_x, new_profile, '-', color='green')
-    plt.show()
+#    plt.plot(new_titan_x, new_profile, '-', color='green')
+#    plt.show()
 
     metadata['end_time'] = time.time()
 

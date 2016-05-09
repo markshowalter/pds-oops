@@ -43,7 +43,7 @@ if len(command_list) == 0:
 #    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results'
 #    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # rings closeup
 
-#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug' # Colombo->Huygens closeup
     
 #    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
@@ -57,7 +57,7 @@ if len(command_list) == 0:
     # Trickiness with label placement
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
+    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug' # A ring edge
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
@@ -93,9 +93,9 @@ if len(command_list) == 0:
 
 #    command_line_str = 'W1537751816_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=65 CLEAR off edge
 #    command_line_str = 'W1753508727_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=90 VIO
-#    command_line_str = 'N1702247210_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109, Rhea overlapping BL1
-#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=100, Rhea (Rhea -10,-2)
-#    command_line_str = 'N1517095065_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=116 CLEAR
+#    command_line_str = 'N1702247210_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109, Rhea overlapping BL1 (RHEA 29,-3) (Titan 29,-5)
+#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=100, Rhea (Rhea -10,-2) (Titan -10,0)
+#    command_line_str = 'N1517095065_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=116 CLEAR (Titan 2,9)
 #    command_line_str = 'W1578213940_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge
 #    command_line_str = 'W1629878033_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge
 #    command_line_str = 'N1806009125_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=141, Rhea, Mimas BL1
@@ -103,18 +103,18 @@ if len(command_list) == 0:
 #    command_line_str = 'N1626123721_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 NAC version
 #    command_line_str = 'W1536376241_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 WAC version
 
-#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan Stars -10,-2
+#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug' # Titan Stars -10,-2
 
 #    command_line_str = 'N1624600010_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=12 RED
-#    command_line_str = 'N1580288525_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=18 RED
+#    command_line_str = 'N1580288525_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=18 RED with Saturn
 #    command_line_str = 'N1624879028_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=81 RED
 #    command_line_str = 'N1611563684_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=125 RED
 #    command_line_str = 'N1614174403_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=156 RED
 
 #    command_line_str = 'N1702239215_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS 14,-6) (TITAN 13,-4)
 #    command_line_str = 'N1702240651_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 14,-3)
-#    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
-    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
+#    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
+#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
 
 
 
@@ -219,6 +219,9 @@ parser.add_argument(
 parser.add_argument(
     '--no-allow-saturn', dest='allow_saturn', action='store_false',
     help='Do not include saturn in navigation')
+parser.add_argument(
+    '--force-titan-only', action='store_true', default=False,
+    help='Force the use of Titan photometric navigation')
 
 file_add_selection_arguments(parser)
 
@@ -251,6 +254,8 @@ def collect_cmd_line(image_path):
         ret += ['--no-allow-moons']
     if not arguments.allow_saturn:
         ret += ['--no-allow-saturn']
+    if arguments.force_titan_only:
+        ret += ['--force-titan-only']
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -301,7 +306,7 @@ def wait_for_all():
 
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
-                             offset_xy=None):
+                             force_titan_only=False, offset_xy=None):
     offset_metadata = file_read_offset_metadata(image_path, overlay=False)
     if offset_metadata is not None:
         if not force_offset:
@@ -367,6 +372,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                       allow_rings=allow_rings,
                                       allow_moons=allow_moons,
                                       allow_saturn=allow_saturn,
+                                      force_titan_only=force_titan_only,
                                       force_offset=offset_xy)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
@@ -495,6 +501,7 @@ main_logger.info('Allow stars:  %s', str(arguments.allow_stars))
 main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
 main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
 main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
+main_logger.info('Force Titan:  %s', str(arguments.force_titan_only))
 main_logger.info('Offset XY:    %s', str(offset_xy))
 main_logger.info('Subprocesses: %d', arguments.max_subprocesses)
 main_logger.info('')
@@ -508,6 +515,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     allow_rings=arguments.allow_rings, 
                     allow_moons=arguments.allow_moons, 
                     allow_saturn=arguments.allow_saturn,
+                    force_titan_only=arguments.force_titan_only,
                     offset_xy=offset_xy):
         num_files_processed += 1
     else:

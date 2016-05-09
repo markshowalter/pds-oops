@@ -152,7 +152,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     axis2 = np.repeat(np.arange(float(model.shape[0]))-body_v,
                       model.shape[1]).reshape(model.shape)
     dist_from_center = axis1**2+5*axis2**2
-    # Don't even label aboves above or below their extent
+    # Don't ever label aboves above or below their extent
     if body_v-body_v_size > 0:
         dist_from_center[:body_v-body_v_size+1,:] = 1e38
     if body_v+body_v_size <= obs.ext_data.shape[0]:
@@ -191,6 +191,9 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     if np.any(dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] != 1e38):
         dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] = 1e38
 
+    label_avoid_mask = np.logical_or(label_avoid_mask, 
+                                     dist_from_center == 1e38)
+    
     # Now find a good place for each label that doesn't overlap text from 
     # previous model steps or actual moon data
     text_name = body_name.capitalize()
@@ -305,9 +308,9 @@ def bodies_create_model(obs, body_name, inventory,
 
     metadata = {}
     metadata['body_name'] = body_name
-    metadata['size_ok'] = False
-    metadata['curvature_ok'] = False
-    metadata['limb_ok'] = False
+    metadata['size_ok'] = None
+    metadata['curvature_ok'] = None
+    metadata['limb_ok'] = None
     metadata['latlon_mask'] = None
     metadata['start_time'] = start_time 
 
@@ -317,6 +320,7 @@ def bodies_create_model(obs, body_name, inventory,
     if bb_area >= bodies_config['min_bounding_box_area']:
         metadata['size_ok'] = True
     else:
+        metadata['size_ok'] = False
         logger.info(
             'Bounding box (area %.3f pixels) is too small to bother with',
             bb_area)
@@ -365,6 +369,8 @@ def bodies_create_model(obs, body_name, inventory,
          (v_center+height_threshold < obs.data.shape[0]-1-extend_fov[1] and
           v_center-height/2 > extend_fov[1]))): # Body is at bottom
         metadata['curvature_ok'] = True
+    else:
+        metadata['curvature_ok'] = False
     
     u_min -= BODIES_POSITION_SLOP
     u_max += BODIES_POSITION_SLOP
@@ -467,12 +473,14 @@ def bodies_create_model(obs, body_name, inventory,
         logger.info('Limb meets criteria')
         metadata['limb_ok'] = True
     else:
+        metadata['limb_ok'] = False
         logger.info('Limb fails criteria')
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata, None
 
-    if not metadata['curvature_ok'] and not always_create_model:
+    if ((not metadata['curvature_ok'] or not metadata['size_ok']) and 
+        not always_create_model):
         metadata['end_time'] = time.time()
         return None, metadata, None
     
