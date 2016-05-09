@@ -9,7 +9,7 @@ import Tkinter as tk
 import ImageTk
 from PIL import Image
 import numpy as np
-import scipy.ndimage.interpolation as interp
+import scipy.ndimage.interpolation as ndinterp
 
 #===============================================================================
 #
@@ -427,8 +427,8 @@ class ImageDisp(tk.Frame):
                 continue
             scale_x = self.overlay_list[i].shape[1] / imgdata_list[i].shape[1]
             scale_y = self.overlay_list[i].shape[0] / imgdata_list[i].shape[0]
-            zoomed_img = interp.zoom(imgdata_list[i], (scale_y, scale_x),
-                                     order=0)
+            zoomed_img = ndinterp.zoom(imgdata_list[i], (scale_y, scale_x),
+                                       order=0)
             new_imgdata_list.append(zoomed_img)
             overlay_scale_x_list.append(scale_x)
             overlay_scale_y_list.append(scale_y)

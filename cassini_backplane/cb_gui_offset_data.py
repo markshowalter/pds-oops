@@ -349,9 +349,29 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Star Offset:', 
-                  anchor='w', width=label_width)
+    label = tk.Label(addon_control_frame, text='Offset Winner:', 
+                     anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+    label = tk.Label(addon_control_frame, 
+                     text=str(metadata['offset_winner']), 
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+
+    contents_str = ''
+    for s in metadata['model_contents']:
+        contents_str += s[0].upper()
+        
+    label = tk.Label(addon_control_frame, text='Model Contents:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
+    label = tk.Label(addon_control_frame, text=contents_str,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    gridrow += 1
+
+    label = tk.Label(addon_control_frame, text='Star Offset:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
     if stars_metadata:
         if stars_metadata['offset'] is None:
             offset = 'None'
@@ -361,11 +381,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         offset = 'N/A'
     label = tk.Label(addon_control_frame, text=offset,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
-
-    label = tk.Label(addon_control_frame, text='', 
-                     anchor='w', width=3)
-    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
 
     if metadata['model_offset'] is None:
         offset = 'None'
@@ -374,39 +390,22 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                   str(metadata['model_offset'][1]))
     label = tk.Label(addon_control_frame, text='Model Offset:', 
                      anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+    label = tk.Label(addon_control_frame, text=offset, 
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+
+    if metadata['titan_offset'] is None:
+        offset = 'None'
+    else:
+        offset = (str(metadata['titan_offset'][0])+', '+
+                  str(metadata['titan_offset'][1]))
+    label = tk.Label(addon_control_frame, text='Titan Offset:', 
+                     anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
     label = tk.Label(addon_control_frame, text=offset, 
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
-    gridrow += 1
-
-    label = tk.Label(addon_control_frame, text='Used Objects:', 
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    label = tk.Label(addon_control_frame, 
-                     text=str(metadata['used_objects_type']), 
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
-
-    contents_str = ''
-    for s in metadata['model_contents']:
-        contents_str += s[0].upper()
-        
-    label = tk.Label(addon_control_frame, text='Model Contents:', 
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, text=contents_str,
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
-
-    label = tk.Label(addon_control_frame, text='Model Overrides:', 
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, 
-                     text=str(metadata['model_overrides_stars']),
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
-
     gridrow += 1
 
     label = tk.Label(addon_control_frame, text='Body Only:', 

@@ -301,6 +301,46 @@ def add_profile_to_list(filename, reinterp=False):
     OFFSET_LIST.append(best_offset)    
     PROFILE_LIST.append((filter, phase_angle, profile))
 
+def make_shifted_profile(bin, filter, phase_angle):
+    if len(bin) == 0:
+        return None
+    if len(bin) == 1:
+        return bin[0]
+    
+    master = bin[0]
+    offsets = []
+    offsets.append(0)
+    for slave in bin[1:]:
+        offset = find_shift_1d(master, slave, 200)
+        print 'Found offset', offset
+        offsets.append(offset)
+#        plt.plot(master, '-', color='green')
+#        plt.plot(slave, '-', color='red')
+#        plt.plot(shift_1d(slave, offset), '-', color='black')
+#        plt.show()
+    half_mean_offset = int(np.round(np.mean(offsets) / 2))
+    print 'Half mean offset', half_mean_offset
+#    plt.figure()
+#    for profile in bin:
+#        plt.plot(profile)
+#    plt.show()
+    profiles = []
+    profiles.append(shift_1d(master, -half_mean_offset))
+    for slave in bin[1:]:
+        profiles.append(shift_1d(slave, half_mean_offset))
+    
+    med_res = np.mean(zip(*profiles), axis=1)
+    
+    if filter == 'BL1' and 139 <= phase_angle*oops.DPR < 141:
+        plt.figure()
+        for profile in profiles:
+            plt.plot(profile)
+        plt.plot(med_res, '-', color='black', lw=2)
+        plt.show()
+    
+    return med_res
+    
+    
 def bin_profiles(plot=False):
     for profile in PROFILE_LIST:
         filter, phase_angle, profile = profile
@@ -318,17 +358,19 @@ def bin_profiles(plot=False):
             if len(bin) == 0:
                 BY_FILTER_DB[filter][bin_no] = None
                 continue
-            phase = bin_no*PHASE_BIN_GRANULARITY*oops.DPR
-            if len(bin) == 1:
-                med_res = bin[0]
+            phase_angle = bin_no*PHASE_BIN_GRANULARITY
+            med_res = make_shifted_profile(bin, filter, phase_angle)
+            if med_res is None:
+                BY_FILTER_DB[filter][bin_no] = None
             else:
-                med_res = np.median(zip(*bin), axis=1)
-            BY_FILTER_DB[filter][bin_no] = (TITAN_X, med_res, len(bin))
-            print filter, bin_no*PHASE_BIN_GRANULARITY*oops.DPR, len(bin)
+                BY_FILTER_DB[filter][bin_no] = (TITAN_X, med_res, len(bin))
+            print filter, phase_angle*oops.DPR, len(bin)
             if plot:
                 color = colorsys.hsv_to_rgb(
-                         phase/180, 1, 1)
-                plt.plot(TITAN_X, med_res, label=('%.1f (%d)'%(phase, len(bin))), color=color)
+                         phase_angle/180, 1, 1)
+                plt.plot(TITAN_X, med_res, 
+                         label=('%.1f (%d)'%(phase_angle*oops.DPR, len(bin))), 
+                         color=color)
 
         if plot:
             plt.legend()
@@ -486,7 +528,7 @@ start_frac = 0
 if len(sys.argv) == 2:
     start_frac = float(sys.argv[1])
     
-if True:
+if False:
     for filename in image_list[int(start_frac*len(image_list)):]:
         try:
             process_image(filename, recompute=True)
