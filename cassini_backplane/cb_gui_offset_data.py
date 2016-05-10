@@ -300,6 +300,10 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     
+    label = tk.Label(addon_control_frame, text='', 
+                     anchor='w', width=3)
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
+
     label = tk.Label(addon_control_frame, text='Texp:',
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')

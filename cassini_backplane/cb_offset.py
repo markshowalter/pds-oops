@@ -105,7 +105,7 @@ def master_find_offset(obs,
                        rings_model_source='voyager',
                        rings_config=None,
 
-                   force_offset=None,
+                   botsim_offset=None,
                    force_bootstrap_candidate=False):
     """Reproject the moon into a rectangular latitude/longitude space.
     
@@ -135,10 +135,11 @@ def master_find_offset(obs,
                                  rings.
         rings_config             Config parameters for rings.
 
-        force_offset             None to find the offset automatically or
+        botsim_offset            None to find the offset automatically or
                                  a tuple (U,V) to force the result offset.
                                  This is useful for creating an overlay 
-                                 with a known offset.
+                                 with a known offset, such as when processing
+                                 pairs of BOTSIM images.
         force_bootstrap_candidate  True to force this image to be a bootstrap
                                  candidate even if we really could find a
                                  viable offset.
@@ -425,7 +426,7 @@ def master_find_offset(obs,
     stars_metadata = None
     
     if (not entirely_body and
-        allow_stars and (not force_offset or create_overlay) and
+        allow_stars and (not botsim_offset or create_overlay) and
         not force_bootstrap_candidate):
         stars_metadata = stars_find_offset(obs,
                                            extend_fov=extend_fov,
@@ -435,7 +436,7 @@ def master_find_offset(obs,
         if star_offset is None:
             logger.info('Final star offset N/A')
         else:
-            logger.info('Final star offset U,V %.2f %.2f good stars %d', 
+            logger.info('Final star offset U,V %.2f,%.2f good stars %d', 
                         star_offset[0], star_offset[1],
                         stars_metadata['num_good_stars'])
         if create_overlay:
@@ -588,11 +589,7 @@ def master_find_offset(obs,
     metadata['model_contents'] = used_model_str_list
     logger.info('Model contains %s', str(used_model_str_list))
     final_model = None
-    if force_offset:
-        model_offset = force_offset
-        logger.info('FORCING OFFSET U,V %.2f,%.2f',
-                     model_offset[0], model_offset[1])
-    elif len(model_list) == 0:
+    if len(model_list) == 0:
         logger.info('Nothing to model - no offset found')
         if (rings_curvature_ok and not rings_features_ok and
             not metadata['bootstrap_body']): # XXX
@@ -602,7 +599,7 @@ def master_find_offset(obs,
             metadata['bootstrap_body'] = 'RINGS'
         if rings_features_ok and not rings_curvature_ok:
             logger.info('Candidate for ring radial scan') # XXX
-    else:
+    elif botsim_offset is None:
         # We have at least one viable component of the model
         final_model = _combine_models(model_list, solid=True, 
                                       masked=masked_model)
@@ -719,11 +716,13 @@ def master_find_offset(obs,
 
     titan_offset = None
     
-    if ((force_titan_only or 
+    if (botsim_offset is None and 
+        (force_titan_only or 
          (model_offset is None and star_offset is None)) and 
         titan_body_metadata is not None and
         titan_body_metadata['size_ok'] and 
-        titan_body_metadata['curvature_ok']):
+        titan_body_metadata['curvature_ok'] and
+        titan_body_metadata['entirely_visible']):
         if force_titan_only:
             logger.info('Forcing use of Titan photometric navigation')
         else:
@@ -732,7 +731,8 @@ def master_find_offset(obs,
         main_final_model = None
         if final_model is not None:
             main_final_model = unpad_image(final_model, extend_fov)
-        titan_metadata = titan_navigate(obs, main_final_model, 
+        titan_metadata = titan_navigate(obs, main_final_model,
+                                        extend_fov=extend_fov, 
                                         titan_config=titan_config)
         metadata['titan_metadata'] = titan_metadata
         titan_offset = titan_metadata['offset']
@@ -745,8 +745,12 @@ def master_find_offset(obs,
                 ########################################
 
     offset = None
-    # Titan wins over everything
-    if titan_offset is not None:
+    # BOTSIM offset wins over everything
+    if botsim_offset is not None:
+        offset = botsim_offset
+        metadata['offset_winner'] = 'BOTSIM'
+    elif titan_offset is not None:
+        # Titan wins over everything else
         offset = titan_offset
         metadata['offset_winner'] = 'TITAN'
     else:
@@ -783,26 +787,29 @@ def master_find_offset(obs,
     if star_offset is None:
         logger.info('Final star offset     N/A')
     else:
-        logger.info('Final star offset     U,V %.2f %.2f good stars %d', 
+        logger.info('Final star offset     U,V %.2f,%.2f good stars %d', 
                     star_offset[0], star_offset[1],
                     stars_metadata['num_good_stars'])
 
     if model_offset is None:
         logger.info('Final model offset    N/A')
     else:
-        logger.info('Final model offset    U,V %d %d', 
+        logger.info('Final model offset    U,V %d,%d', 
                     model_offset[0], model_offset[1])
 
     if titan_offset is None:
         logger.info('Final Titan offset    N/A')
     else:
-        logger.info('Final Titan offset    U,V %d %d', 
+        logger.info('Final Titan offset    U,V %d,%d', 
                     titan_offset[0], titan_offset[1])
 
+    if botsim_offset is not None:
+        logger.info('FINAL OFFSET SET BY BOTSIM')
+        
     if offset is None:
         logger.info('Final combined offset FAILED')
     else:
-        logger.info('Final combined offset U,V %.2f %.2f', offset[0], offset[1])
+        logger.info('Final combined offset U,V %.2f,%.2f', offset[0], offset[1])
 
     metadata['offset'] = offset
 
@@ -1035,51 +1042,54 @@ def offset_create_overlay_image(obs, metadata,
     data_lines.append('%s %s' % (obs.filename[:13], 
                                  cspice.et2utc(obs.midtime, 'C', 0)))
     data_lines.append('%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2))
-    data_line = ''
     offset_winner = metadata['offset_winner']
-    star_offset = None
-    if (metadata['stars_metadata'] is not None and 
-        metadata['stars_metadata']['offset'] is not None):
-        star_offset = metadata['stars_metadata']['offset']
-    model_offset = metadata['model_offset']
-    titan_offset = metadata['titan_offset']
-    
-    titan_offset = None
-    if star_offset is None:
-        data_line += 'Stars N/A'
-    else:
-        if offset_winner == 'STARS':
-            data_line += 'STARS'
-        else:
-            data_line += 'Stars'
-        data_line += ' %.2f,%.2f' % star_offset
-    if model_offset is None:
-        data_line += ' | Model N/A'
-    else:
-        if (offset_winner != 'STARS' and
-            offset_winner != 'TITAN'):
-            data_line += ' | MODEL'
-        else:
-            data_line += ' | Model'
-        data_line += ' %d,%d' % model_offset
-    if titan_offset is None:
-        data_line += ' | Titan N/A'
-    else:
-        if offset_winner == 'TITAN':
-            data_line += ' | TITAN'
-        else:
-            data_line += ' | Titan'
-        data_line += ' %d,%d' % titan_offset
-    data_lines.append(data_line)
-    model_contents = metadata['model_contents']
-    if model_contents is not None and model_contents != []:
-        model_contents_str = '+'.join(model_contents)
-        data_lines.append('Model: '+model_contents_str)
-
-    if metadata['bootstrap_candidate']:
-        data_line = 'Bootstrap Cand ' + metadata['bootstrap_body']
+    if offset_winner == 'BOTSIM':
+        data_line = 'BOTSIM %d,%d' % offset
         data_lines.append(data_line)
-    
+    else:
+        star_offset = None
+        if (metadata['stars_metadata'] is not None and 
+            metadata['stars_metadata']['offset'] is not None):
+            star_offset = metadata['stars_metadata']['offset']
+        model_offset = metadata['model_offset']
+        titan_offset = metadata['titan_offset']
+        
+        if star_offset is None:
+            data_line = 'Stars N/A'
+        else:
+            if offset_winner == 'STARS':
+                data_line = 'STARS'
+            else:
+                data_line = 'Stars'
+            data_line += ' %.2f,%.2f' % star_offset
+        if model_offset is None:
+            data_line += ' | Model N/A'
+        else:
+            if (offset_winner != 'STARS' and
+                offset_winner != 'TITAN'):
+                data_line += ' | MODEL'
+            else:
+                data_line += ' | Model'
+            data_line += ' %d,%d' % model_offset
+        if titan_offset is None:
+            data_line += ' | Titan N/A'
+        else:
+            if offset_winner == 'TITAN':
+                data_line += ' | TITAN'
+            else:
+                data_line += ' | Titan'
+            data_line += ' %d,%d' % titan_offset
+        data_lines.append(data_line)
+
+        model_contents = metadata['model_contents']
+        if model_contents is not None and model_contents != []:
+            model_contents_str = '+'.join(model_contents)
+            data_lines.append('Model: '+model_contents_str)
+
+        if metadata['bootstrap_candidate']:
+            data_line = 'Bootstrap Cand ' + metadata['bootstrap_body']
+            data_lines.append(data_line)
+        
     text_size_h_list = []
     text_size_v_list = []
     for data_line in data_lines:
@@ -1172,25 +1182,29 @@ def offset_result_str(metadata):
     ret += the_time + ' ' + ('%-4s'%filter1) + '+' + ('%-5s'%filter2) + ' '
     ret += the_size
     ret += ' Final ' + offset_str
-    if metadata['offset_winner'] == 'STARS':
-        ret += '  STAR ' + star_offset_str
+    offset_winner = metadata['offset_winner']
+    if offset_winner == 'BOTSIM':
+        ret += '  BOTSIM'
     else:
-        ret += '  Star ' + star_offset_str
-    if (metadata['offset_winner'] != 'MODEL' and 
-        metadata['offset_winner'] != 'STARS'):
-        ret += '  MODEL ' + model_offset_str
-    else:
-        ret += '  Model ' + model_offset_str
-    if metadata['offset_winner'] == 'TITAN':
-        ret += '  TITAN ' + titan_offset_str
-    else:
-        ret += '  Titan ' + titan_offset_str
-    if bootstrap_str:
-        ret += ' ' + bootstrap_str
-    if bootstrap_str and single_body_str:
-        ret += ' '
-    if single_body_str:
-        ret += ' ' + single_body_str
+        if offset_winner == 'STARS':
+            ret += '  STAR ' + star_offset_str
+        else:
+            ret += '  Star ' + star_offset_str
+        if (offset_winner is not None and
+            offset_winner != 'MODEL' and 
+            offset_winner != 'STARS'):
+            ret += '  MODEL ' + model_offset_str
+        else:
+            ret += '  Model ' + model_offset_str
+        if offset_winner == 'TITAN':
+            ret += '  TITAN ' + titan_offset_str
+        else:
+            ret += '  Titan ' + titan_offset_str
+        if bootstrap_str:
+            ret += ' ' + bootstrap_str
+        if bootstrap_str and single_body_str:
+            ret += ' '
+        if single_body_str:
+            ret += ' ' + single_body_str
         
     return ret
-    

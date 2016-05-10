@@ -322,7 +322,7 @@ def _find_baseline(filter, phase_angle):
      
     return profile_x, profile_y, num_images
 
-def titan_navigate(obs, other_model, titan_config=None):
+def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     """Navigate Titan photometrically.
     
     We don't deal with models and text labels here; those are assumed to have 
@@ -334,6 +334,8 @@ def titan_navigate(obs, other_model, titan_config=None):
                            of other bodies, rings, etc. in the image. These 
                            pixels will be masked out of the Titan model in
                            case they are in front of Titan and eclipsing it.
+        extend_fov         The amount beyond the image in the (U,V) dimension
+                           to consider when seeing if Titan is in the FOV.
         titan_config       Configuration parameters.
 
     Returns:
@@ -373,21 +375,6 @@ def titan_navigate(obs, other_model, titan_config=None):
         elif obs.filter2 != 'CL2':
             filter += '+' + obs.filter2
 
-    ret = _find_baseline(filter, phase_angle)
-
-    if ret is None:
-        logger.info('No baseline profile for filter %s and '+
-                    'phase angle %.2f', filter, phase_angle*oops.DPR)
-        metadata['end_time'] = time.time()
-        return metadata
-
-    baseline_x, baseline_profile, num_images = ret
-    metadata['num_images'] = num_images
-    
-    logger.info('Baseline profile for filter %s phase angle %.2f was '+
-                'constructed from %d images', filter, phase_angle*oops.DPR,
-                num_images)
-    
     # Create the enlarged Titan
     atmos_height = titan_config['atmosphere_height']
     logger.info('Atmosphere height %.0f', atmos_height)
@@ -418,14 +405,42 @@ def titan_navigate(obs, other_model, titan_config=None):
     titan_radius = titan_inv['outer_radius'] 
     titan_radius_pix = int(titan_radius / titan_resolution)
 
-    logger.debug('Titan center U,V %d,%d / Resolution %.2f / Radius (km) %.2f / '+
+    logger.debug('Titan+atmosphere center U,V %d,%d / Resolution %.2f / Radius (km) %.2f / '+
                  'Radius (pix) %d', titan_center[0], titan_center[1],
                  titan_resolution, titan_radius, titan_radius_pix)
+
+    u_min = titan_inv['u_min_unclipped']
+    u_max = titan_inv['u_max_unclipped']
+    v_min = titan_inv['v_min_unclipped']
+    v_max = titan_inv['v_max_unclipped']
+
+    if (u_min < extend_fov[0] or 
+        u_max > obs.data.shape[1]-1-extend_fov[0] or
+        v_min < extend_fov[1] or
+        v_max > obs.data.shape[0]-1-extend_fov[1]):
+        logger.info('Titan+atmosphere not entirely visible - aborting')
+        metadata['end_time'] = time.time()
+        return metadata
+    
+    phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
+    ret = _find_baseline(filter, phase_angle)
+
+    if ret is None:
+        logger.info('No baseline profile for filter %s and '+
+                    'phase angle %.2f', filter, phase_angle*oops.DPR)
+        metadata['end_time'] = time.time()
+        return metadata
+
+    baseline_x, baseline_profile, num_images = ret
+    metadata['num_images'] = num_images
+    
+    logger.info('Baseline profile for filter %s phase angle %.2f was '+
+                'constructed from %d images', filter, phase_angle*oops.DPR,
+                num_images)
     
     # Find the projected angle of the solar illumination to the center of
     # Titan's disc.
     bp_incidence = obs.bp.incidence_angle('TITAN+ATMOSPHERE')
-    phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     
     if phase_angle < oops.HALFPI:
         extreme_pos = np.argmin(bp_incidence.mvals)

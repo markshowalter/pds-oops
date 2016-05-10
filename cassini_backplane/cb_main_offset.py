@@ -1,7 +1,7 @@
 ###############################################################################
 # cb_main_offset.py
 #
-# The main top-level driver for all of CB.
+# The main top-level driver for single file offset finding.
 ###############################################################################
 
 from cb_logging import *
@@ -9,7 +9,6 @@ import logging
 
 import argparse
 import cProfile, pstats, StringIO
-from datetime import datetime
 import os
 import subprocess
 import sys
@@ -57,7 +56,7 @@ if len(command_list) == 0:
     # Trickiness with label placement
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 
-    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug' # A ring edge
+#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug' # A ring edge
 #    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
 #    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge
@@ -116,10 +115,10 @@ if len(command_list) == 0:
 #    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
 #    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --disp1lay-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
 
-    command_line_str = 'W1491009791_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # TEST 
-
-
-
+#    command_line_str = 'W1506215893_1 N1506215893_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM 
+#    command_line_str = 'W1716174363_1 N1716174363_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
+#    command_line_str = 'W1613101946_1 N1613101946_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
+    command_line_str = 'W1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 
     command_list = command_line_str.split()
 
@@ -182,8 +181,8 @@ parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
     help='Graphically display the results of the offset process')
 parser.add_argument(
-    '--offset-xy', type=str,
-    help='Force the offset to be x,y')
+    '--botsim-offset', type=str,
+    help='Force the offset to be u,v')
 parser.add_argument(
     '--stars-only', action='store_true', default=False,
     help='Navigate only using stars')
@@ -307,7 +306,7 @@ def wait_for_all():
 
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
-                             force_titan_only=False, offset_xy=None):
+                             force_titan_only=False, botsim_offset=None):
     offset_metadata = file_read_offset_metadata(image_path, overlay=False)
     if offset_metadata is not None:
         if not force_offset:
@@ -374,7 +373,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                       allow_moons=allow_moons,
                                       allow_saturn=allow_saturn,
                                       force_titan_only=force_titan_only,
-                                      force_offset=offset_xy)
+                                      botsim_offset=botsim_offset)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
@@ -466,11 +465,11 @@ image_logfile_level = log_decode_level(arguments.image_logfile_level)
 force_offset = arguments.force_offset
 redo_offset_error = arguments.offset_redo_error
 
-offset_xy = None
+botsim_offset = None
 
-if arguments.offset_xy:
-    x, y = arguments.offset_xy.split(',')
-    offset_xy = (float(x.replace('"','')), float(y.replace('"','')))
+if arguments.botsim_offset:
+    x, y = arguments.botsim_offset.split(',')
+    botsim_offset = (float(x.replace('"','')), float(y.replace('"','')))
     
 if arguments.stars_only:
     arguments.allow_rings = False
@@ -498,13 +497,13 @@ main_logger.info('**********************************')
 main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
 main_logger.info('**********************************')
 main_logger.info('')
-main_logger.info('Allow stars:  %s', str(arguments.allow_stars))
-main_logger.info('Allow rings:  %s', str(arguments.allow_rings))
-main_logger.info('Allow moons:  %s', str(arguments.allow_moons))
-main_logger.info('Allow Saturn: %s', str(arguments.allow_saturn))
-main_logger.info('Force Titan:  %s', str(arguments.force_titan_only))
-main_logger.info('Offset XY:    %s', str(offset_xy))
-main_logger.info('Subprocesses: %d', arguments.max_subprocesses)
+main_logger.info('Allow stars:   %s', str(arguments.allow_stars))
+main_logger.info('Allow rings:   %s', str(arguments.allow_rings))
+main_logger.info('Allow moons:   %s', str(arguments.allow_moons))
+main_logger.info('Allow Saturn:  %s', str(arguments.allow_saturn))
+main_logger.info('Force Titan:   %s', str(arguments.force_titan_only))
+main_logger.info('BOTSIM offset: %s', str(botsim_offset))
+main_logger.info('Subprocesses:  %d', arguments.max_subprocesses)
 main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
@@ -517,7 +516,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     allow_moons=arguments.allow_moons, 
                     allow_saturn=arguments.allow_saturn,
                     force_titan_only=arguments.force_titan_only,
-                    offset_xy=offset_xy):
+                    botsim_offset=botsim_offset):
         num_files_processed += 1
     else:
         num_files_skipped += 1
