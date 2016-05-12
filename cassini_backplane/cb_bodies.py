@@ -245,6 +245,13 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         v = first_v
         text = first_text
     
+    if u is None:
+        # We never found anything good - go ahead and place it directly in the
+        # center and ignore that it might overlap with other labels
+        u = body_u+3
+        v = body_v-text_size[1]//2
+        text = '<-'+text_name
+        
     if u is not None:
         text_draw.text((u,v), text, fill=1)
 

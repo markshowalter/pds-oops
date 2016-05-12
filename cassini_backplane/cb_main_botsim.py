@@ -29,7 +29,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--volume COISS_2007 --image-console-level debug --display-offset-results' # TEST 
+    command_line_str = '--volume COISS_2052 --main-console-level debug --image-console-level debug --display-offset-results' # TEST 
 
     command_list = command_line_str.split()
 

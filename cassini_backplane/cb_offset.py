@@ -171,6 +171,12 @@ def master_find_offset(obs,
           
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
+            'stars_offset'     The offset from star matching. None is star
+                               matching failed.
+            'model_offset'     The offset from model (rings and bodies) 
+                               matching. None is model matching failed.
+            'titan_offset'     The offset from Titan photometric navigation.
+                               None if navigation failed.
             'large_bodies'     A list of the large bodies present in the image
                                sorted in descending order by range.
             'body_only'        False if the image doesn't consist entirely of
@@ -192,12 +198,8 @@ def master_find_offset(obs,
                                body in the large_bodies list.
             'rings_metadata'   The metadata from ring modeling. None if ring
                                modeling not performed.
-            'model_offset'     The (U,V) offset determined by model matching.
-                               None if model matching failed.
             'secondary_corr_ok' True if secondary model correlation was
                                successful. None if it wasn't performed.
-            'titan_offset'     The (U,V) offset determined by Titan photometric
-                               navigation.
             'start_time'       The start time (s) of the entire offset process.
             'end_time'         The end time (s) of the entire offset process.
             
@@ -310,6 +312,9 @@ def master_find_offset(obs,
     metadata['start_time'] = start_time
     metadata['end_time'] = None
     metadata['offset'] = None
+    metadata['stars_offset'] = None
+    metadata['model_offset'] = None
+    metadata['titan_offset'] = None
     metadata['body_only'] = False
     metadata['rings_only'] = False
     metadata['model_contents'] = []
@@ -321,7 +326,6 @@ def master_find_offset(obs,
     metadata['titan_metadata'] = None
     metadata['model_offset'] = None
     metadata['secondary_corr_ok'] = None
-    metadata['titan_offset'] = None
     # Large
     metadata['ext_data'] = obs.ext_data
     metadata['ext_overlay'] = color_overlay
@@ -422,7 +426,7 @@ def master_find_offset(obs,
     # CHOICE.
     #
 
-    star_offset = None
+    stars_offset = None
     stars_metadata = None
     
     if (not entirely_body and
@@ -432,12 +436,13 @@ def master_find_offset(obs,
                                            extend_fov=extend_fov,
                                            stars_config=stars_config)
         metadata['stars_metadata'] = stars_metadata
-        star_offset = stars_metadata['offset']
-        if star_offset is None:
+        stars_offset = stars_metadata['offset']
+        metadata['stars_offset'] = stars_offset
+        if stars_offset is None:
             logger.info('Final star offset N/A')
         else:
             logger.info('Final star offset U,V %.2f,%.2f good stars %d', 
-                        star_offset[0], star_offset[1],
+                        stars_offset[0], stars_offset[1],
                         stars_metadata['num_good_stars'])
         if create_overlay:
             # Make the extended overlay with no offset because we shift the 
@@ -535,7 +540,6 @@ def master_find_offset(obs,
     model_list = []
     used_model_str_list = []
     titan_body_metadata = None
-    model_contents_types = ''
     
     # XXX Deal with moons on the far side of the rings
     if (rings_model is not None and rings_curvature_ok and 
@@ -547,9 +551,6 @@ def master_find_offset(obs,
         # Only use blurred rings if there are no bodies to use
         model_list.append(rings_model)
         used_model_str_list.append('RINGS')
-        if model_contents_types != '':
-            model_contents_types += '+'
-        model_contents_types += 'RINGS'
         if rings_features_blurred is not None:
             logger.info('Using rings model blurred by %f because there are no'+
                         ' bodies', rings_features_blurred)
@@ -579,10 +580,6 @@ def master_find_offset(obs,
                     # Only if there isn't a good closer body
                     bad_body = True
                 continue
-            if not good_body: # First time
-                if model_contents_types != '':
-                    model_contents_types += '+'
-                model_contents_types += 'BODIES'
             good_body = True
             model_list.append(body_model)
             used_model_str_list.append(body_name)
@@ -718,7 +715,7 @@ def master_find_offset(obs,
     
     if (botsim_offset is None and 
         (force_titan_only or 
-         (model_offset is None and star_offset is None)) and 
+         (model_offset is None and stars_offset is None)) and 
         titan_body_metadata is not None and
         titan_body_metadata['size_ok'] and 
         titan_body_metadata['curvature_ok'] and
@@ -754,19 +751,19 @@ def master_find_offset(obs,
         offset = titan_offset
         metadata['offset_winner'] = 'TITAN'
     else:
-        if star_offset is None:
+        if stars_offset is None:
             if model_offset is not None:
                 offset = model_offset
-                metadata['offset_winner'] = model_contents_types
+                metadata['offset_winner'] = 'MODEL'
         else:
             # Assume stars are good until proven otherwise
-            offset = star_offset
+            offset = stars_offset
             metadata['offset_winner'] = 'STARS'
-        if model_offset is not None and star_offset is not None:
+        if model_offset is not None and stars_offset is not None:
             disagree_threshold = offset_config['stars_model_diff_threshold']
             stars_threshold = offset_config['stars_override_threshold']
-            if (abs(star_offset[0]-model_offset[0]) >= disagree_threshold or
-                abs(star_offset[1]-model_offset[1]) >= disagree_threshold):
+            if (abs(stars_offset[0]-model_offset[0]) >= disagree_threshold or
+                abs(stars_offset[1]-model_offset[1]) >= disagree_threshold):
                 if (stars_metadata['num_good_stars'] >= stars_threshold):
                     logger.info('Star and model offsets disagree by too '+
                                 'much - trusting star result')
@@ -782,13 +779,13 @@ def master_find_offset(obs,
                               extend_fov=extend_fov,
                               stars_config=stars_config)
                     offset = model_offset
-                    metadata['used_objects_type'] = model_contents_types
+                    metadata['used_objects_type'] = 'MODEL'
 
-    if star_offset is None:
+    if stars_offset is None:
         logger.info('Final star offset     N/A')
     else:
         logger.info('Final star offset     U,V %.2f,%.2f good stars %d', 
-                    star_offset[0], star_offset[1],
+                    stars_offset[0], stars_offset[1],
                     stars_metadata['num_good_stars'])
 
     if model_offset is None:
@@ -1047,21 +1044,18 @@ def offset_create_overlay_image(obs, metadata,
         data_line = 'BOTSIM %d,%d' % offset
         data_lines.append(data_line)
     else:
-        star_offset = None
-        if (metadata['stars_metadata'] is not None and 
-            metadata['stars_metadata']['offset'] is not None):
-            star_offset = metadata['stars_metadata']['offset']
+        stars_offset = metadata['stars_offset']
         model_offset = metadata['model_offset']
         titan_offset = metadata['titan_offset']
         
-        if star_offset is None:
+        if stars_offset is None:
             data_line = 'Stars N/A'
         else:
             if offset_winner == 'STARS':
                 data_line = 'STARS'
             else:
                 data_line = 'Stars'
-            data_line += ' %.2f,%.2f' % star_offset
+            data_line += ' %.2f,%.2f' % stars_offset
         if model_offset is None:
             data_line += ' | Model N/A'
         else:
@@ -1150,11 +1144,11 @@ def offset_result_str(metadata):
         offset_str = '  N/A  '
     else:
         offset_str = '%3d,%3d' % tuple(offset)
-    star_offset_str = '  N/A  '
-    if metadata['stars_metadata'] is not None:
-        star_offset = metadata['stars_metadata']['offset']
-        if star_offset is not None:
-            star_offset_str = '%3d,%3d' % tuple(star_offset)
+    stars_offset = metadata['stars_offset']
+    if stars_offset is None:
+        stars_offset_str = '  N/A  '
+    else:
+        stars_offset_str = '%3d,%3d' % tuple(stars_offset)
     model_offset = metadata['model_offset']
     if model_offset is None:
         model_offset_str = '  N/A  '
@@ -1179,7 +1173,7 @@ def offset_result_str(metadata):
     if metadata['bootstrap_candidate']:
         bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
         
-    ret += the_time + ' ' + ('%-4s'%filter1) + '+' + ('%-5s'%filter2) + ' '
+    ret += the_time + ' ' + ('%4s'%filter1) + '+' + ('%-5s'%filter2) + ' '
     ret += the_size
     ret += ' Final ' + offset_str
     offset_winner = metadata['offset_winner']
@@ -1187,12 +1181,10 @@ def offset_result_str(metadata):
         ret += '  BOTSIM'
     else:
         if offset_winner == 'STARS':
-            ret += '  STAR ' + star_offset_str
+            ret += '  STAR ' + stars_offset_str
         else:
-            ret += '  Star ' + star_offset_str
-        if (offset_winner is not None and
-            offset_winner != 'MODEL' and 
-            offset_winner != 'STARS'):
+            ret += '  Star ' + stars_offset_str
+        if offset_winner == 'MODEL':
             ret += '  MODEL ' + model_offset_str
         else:
             ret += '  Model ' + model_offset_str

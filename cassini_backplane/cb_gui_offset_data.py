@@ -345,11 +345,11 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     label = tk.Label(addon_control_frame, text='Final Offset:', 
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    if metadata['offset'] is None:
-        offset = 'None'
+    if offset is None:
+        offset_str = 'None'
     else:
-        offset = '%.2f, %.2f' % tuple(metadata['offset'])
-    label = tk.Label(addon_control_frame, text=offset, 
+        offset_str = '%.2f, %.2f' % tuple(offset)
+    label = tk.Label(addon_control_frame, text=offset_str, 
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
 
@@ -376,11 +376,11 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     label = tk.Label(addon_control_frame, text='Star Offset:', 
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    if stars_metadata:
-        if stars_metadata['offset'] is None:
+    if stars_metadata is not None:
+        if metadata['stars_offset'] is None:
             offset = 'None'
         else:
-            offset = '%.2f, %.2f' % tuple(stars_metadata['offset'])
+            offset = '%.2f, %.2f' % tuple(metadata['stars_offset'])
     else:
         offset = 'N/A'
     label = tk.Label(addon_control_frame, text=offset,

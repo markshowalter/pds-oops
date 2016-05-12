@@ -25,7 +25,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--has-offset-file --verbose --volume COISS_2024'
+    command_line_str = '--has-offset-file --verbose --volume COISS_2052'
 
     command_list = command_line_str.split()
 
@@ -132,6 +132,11 @@ total_good_offset = 0
 total_good_offset_list = []
 total_good_star_offset = 0
 total_good_model_offset = 0
+total_good_titan_offset = 0
+total_winner_star = 0
+total_winner_model = 0
+total_winner_titan = 0
+total_winner_botsim = 0
 body_only_db = {}
 total_rings_only = 0
 total_bootstrap_cand = 0
@@ -171,15 +176,29 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 total_good_offset += 1
                 total_good_offset_list.append(tuple(offset))
                 
-            if metadata['stars_metadata'] is not None:
-                star_offset = metadata['stars_metadata']['offset']
-                if star_offset is not None:
-                    total_good_star_offset += 1
+            stars_offset = metadata['stars_offset']
+            if stars_offset is not None:
+                total_good_star_offset += 1
         
             model_offset = metadata['model_offset']
             if model_offset is not None:
                 total_good_model_offset += 1
         
+            titan_offset = metadata['titan_offset']
+            if titan_offset is not None:
+                total_good_titan_offset += 1
+        
+            winner = metadata['offset_winner']
+            if winner == 'STARS':
+                total_winner_star += 1
+            elif winner == 'MODEL':
+                total_winner_model += 1
+            elif winner == 'TITAN':
+                total_winner_titan += 1
+            elif winner == 'BOTSIM':
+                total_winner_botsim += 1
+            else:
+                print image_path, 'Unknown offset winner', winner
             body_only = metadata['body_only']
             if body_only:
                 if body_only not in body_only_db:
@@ -219,6 +238,10 @@ if total_offset:
                 total_good_model_offset, 
                 float(total_good_model_offset)/total_good_offset*100,
                 float(total_good_model_offset)/total_offset*100)
+    print '  Good Titan offset: %d (%.2f%%, %.2f%% of total)' % (
+                total_good_titan_offset, 
+                float(total_good_titan_offset)/total_good_offset*100,
+                float(total_good_titan_offset)/total_offset*100)
     failed = total_offset-total_good_offset-total_bootstrap_cand
     print 'Failed and not bootstrap candidate: %d (%.2f%%)' % (failed, float(failed)/total_offset*100)
     print 'Failed and bootstrap candidate: %d (%.2f%%)' % (total_bootstrap_cand, float(total_bootstrap_cand)/total_offset*100)
