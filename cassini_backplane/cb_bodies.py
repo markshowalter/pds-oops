@@ -44,7 +44,8 @@ from cb_util_oops import *
 _LOGGING_NAME = 'cb.' + __name__
 
 
-BODIES_POSITION_SLOP = 50
+# Sometimes the bounding box returned by "inventory" is not quite big enough
+BODIES_POSITION_SLOP_FRAC = 0.05
 
 _BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION = 0.1 * oops.RPD
 _BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.1 * oops.RPD
@@ -152,7 +153,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     axis2 = np.repeat(np.arange(float(model.shape[0]))-body_v,
                       model.shape[1]).reshape(model.shape)
     dist_from_center = axis1**2+5*axis2**2
-    # Don't ever label aboves above or below their extent
+    # Don't ever label bodies above or below their extent
     if body_v-body_v_size > 0:
         dist_from_center[:body_v-body_v_size+1,:] = 1e38
     if body_v+body_v_size <= obs.ext_data.shape[0]:
@@ -180,7 +181,8 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                           model.shape[1]).reshape(model.shape)
 
         dist_body = (axis1/u_size)**2+(axis2/v_size)**2
-        dist_from_center[dist_body <= 1.] = 1e38
+        if not np.all(dist_body <= 1.):
+            dist_from_center[dist_body <= 1.] = 1e38
         
     # Give us a few pixels margin from the edge of a moon
     dist_from_center = filt.maximum_filter(dist_from_center, 3)
@@ -199,7 +201,9 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     # Now find a good place for each label that doesn't overlap text from 
     # previous model steps or actual moon data
     text_name = body_name.capitalize()
-    text_size = text_draw.textsize(text_name+'->')
+    # Have to add the leading space because there seems to be a bug in ImageDraw
+    # that cuts of part of the leading character in some cases
+    text_size = text_draw.textsize(' '+text_name+'->')
     u = None
     v = None
     first_u = None
@@ -217,9 +221,9 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                 (u >= body_u and 
                  u+text_size[0] > model_text.shape[1]-extend_fov[0])):
                 u = u-text_size[0]
-                text = text_name + '->'
+                text = ' ' + text_name + '->'
             else:
-                text = '<-' + text_name
+                text = ' <-' + text_name
             if first_u is None:
                 first_u = u
                 first_v = v
@@ -250,7 +254,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         # center and ignore that it might overlap with other labels
         u = body_u+3
         v = body_v-text_size[1]//2
-        text = '<-'+text_name
+        text = ' <-'+text_name
         
     if u is not None:
         text_draw.text((u,v), text, fill=1)
@@ -385,10 +389,10 @@ def bodies_create_model(obs, body_name, inventory,
     else:
         metadata['curvature_ok'] = False
     
-    u_min -= BODIES_POSITION_SLOP
-    u_max += BODIES_POSITION_SLOP
-    v_min -= BODIES_POSITION_SLOP
-    v_max += BODIES_POSITION_SLOP
+    u_min -= int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
+    u_max += int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
+    v_min -= int((v_max-v_min) * BODIES_POSITION_SLOP_FRAC)
+    v_max += int((v_max-v_min) * BODIES_POSITION_SLOP_FRAC)
     
     u_min = np.clip(u_min, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
     u_max = np.clip(u_max, -extend_fov[0], obs.data.shape[1]+extend_fov[0]-1)
@@ -443,13 +447,6 @@ def bodies_create_model(obs, body_name, inventory,
         metadata['end_time'] = time.time()
         return None, metadata, None
 
-# We want to always create the model now since there could be a slight
-# glow. Also we want to create the text labels.
-#    if not np.any(latlon_mask) and not always_create_model:
-#        logger.info('No pixels intercepted - aborting')
-#        metadata['end_time'] = time.time()
-#        return None, metadata, None
-        
     # Analyze the limb
     
     incidence = restr_bp.incidence_angle(body_name)
@@ -480,9 +477,11 @@ def bodies_create_model(obs, body_name, inventory,
     limb_threshold = bodies_config['limb_incidence_threshold']
     # If we can see the entire body, then we only need part of the limb to be
     # OK. If the body is partially off the edge, then we need the entire limb
-    # to be OK.
+    # to be OK. If we have cartographic data, then we don't need a limb
+    # at all.
     if ((entirely_visible and limb_incidence_min < limb_threshold) or
-        (not entirely_visible and limb_incidence_max < limb_threshold)):
+        (not entirely_visible and limb_incidence_max < limb_threshold) or
+        (cartographic_data and body_name in cartographic_data)):
         logger.info('Limb meets criteria')
         metadata['limb_ok'] = True
     else:
@@ -492,39 +491,41 @@ def bodies_create_model(obs, body_name, inventory,
             metadata['end_time'] = time.time()
             return None, metadata, None
 
-    if ((not metadata['curvature_ok'] or not metadata['size_ok']) and 
-        not always_create_model):
-        metadata['end_time'] = time.time()
-        return None, metadata, None
-    
     # Make the actual model
-    
-    logger.debug('Making actual model')
-    
-    if bodies_config['use_lambert']:
-        restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
-        restr_model += 0.01 # Make a slight glow even past the terminator
-        restr_model[restr_body_mask_inv] = 0.
-    else:
-        restr_model = restr_body_mask.astype('float')
 
-    if cartographic_data:
-        for cart_body in sorted(cartographic_data.keys()):
-            if cart_body == body_name:
-                cart_body_data = cartographic_data[body_name]
-                cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
-                restr_model *= cart_model
-                logger.info('Cartographic data provided for %s - USING', cart_body)
-            else:
-                logger.info('Cartographic data provided for %s', cart_body)
+    restr_model = None    
+    if (np.max(restr_body_mask) == 0 or 
+        np.min(incidence[restr_body_mask].vals) >= oops.HALFPI):
+        logger.debug('Looking only at back side - leaving model empty')
+    else:
+        logger.debug('Making actual model')
+    
+        if bodies_config['use_lambert']:
+            restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
+            # Make a slight glow even past the terminator
+            restr_model = restr_model+0.01
+            restr_model[restr_body_mask_inv] = 0.
+        else:
+            restr_model = restr_body_mask.astype('float')
+    
+        if cartographic_data:
+            for cart_body in sorted(cartographic_data.keys()):
+                if cart_body == body_name:
+                    cart_body_data = cartographic_data[body_name]
+                    cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
+                    restr_model *= cart_model
+                    logger.info('Cartographic data provided for %s - USING', cart_body)
+                else:
+                    logger.info('Cartographic data provided for %s', cart_body)
 
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
-    model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
-          u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
+    if restr_model is not None:
+        model[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
+              u_min+extend_fov[0]:u_max+extend_fov[0]+1] = restr_model
     
     model_text = _bodies_make_label(obs, body_name, model, label_avoid_mask,
                                     extend_fov, bodies_config)

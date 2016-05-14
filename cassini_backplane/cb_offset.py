@@ -97,7 +97,6 @@ def master_find_offset(obs,
                    allow_saturn=True,
                    allow_moons=True,
                        bodies_cartographic_data=None,
-                       force_titan_only=False,
                        bodies_config=None,
                        titan_config=None,
                    
@@ -125,9 +124,6 @@ def master_find_offset(obs,
                                  moons.
         bodies_cartographic_data The metadata to use for cartographic
                                  surfaces (see cb_bodies).
-        force_titan_only         Perform navigation as usual, but in the end
-                                 throw away the star and model results and
-                                 force the use of Titan photometric navigation.
         bodies_config            Config parameters for bodies.
         titan_config             Config parameters for Titan navigation.
 
@@ -171,6 +167,9 @@ def master_find_offset(obs,
           
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
+            'confidence'       The confidence 0-1 of the final offset.
+            'model_blur_amount' The amount the model was blurred before 
+                               correlating.
             'stars_offset'     The offset from star matching. None is star
                                matching failed.
             'model_offset'     The offset from model (rings and bodies) 
@@ -273,11 +272,13 @@ def master_find_offset(obs,
     
     set_obs_ext_data(obs, extend_fov)
     set_obs_ext_corner_bp(obs, extend_fov)
+    set_obs_ext_bp(obs, extend_fov)
     
     bodies_model_list = []
     rings_model = None
     rings_overlay_text = None
     titan_model = None
+    titan_body_metadata = None
     final_model = None
     
     if create_overlay:
@@ -312,9 +313,14 @@ def master_find_offset(obs,
     metadata['start_time'] = start_time
     metadata['end_time'] = None
     metadata['offset'] = None
+    metadata['confidence'] = 0.
     metadata['stars_offset'] = None
+    metadata['stars_confidence'] = 0.
     metadata['model_offset'] = None
+    metadata['model_confidence'] = 0.
+    metadata['model_blur_amount'] = None
     metadata['titan_offset'] = None
+    metadata['titan_confidence'] = 0.
     metadata['body_only'] = False
     metadata['rings_only'] = False
     metadata['model_contents'] = []
@@ -324,7 +330,6 @@ def master_find_offset(obs,
     metadata['bodies_metadata'] = bodies_metadata
     metadata['rings_metadata'] = None
     metadata['titan_metadata'] = None
-    metadata['model_offset'] = None
     metadata['secondary_corr_ok'] = None
     # Large
     metadata['ext_data'] = obs.ext_data
@@ -422,11 +427,12 @@ def master_find_offset(obs,
                     ######################
     
     #
-    # TRY TO FIND THE OFFSET USING STARS ONLY. STARS ARE ALWAYS OUR BEST
-    # CHOICE.
+    # TRY TO FIND THE OFFSET USING STARS ONLY.
+    # XXX EVEN IF STAR PHOTOMETRY FAILS, WE COULD COMBINE WITH LATER MODELS!
     #
 
     stars_offset = None
+    stars_confidence = 0.
     stars_metadata = None
     
     if (not entirely_body and
@@ -438,6 +444,8 @@ def master_find_offset(obs,
         metadata['stars_metadata'] = stars_metadata
         stars_offset = stars_metadata['offset']
         metadata['stars_offset'] = stars_offset
+        stars_confidence = stars_metadata['confidence']
+        metadata['stars_confidence'] = stars_confidence
         if stars_offset is None:
             logger.info('Final star offset N/A')
         else:
@@ -459,15 +467,13 @@ def master_find_offset(obs,
                                                  stars_overlay_text)
 
 
-                    ###############################
-                    # CREATE RING AND BODY MODELS #
-                    ###############################
-    
-    set_obs_ext_bp(obs, extend_fov)
-    model_offset = None
+                    ######################
+                    # CREATE BODY MODELS #
+                    ######################
     
     #
     # MAKE MODELS FOR THE BODIES IN THE IMAGE, EVEN THE FUZZY ONES
+    # (BECAUSE WE'LL WANT THEM IN THE OVERLAY LATER)
     #
     if (allow_saturn or allow_moons) and not entirely_rings:
         for body_name, inv in large_bodies_by_range:
@@ -505,9 +511,42 @@ def master_find_offset(obs,
             metadata['end_time'] = time.time()
             return metadata
 
-    #
-    # MAKE A MODEL FOR THE RINGS IN THE IMAGE
-    #
+    good_body = False # True if we have cartographic data OR
+                      #     the limb and curvature are both OK for
+                      #     at least one body
+    bad_body = False  # True if the closest useable body is not a good body
+    
+    navigable_bodies_model_list = []
+    for body_model, body_metadata, body_text in bodies_model_list:
+        body_name = body_metadata['body_name']
+        if body_name in FUZZY_BODY_LIST:
+            # Fuzzy bodies can't be used for navigation, but can be used
+            # later to create the overlay
+            logger.debug('Model: %s is fuzzy - ignoring', body_name)
+            continue
+        if body_name == 'TITAN':
+            # Titan can't be used for primary model navigation
+            logger.debug('Model: %s - ignoring', body_name)
+            titan_body_metadata = body_metadata
+            continue
+        navigable_bodies_model_list.append(
+                           (body_model, body_metadata, body_text))
+        if ((bodies_cartographic_data is None or
+             body_name not in bodies_cartographic_data) and
+            not body_metadata['curvature_ok'] or
+            not body_metadata['limb_ok'] or
+            not body_metadata['size_ok']):
+            if not good_body:
+                # Only if there isn't a good closer body
+                bad_body = True
+            continue
+        good_body = True
+
+
+                    ######################
+                    # CREATE RING MODELS #
+                    ######################
+    
     if allow_rings:
         rings_model, rings_metadata, rings_overlay_text = rings_create_model(
                                          obs, extend_fov=extend_fov,
@@ -537,155 +576,180 @@ def master_find_offset(obs,
                 # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET #
                 #####################################################
 
-    model_list = []
-    used_model_str_list = []
-    titan_body_metadata = None
-    
-    # XXX Deal with moons on the far side of the rings
-    if (rings_model is not None and rings_curvature_ok and 
-        rings_features_ok and
-        (rings_features_blurred is None or 
-         len(bodies_model_list) == 0)):
-        # Only include the rings if they are going to provide a valid
-        # navigation reference
-        # Only use blurred rings if there are no bodies to use
-        model_list.append(rings_model)
-        used_model_str_list.append('RINGS')
-        if rings_features_blurred is not None:
-            logger.info('Using rings model blurred by %f because there are no'+
-                        ' bodies', rings_features_blurred)
 
-    good_body = False # True if we have cartographic data OR
-                      #         the limb and curvature are both OK
-    bad_body = False  # True if the closest useable body is not a good body
+    model_offset = None
+    model_confidence = 0.
+    model_blur_amount = None
 
-    if len(bodies_model_list) > 0:
-        # Sorted by range
-        for body_model, body_metadata, body_text in bodies_model_list:
+    previously_used_model_contents = []
+            
+    # Try relaxing varying constraints on the bodies until we find one that
+    # works.
+    model_phase_info_list = [(1.00, False, False, False, False),
+                             (0.75,  True, False, False, False),
+                             (0.75, False, False,  True, False),
+                             (0.50,  True, False,  True, False),
+                             (0.25, False,  True, False, False),
+                             (0.10, False, False, False,  True),
+                             (0.05,  True,  True,  True,  True)] 
+    for model_phase_info in model_phase_info_list:
+        (model_confidence, 
+         override_bodies_curvature_ok, 
+         override_bodies_limb_ok,
+         override_rings_curvature_ok,
+         rings_allow_blur) = model_phase_info
+
+        if botsim_offset is not None:
+            # This is inside the loop simply because I don't want to add 
+            # another level of indentation!
+            break
+        
+        if rings_allow_blur and rings_features_blurred is None:
+            continue
+
+        logger.info('*** Trying model offset with:')
+        logger.info('   override_bodies_curvature_ok %s', 
+                    str(override_bodies_curvature_ok))
+        logger.info('   override_bodies_limb_ok      %s', 
+                    str(override_bodies_limb_ok))
+        logger.info('   override_rings_curvature_ok  %s', 
+                    str(override_rings_curvature_ok))
+        logger.info('   rings_allow_blur             %s', 
+                    str(rings_allow_blur))
+        
+        model_list = []
+        used_model_str_list = []
+        
+        # XXX Need to deal with moons on the far side of the rings
+
+        # Deal with bodies first
+                
+        for body_model, body_metadata, body_text in navigable_bodies_model_list:
             body_name = body_metadata['body_name']
-            if body_name in FUZZY_BODY_LIST:
-                # Fuzzy bodies can't be used for navigation, but can be used
-                # later to create the overlay
-                continue
-            if body_name == 'TITAN':
-                # Titan can't be used for primary model navigation
-                titan_body_metadata = body_metadata
-                continue
             if ((bodies_cartographic_data is None or
                  body_name not in bodies_cartographic_data) and
-                (not body_metadata['curvature_ok'] or
-                 not body_metadata['limb_ok'] or
+                (not (override_bodies_curvature_ok or 
+                      body_metadata['curvature_ok']) or
+                 not (override_bodies_limb_ok or
+                      body_metadata['limb_ok']) or
                  not body_metadata['size_ok'])):
-                if not good_body:
-                    # Only if there isn't a good closer body
-                    bad_body = True
                 continue
-            good_body = True
             model_list.append(body_model)
             used_model_str_list.append(body_name)
-    metadata['model_contents'] = used_model_str_list
-    logger.info('Model contains %s', str(used_model_str_list))
-    final_model = None
-    if len(model_list) == 0:
-        logger.info('Nothing to model - no offset found')
-        if (rings_curvature_ok and not rings_features_ok and
-            not metadata['bootstrap_body']): # XXX
-            logger.info('Ring curvature OK but not enough fiducial features '+
-                        '- candidate for bootstrapping')
-            metadata['bootstrapping_candidate'] = True
-            metadata['bootstrap_body'] = 'RINGS'
-        if rings_features_ok and not rings_curvature_ok:
-            logger.info('Candidate for ring radial scan') # XXX
-    elif botsim_offset is None:
-        # We have at least one viable component of the model
+
+        if override_rings_curvature_ok and len(model_list) == 0:
+            # We only allow flat rings when there is also a body to use;
+            # otherwise we're pretty much guaranteed the navigation will be
+            # bad.
+            continue
+                    
+        ### Now deal with rings
+        
+        model_blur_amount = None
+        
+        if (rings_model is not None and 
+            (override_rings_curvature_ok or rings_curvature_ok) and 
+            rings_features_ok and
+            (rings_allow_blur or rings_features_blurred is None)): 
+            model_list.append(rings_model)
+            used_model_str_list.append('RINGS')
+            model_blur_amount = rings_features_blurred
+            if rings_features_blurred is not None:
+                logger.info('Blurring model by %f', rings_features_blurred)
+    
+        metadata['model_contents'] = used_model_str_list
+        logger.info('Model contains %s', str(used_model_str_list))
+        final_model = None
+        if len(model_list) == 0:
+            logger.info('Nothing to model - no offset found')
+            continue
+    
+        if used_model_str_list in previously_used_model_contents:
+            logger.info('Ignoring configuration - already tried')
+            continue
+        
+        previously_used_model_contents.append(used_model_str_list)
+            
+        # We have at least one viable component of the model,
+        # so combine everything together and try to find the offset
         final_model = _combine_models(model_list, solid=True, 
                                       masked=masked_model)
 
-        if (rings_model is None and 
-            len(bodies_model_list) < offset_config['num_bodies_threshold'] and
-            np.count_nonzero(final_model) < 
-              offset_config['bodies_cov_threshold']):
-            logger.info('Too few moons, no rings, model has too little '+
-                        'coverage - model not used')
-            model_offset = None
-            peak = None
-        else:
-            gaussian_blur = offset_config['default_gaussian_blur']
-            if rings_features_blurred is not None:
-                gaussian_blur = rings_features_blurred
-            model_filter_func = (lambda image, masked=False:
-                     _model_filter(image, 
-                                   gaussian_blur, 
-                                   offset_config['median_filter_size'],
-                                   offset_config['median_filter_blur'],
-                                   masked=masked))
-            model_offset_list = find_correlation_and_offset(
-                                       obs.ext_data,
-                                       final_model, search_size_min=0,
-                                       search_size_max=(search_size_max_u, 
-                                                        search_size_max_v),
-                                       extend_fov=extend_fov,
-                                       filter=model_filter_func,
-                                       masked=masked_model)
-            model_offset = None
-            peak = None
-            if len(model_offset_list) > 0:
-                (model_offset, peak) = model_offset_list[0]
+        gaussian_blur = offset_config['default_gaussian_blur']
+        if model_blur_amount is not None:
+            gaussian_blur = model_blur_amount
+        model_filter_func = (lambda image, masked=False:
+                 _model_filter(image, 
+                               gaussian_blur, 
+                               offset_config['median_filter_size'],
+                               offset_config['median_filter_blur'],
+                               masked=masked))
+        model_offset_list = find_correlation_and_offset(
+                                   obs.ext_data,
+                                   final_model, search_size_min=0,
+                                   search_size_max=(search_size_max_u, 
+                                                    search_size_max_v),
+                                   extend_fov=extend_fov,
+                                   filter=model_filter_func,
+                                   masked=masked_model)
+        model_offset = None
+        peak = None
+        if len(model_offset_list) > 0:
+            (model_offset, peak) = model_offset_list[0]
         
-            if model_offset is not None and not masked_model:
-                # Run it again to make sure it works with a fully sliced
-                # model.
-                # No point in doing this if we allow_masked, since we've
-                # already used each model slice independently.
-                logger.info(
-                     'Running secondary correlation on offset U,V %d,%d',
-                     model_offset[0], model_offset[1])
-                offset_model = final_model[extend_fov[1]-model_offset[1]:
-                                           extend_fov[1]-model_offset[1]+
-                                               obs.data.shape[0],
-                                           extend_fov[0]-model_offset[0]:
-                                           extend_fov[0]-model_offset[0]+
-                                               obs.data.shape[1]]
-                sec_search_size = offset_config['secondary_corr_search_size']
-                model_offset_list = find_correlation_and_offset(
-                                           obs.data,
-                                           offset_model, search_size_min=0,
-                                           search_size_max=(sec_search_size,
-                                                            sec_search_size),
-                                           filter=model_filter_func,
-                                           masked=masked_model)
-                new_model_offset = None
-                if len(model_offset_list):
-                    (new_model_offset, new_peak) = model_offset_list[0]
-                metadata['secondary_corr_ok'] = False
-                if new_model_offset is None:
-                    logger.info('Secondary model correlation FAILED - '+
-                                 'Not trusting result')
+        if model_offset is not None and not masked_model:
+            # Run it again to make sure it works with a fully sliced
+            # model.
+            # No point in doing this if we allow_masked, since we've
+            # already used each model slice independently.
+            logger.info('Running secondary correlation on offset U,V %d,%d',
+                        model_offset[0], model_offset[1])
+            offset_model = final_model[extend_fov[1]-model_offset[1]:
+                                       extend_fov[1]-model_offset[1]+
+                                           obs.data.shape[0],
+                                       extend_fov[0]-model_offset[0]:
+                                       extend_fov[0]-model_offset[0]+
+                                           obs.data.shape[1]]
+            sec_search_size = offset_config['secondary_corr_search_size']
+            model_offset_list = find_correlation_and_offset(
+                                   obs.data,
+                                   offset_model, search_size_min=0,
+                                   search_size_max=(sec_search_size,
+                                                    sec_search_size),
+                                   filter=model_filter_func,
+                                   masked=masked_model)
+            new_model_offset = None
+            if len(model_offset_list):
+                (new_model_offset, new_peak) = model_offset_list[0]
+            metadata['secondary_corr_ok'] = False
+            if new_model_offset is None:
+                logger.info('Secondary model correlation FAILED - '+
+                             'Not trusting result')
+                model_offset = None
+                peak = None
+            else:
+                logger.info('Secondary model correlation dU,dV %d,%d '+
+                             'CORR %f', new_model_offset[0],
+                             new_model_offset[1], new_peak)
+                sec_threshold = offset_config['secondary_corr_threshold']
+                sec_frac = offset_config['secondary_corr_peak_threshold']
+                if (abs(new_model_offset[0]) >= sec_threshold or
+                    abs(new_model_offset[1]) >= sec_threshold or
+                    new_peak < peak*sec_frac):
+                    logger.info('Secondary model correlation offset does '+
+                                'not meet criteria - Not trusting result')
                     model_offset = None
                     peak = None
                 else:
-                    logger.info('Secondary model correlation dU,dV %d,%d '+
-                                 'CORR %f', new_model_offset[0],
-                                 new_model_offset[1], new_peak)
-                    sec_threshold = offset_config['secondary_corr_threshold']
-                    sec_frac = offset_config['secondary_corr_peak_threshold']
-                    if (abs(new_model_offset[0]) >= sec_threshold or
-                        abs(new_model_offset[1]) >= sec_threshold or
-                        new_peak < peak*sec_frac):
-                        logger.info('Secondary model correlation offset does '+
-                                    'not meet criteria - Not trusting result')
-                        model_offset = None
-                        peak = None
-                    else:
-                        model_offset = (model_offset[0]+new_model_offset[0],
-                                        model_offset[1]+new_model_offset[1])
-                        peak = new_peak
-                        metadata['secondary_corr_ok'] = True
+                    model_offset = (model_offset[0]+new_model_offset[0],
+                                    model_offset[1]+new_model_offset[1])
+                    peak = new_peak
+                    metadata['secondary_corr_ok'] = True
                 
         if model_offset is None:
-            logger.info('Final model offset N/A')
+            logger.info('Resulting model offset N/A')
         else:
-            logger.info('Final model offset    U,V %d %d', 
+            logger.info('Resulting model offset U,V %d,%d', 
                          model_offset[0], model_offset[1])
     
             shifted_model = shift_image(final_model, model_offset[0], 
@@ -696,47 +760,73 @@ def master_find_offset(obs,
             # pixels and parts of the model are not right along the edge.
             cov_threshold = offset_config['model_cov_threshold']
             edge_pixels = offset_config['model_edge_pixels']
-            if (np.count_nonzero(shifted_model[edge_pixels:-edge_pixels+1,
-                                               edge_pixels:-edge_pixels+1]) <
-                cov_threshold):
-                logger.info('Final shifted model has too little coverage - '+
-                            'Offset rejected')
-                model_offset = None
-                peak = None
+            model_count = np.count_nonzero(
+                         shifted_model[edge_pixels:-edge_pixels+1,
+                                       edge_pixels:-edge_pixels+1])
+            if model_count < cov_threshold:
+                logger.info('Final shifted model has too little coverage '+
+                            '- reducing confidence')
+                model_confidence *= float(model_count) / cov_threshold
+    
+        if model_offset is not None:
+            break
+        
+    # Out of the big model testing loop!
+
+    if model_offset is None:
+        if (rings_curvature_ok and not rings_features_ok and
+            not metadata['bootstrap_body']): # XXX
+            logger.info('Ring curvature OK but not enough fiducial '+
+                        'features - candidate for bootstrapping')
+            metadata['bootstrapping_candidate'] = True
+            metadata['bootstrap_body'] = 'RINGS'
+        if rings_features_ok and not rings_curvature_ok:
+            logger.info('Candidate for ring radial scan') # XXX
+
+    if model_offset is not None:
+        if ('RINGS' not in used_model_str_list and
+            len(used_model_str_list) < 
+                offset_config['num_bodies_threshold'] and
+            np.count_nonzero(final_model) < 
+                offset_config['bodies_cov_threshold']):
+            logger.info('Too few moons, no rings, model has too little '+
+                        'coverage - reducing confidence')
+            model_confidence *= 0.25 # XXX CLEAN THIS UP
 
     metadata['model_offset'] = model_offset
+    metadata['model_confidence'] = model_confidence
+    metadata['model_blur_amount'] = model_blur_amount
     
+    if model_offset is None:
+        logger.info('Final model offset N/A')
+    else:   
+        logger.info('Final model offset U,V %d,%d (%.2f)',
+                    model_offset[0], model_offset[1], model_confidence)
+
 
                 #####################################
                 # DEAL WITH TITAN AS A SPECIAL CASE #
                 #####################################
 
     titan_offset = None
+    titan_confidence = 0.
     
     if (botsim_offset is None and 
-        (force_titan_only or 
-         (model_offset is None and stars_offset is None)) and 
         titan_body_metadata is not None and
-        titan_body_metadata['size_ok'] and 
-        titan_body_metadata['curvature_ok'] and
-        titan_body_metadata['entirely_visible']):
-        if force_titan_only:
-            logger.info('Forcing use of Titan photometric navigation')
-        else:
-            logger.info('Model contains only TITAN and no stars - '+
-                        'performing Titan photometric navigation')
-        main_final_model = None
+        titan_body_metadata['size_ok']): 
+        unpadded_final_model = None
         if final_model is not None:
-            main_final_model = unpad_image(final_model, extend_fov)
-        titan_metadata = titan_navigate(obs, main_final_model,
+            unpadded_final_model = unpad_image(final_model, extend_fov)
+        titan_metadata = titan_navigate(obs, unpadded_final_model,
                                         extend_fov=extend_fov, 
                                         titan_config=titan_config)
         metadata['titan_metadata'] = titan_metadata
         titan_offset = titan_metadata['offset']
+        titan_confidence = titan_metadata['confidence']
         metadata['titan_offset'] = titan_offset
+        metadata['titan_confidence'] = titan_confidence
 
         
-    
                 ########################################
                 # COMPARE STARS OFFSET TO MODEL OFFSET #
                 ########################################
@@ -746,19 +836,28 @@ def master_find_offset(obs,
     if botsim_offset is not None:
         offset = botsim_offset
         metadata['offset_winner'] = 'BOTSIM'
-    elif titan_offset is not None:
+        metadata['confidence'] = 1.
+    elif (titan_offset is not None and
+          (model_offset is None or titan_confidence > model_confidence) and
+          (stars_offset is None or titan_confidence > stars_confidence)):
         # Titan wins over everything else
         offset = titan_offset
         metadata['offset_winner'] = 'TITAN'
+        metadata['confidence'] = titan_confidence
+    elif (stars_offset is not None and
+          (model_offset is None or stars_confidence > model_confidence) and
+          (titan_offset is None or stars_confidence > titan_confidence)):
+        offset = stars_offset
+        metadata['offset_winner'] = 'STARS'
+        metadata['confidence'] = stars_confidence
+    elif model_offset is not None:
+        offset = model_offset
+        metadata['offset_winner'] = 'MODEL'
+        metadata['confidence'] = model_confidence
     else:
-        if stars_offset is None:
-            if model_offset is not None:
-                offset = model_offset
-                metadata['offset_winner'] = 'MODEL'
-        else:
-            # Assume stars are good until proven otherwise
-            offset = stars_offset
-            metadata['offset_winner'] = 'STARS'
+        metadata['offset_winner'] = None
+        metadata['confidence'] = 0.
+        
         if model_offset is not None and stars_offset is not None:
             disagree_threshold = offset_config['stars_model_diff_threshold']
             stars_threshold = offset_config['stars_override_threshold']
@@ -784,21 +883,21 @@ def master_find_offset(obs,
     if stars_offset is None:
         logger.info('Final star offset     N/A')
     else:
-        logger.info('Final star offset     U,V %.2f,%.2f good stars %d', 
+        logger.info('Final star offset     U,V %.2f,%.2f (%.2f) good stars %d', 
                     stars_offset[0], stars_offset[1],
-                    stars_metadata['num_good_stars'])
+                    stars_confidence, stars_metadata['num_good_stars'])
 
     if model_offset is None:
         logger.info('Final model offset    N/A')
     else:
-        logger.info('Final model offset    U,V %d,%d', 
-                    model_offset[0], model_offset[1])
+        logger.info('Final model offset    U,V %d,%d (%.2f)', 
+                    model_offset[0], model_offset[1], model_confidence)
 
     if titan_offset is None:
         logger.info('Final Titan offset    N/A')
     else:
-        logger.info('Final Titan offset    U,V %d,%d', 
-                    titan_offset[0], titan_offset[1])
+        logger.info('Final Titan offset    U,V %d,%d (%.2f)', 
+                    titan_offset[0], titan_offset[1], titan_confidence)
 
     if botsim_offset is not None:
         logger.info('FINAL OFFSET SET BY BOTSIM')
@@ -806,7 +905,8 @@ def master_find_offset(obs,
     if offset is None:
         logger.info('Final combined offset FAILED')
     else:
-        logger.info('Final combined offset U,V %.2f,%.2f', offset[0], offset[1])
+        logger.info('Final combined offset U,V %.2f,%.2f (%.2f)', 
+                    offset[0], offset[1], metadata['confidence'])
 
     metadata['offset'] = offset
 

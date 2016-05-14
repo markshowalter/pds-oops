@@ -16,6 +16,7 @@ import polymath
 
 from imgdisp import *
 import Tkinter as tk
+import ttk
 
 import cspice
 import oops
@@ -111,6 +112,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']
+    confidence = metadata['confidence']
     metadata['img'] = obs.data
     
     if 'ext_data' not in metadata:
@@ -277,155 +279,161 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     gridrow = 0
     gridcolumn = 0
 
-    label_width = 15
-    val_width = 9
+    label_width = 17
+    val_width = 16
 
     addon_control_frame = imgdisp.addon_control_frame
 
-    label = tk.Label(addon_control_frame, text='Filter 1:',
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    label = tk.Label(addon_control_frame, text=obs.filter1,
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
-
-    label = tk.Label(addon_control_frame, text='', 
+    label = ttk.Label(addon_control_frame, text='', 
                      anchor='w', width=3)
+    label.grid(row=gridrow, column=gridcolumn+0, sticky='w')
+
+    label = ttk.Label(addon_control_frame, text='Filters:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label = ttk.Label(addon_control_frame, text=obs.filter1+'+'+obs.filter2,
+                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Filter 2:',
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, text=obs.filter2,
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
-    
-    label = tk.Label(addon_control_frame, text='', 
+    label = ttk.Label(addon_control_frame, text='', 
                      anchor='w', width=3)
+    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+
+    label = ttk.Label(addon_control_frame, text='Texp:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, text=('%7.3f'%obs.texp),
+                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Texp:',
-                     anchor='w', width=label_width)
+    label = ttk.Label(addon_control_frame, text='', 
+                     anchor='w', width=3)
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, text=('%7.3f'%obs.texp),
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+
     gridrow += 1
     
-    label = tk.Label(addon_control_frame, text='Bootstrap Cand:', 
+    label = ttk.Label(addon_control_frame, text='Bootstrap Cand:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    label = tk.Label(addon_control_frame, 
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label = ttk.Label(addon_control_frame, 
                      text=str(metadata['bootstrap_candidate']), 
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Bootstrapped:', 
+    label = ttk.Label(addon_control_frame, text='Bootstrapped:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, 
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, 
                      text=str(metadata['bootstrapped']), 
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Bootstrap Mosaic:', 
+    label = ttk.Label(addon_control_frame, text='Bootstrap Mosaic:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
     mosaic_path = metadata['bootstrap_mosaic_path']
     if mosaic_path is None:
         mosaic_path = 'N/A'
     else:
         _, mosaic_path = os.path.split(mosaic_path)
-    label = tk.Label(addon_control_frame,
+    label = ttk.Label(addon_control_frame,
                      text=mosaic_path,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
     gridrow += 1
     
-    label = tk.Label(addon_control_frame, text='Final Offset:', 
+    sep = ttk.Separator(addon_control_frame)
+    sep.grid(row=gridrow, column=1, columnspan=8, sticky='ew')
+    gridrow += 1
+    
+    label = ttk.Label(addon_control_frame, text='Final Offset:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     if offset is None:
         offset_str = 'None'
     else:
-        offset_str = '%.2f, %.2f' % tuple(offset)
-    label = tk.Label(addon_control_frame, text=offset_str, 
+        offset_str = '%.2f, %.2f (%.2f)' % (offset[0], offset[1], confidence)
+    label = ttk.Label(addon_control_frame, text=offset_str, 
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Offset Winner:', 
+    label = ttk.Label(addon_control_frame, text='Offset Winner:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, 
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, 
                      text=str(metadata['offset_winner']), 
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
     contents_str = ''
     for s in metadata['model_contents']:
         contents_str += s[0].upper()
         
-    label = tk.Label(addon_control_frame, text='Model Contents:', 
+    label = ttk.Label(addon_control_frame, text='Model Contents:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, text=contents_str,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label = ttk.Label(addon_control_frame, text=contents_str,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
     gridrow += 1
 
-    label = tk.Label(addon_control_frame, text='Star Offset:', 
+    label = ttk.Label(addon_control_frame, text='Star Offset:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     if stars_metadata is not None:
         if metadata['stars_offset'] is None:
             offset = 'None'
         else:
-            offset = '%.2f, %.2f' % tuple(metadata['stars_offset'])
+            offset = '%.2f, %.2f (%.2f)' % (metadata['stars_offset'][0],
+                                            metadata['stars_offset'][1],
+                                            metadata['stars_confidence'])
     else:
         offset = 'N/A'
-    label = tk.Label(addon_control_frame, text=offset,
+    label = ttk.Label(addon_control_frame, text=offset,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
     if metadata['model_offset'] is None:
         offset = 'None'
     else:
-        offset = (str(metadata['model_offset'][0])+', '+
-                  str(metadata['model_offset'][1]))
-    label = tk.Label(addon_control_frame, text='Model Offset:', 
+        offset = '%d, %d (%.2f)' % (metadata['model_offset'][0],
+                                    metadata['model_offset'][1],
+                                    metadata['model_confidence'])
+    label = ttk.Label(addon_control_frame, text='Model Offset:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, text=offset, 
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, text=offset, 
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
     if metadata['titan_offset'] is None:
         offset = 'None'
     else:
-        offset = (str(metadata['titan_offset'][0])+', '+
-                  str(metadata['titan_offset'][1]))
-    label = tk.Label(addon_control_frame, text='Titan Offset:', 
+        offset = '%d, %d (%.2f)' % (metadata['titan_offset'][0],
+                                    metadata['titan_offset'][1],
+                                    metadata['titan_confidence'])
+    label = ttk.Label(addon_control_frame, text='Titan Offset:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, text=offset, 
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label = ttk.Label(addon_control_frame, text=offset, 
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
     gridrow += 1
 
-    label = tk.Label(addon_control_frame, text='Body Only:', 
+    label = ttk.Label(addon_control_frame, text='Body Only:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn, sticky='w')
-    label = tk.Label(addon_control_frame, text=str(metadata['body_only']),
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label = ttk.Label(addon_control_frame, text=str(metadata['body_only']),
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
-    label = tk.Label(addon_control_frame, text='Rings Only:', 
+    label = ttk.Label(addon_control_frame, text='Rings Only:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, 
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, 
                      text=str(metadata['rings_only']),
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
     rings_metadata = metadata['rings_metadata']
     
@@ -436,15 +444,19 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         for body_name in rings_metadata['shadow_bodies']:
             shadow_bodies += body_name.upper()[:2] + ' '
 
-    label = tk.Label(addon_control_frame, text='Ring Shadowed By:', 
+    label = ttk.Label(addon_control_frame, text='Ring Shadowed By:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, text=shadow_bodies,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label = ttk.Label(addon_control_frame, text=shadow_bodies,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
 
     gridrow += 1
 
+    sep = ttk.Separator(addon_control_frame)
+    sep.grid(row=gridrow, column=1, columnspan=8, sticky='ew')
+    gridrow += 1
+    
     fiducial_features = 'N/A'
     
     if rings_metadata and 'fiducial_features' in rings_metadata:
@@ -456,12 +468,12 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         else:
             fiducial_features += ' NOT OK'
 
-    label = tk.Label(addon_control_frame, text='Ring # Features:', 
+    label = ttk.Label(addon_control_frame, text='Ring # Features:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+0, sticky='w')
-    label = tk.Label(addon_control_frame, text=fiducial_features,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label = ttk.Label(addon_control_frame, text=fiducial_features,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
     fiducial_blur = 'N/A'
     
@@ -471,24 +483,24 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         else:
             fiducial_blur = ('%.3f' % rings_metadata['fiducial_blur'])
         
-    label = tk.Label(addon_control_frame, text='Ring Blur:', 
+    label = ttk.Label(addon_control_frame, text='Ring Blur:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-    label = tk.Label(addon_control_frame, text=fiducial_blur,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    label = ttk.Label(addon_control_frame, text=fiducial_blur,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
     curvature_ok = 'N/A'
             
     if rings_metadata and 'curvature_ok' in rings_metadata:
         curvature_ok = str(rings_metadata['curvature_ok'])
         
-    label = tk.Label(addon_control_frame, text='Curvature OK:', 
+    label = ttk.Label(addon_control_frame, text='Ring Curvature OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-    label = tk.Label(addon_control_frame, text=curvature_ok,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label = ttk.Label(addon_control_frame, text=curvature_ok,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
         
     gridrow += 1
 
@@ -497,129 +509,133 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     if rings_metadata and 'emission_ok' in rings_metadata:
         curvature_ok = str(rings_metadata['emission_ok'])
         
-    label = tk.Label(addon_control_frame, text='Emission OK:', 
+    label = ttk.Label(addon_control_frame, text='Ring Emission OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+0, sticky='w')
-    label = tk.Label(addon_control_frame, text=emission_ok,
-                     anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label = ttk.Label(addon_control_frame, text=emission_ok,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         
     gridrow += 1
 
     if show_rings:
-        label = tk.Label(addon_control_frame, text='Ring Long:', 
+        label = ttk.Label(addon_control_frame, text='Ring Long:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn, sticky='w')
-        label_ring_longitude = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_ring_longitude = ttk.Label(addon_control_frame, text='', 
                                         anchor='e', width=val_width)
-        label_ring_longitude.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_ring_longitude.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         metadata['label_ring_longitude'] = label_ring_longitude
     
-        label = tk.Label(addon_control_frame, text='Ring Radius:', 
+        label = ttk.Label(addon_control_frame, text='Ring Radius:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-        label_ring_radius = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_ring_radius = ttk.Label(addon_control_frame, text='', 
                                      anchor='e', width=val_width)
-        label_ring_radius.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_ring_radius.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         metadata['label_ring_radius'] = label_ring_radius
     
-        label = tk.Label(addon_control_frame, text='Ring Radial Res:', 
+        label = ttk.Label(addon_control_frame, text='Ring Radial Res:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-        label_ring_resolution = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        label_ring_resolution = ttk.Label(addon_control_frame, text='', 
                                          anchor='e', width=val_width)
-        label_ring_resolution.grid(row=gridrow, column=gridcolumn+7,
+        label_ring_resolution.grid(row=gridrow, column=gridcolumn+8,
                                    sticky='w')
         metadata['label_ring_resolution'] = label_ring_resolution
         
         gridrow += 1
     
-        label = tk.Label(addon_control_frame, text='Ring Phase:', 
+        label = ttk.Label(addon_control_frame, text='Ring Phase:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn, sticky='w')
-        label_ring_phase = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_ring_phase = ttk.Label(addon_control_frame, text='', 
                                     anchor='e', width=val_width)
-        label_ring_phase.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_ring_phase.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         metadata['label_ring_phase'] = label_ring_phase
     
-        label = tk.Label(addon_control_frame, text='Ring Emission:', 
+        label = ttk.Label(addon_control_frame, text='Ring Emission:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
-        label_ring_emission = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_ring_emission = ttk.Label(addon_control_frame, text='', 
                                        anchor='e', width=val_width)
-        label_ring_emission.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_ring_emission.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         metadata['label_ring_emission'] = label_ring_emission
     
-        label = tk.Label(addon_control_frame, text='Ring Incidence:', 
+        label = ttk.Label(addon_control_frame, text='Ring Incidence:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
-        label_ring_incidence = tk.Label(addon_control_frame, text='', 
+        label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        label_ring_incidence = ttk.Label(addon_control_frame, text='', 
                                         anchor='e', width=val_width)
-        label_ring_incidence.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        label_ring_incidence.grid(row=gridrow, column=gridcolumn+8, sticky='w')
         metadata['label_ring_incidence'] = label_ring_incidence
 
         gridrow += 1
 
     if show_bodies:
+        sep = ttk.Separator(addon_control_frame)
+        sep.grid(row=gridrow, column=1, columnspan=8, sticky='ew')
+        gridrow += 1
+    
         metadata['latitude_type'] = latlon_type[0].upper()
-        label = tk.Label(addon_control_frame, 
+        label = ttk.Label(addon_control_frame, 
                          text='Body Latitude '+metadata['latitude_type']+':', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
         metadata['label_body_name_latitude'] = label
-        label_latitude = tk.Label(addon_control_frame, text='', 
+        label_latitude = ttk.Label(addon_control_frame, text='', 
                                   anchor='e', width=val_width)
-        label_latitude.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_latitude.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         metadata['label_body_latitude'] = label_latitude
     
         metadata['longitude_type'] = (latlon_type[0].upper() + '/' +
                                       lon_direction[0].upper())
-        label = tk.Label(addon_control_frame, 
+        label = ttk.Label(addon_control_frame, 
                          text='Body Longitude '+metadata['longitude_type']+':', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
         metadata['label_body_name_longitude'] = label
-        label_longitude = tk.Label(addon_control_frame, text='', 
+        label_longitude = ttk.Label(addon_control_frame, text='', 
                                    anchor='e', width=val_width)
-        label_longitude.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_longitude.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         metadata['label_body_longitude'] = label_longitude
     
-        label = tk.Label(addon_control_frame, text='Body Resolution:', 
+        label = ttk.Label(addon_control_frame, text='Body Resolution:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
         metadata['label_body_name_resolution'] = label
-        label_resolution = tk.Label(addon_control_frame, text='', 
+        label_resolution = ttk.Label(addon_control_frame, text='', 
                                     anchor='e', width=val_width)
-        label_resolution.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        label_resolution.grid(row=gridrow, column=gridcolumn+8, sticky='w')
         metadata['label_body_resolution'] = label_resolution
         
         gridrow += 1
     
-        label = tk.Label(addon_control_frame, text='Body Phase:', 
+        label = ttk.Label(addon_control_frame, text='Body Phase:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
         metadata['label_body_name_phase'] = label
-        label_phase = tk.Label(addon_control_frame, text='', 
+        label_phase = ttk.Label(addon_control_frame, text='', 
                                anchor='e', width=val_width)
-        label_phase.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        label_phase.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         metadata['label_body_phase'] = label_phase
     
-        label = tk.Label(addon_control_frame, text='Body Emission:', 
+        label = ttk.Label(addon_control_frame, text='Body Emission:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+3, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
         metadata['label_body_name_emission'] = label
-        label_emission = tk.Label(addon_control_frame, text='', 
+        label_emission = ttk.Label(addon_control_frame, text='', 
                                   anchor='e', width=val_width)
-        label_emission.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+        label_emission.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         metadata['label_body_emission'] = label_emission
     
-        label = tk.Label(addon_control_frame, text='Body Incidence:', 
+        label = ttk.Label(addon_control_frame, text='Body Incidence:', 
                          anchor='w', width=label_width)
-        label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
+        label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
         metadata['label_body_name_incidence'] = label
-        label_incidence = tk.Label(addon_control_frame, text='', 
+        label_incidence = ttk.Label(addon_control_frame, text='', 
                                    anchor='e', width=val_width)
-        label_incidence.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+        label_incidence.grid(row=gridrow, column=gridcolumn+8, sticky='w')
         metadata['label_body_incidence'] = label_incidence
 
         gridrow += 1

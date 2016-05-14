@@ -109,8 +109,11 @@ STARS_DEFAULT_CONFIG = {
     'allow_fractional_offsets': True,
     
     # Minimum number of stars that must photometrically match for an offset
-    # to be considered good.
-    'min_stars': 3,
+    # to be considered acceptable and the corresponding confidence.
+    # Also the minimum number of stars that must match to give a confidence 
+    # of 1.0.
+    'min_stars_low_confidence': (3, 0.75),
+    'min_stars_high_confidence': (6, 1.0),
 
     # The minimum photometry confidence allowed for a star to be considered
     # valid.
@@ -340,7 +343,7 @@ OFFSET_DEFAULT_CONFIG = {
     
     #vvv
     # If the total model covers at least this number of pixels the given
-    # distance from an edge, then we might trust it.
+    # distance from an edge, then we trust it.
     'model_cov_threshold': 25,
     'model_edge_pixels': 5,
     #^^^

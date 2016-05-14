@@ -1199,6 +1199,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         metadata           A dictionary containing information about the
                            offset result:
             'offset'            The (U,V) offset.
+            'confidence'        The confidence (0-1) in the result.
             'full_star_list'    The list of Stars in the FOV.
             'num_stars',        The number of Stars in the FOV.
             'num_good_stars'    The number of Stars that photometrically match.
@@ -1211,7 +1212,8 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         stars_config = STARS_DEFAULT_CONFIG
         
     min_dn = stars_config[('min_detectable_dn', obs.detector)]
-    min_stars = stars_config['min_stars']
+    min_stars, min_stars_conf = stars_config['min_stars_low_confidence']
+    min_stars_hc, min_stars_hc_conf = stars_config['min_stars_high_confidence']
     
     metadata = {}
 
@@ -1229,10 +1231,11 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         star.is_bright_enough = False
         star.is_dim_enough = True
 
+    metadata['offset'] = None
+    metadata['confidence'] = 0.
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
-    metadata['offset'] = None
 
     # A list of offsets that we have already tried so we don't waste time
     # trying them a second time.
@@ -1476,11 +1479,17 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         
         logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d / Corr %f',
                     offset[0], offset[1], good_stars, corr)
-            
+
+    metadata['offset'] = offset
+    confidence = ((good_stars-min_stars) * 
+                    (float(min_stars_hc_conf)-min_stars_conf)/
+                    (float(min_stars_hc-min_stars)) +
+                  min_stars_conf)
+    confidence = np.clip(confidence, 0., 1.)
+    metadata['confidence'] = confidence         
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = good_stars
-    metadata['offset'] = offset
 
     offset_x = 0
     offset_y = 0

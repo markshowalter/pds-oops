@@ -153,10 +153,19 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
         
     #######################################################################                               
     ### B RING OUTER EDGE - Nicholson, et al. Icarus 227 (2014) 152-175 ###
+    ### From Dick French                                                ###
+    ### ringfit_v1.8.Sa025S-RF-V5697c.out                               ###
     #######################################################################                         
     
-    ###### XXX TO DO XXX ######
-
+    ('GAP', 'B Ring',
+                ((  1, 117569.41, 7.56, 22.89,  66.89,    5.08300),
+                 (  2,                  37.94, 117.29,  382.07925),
+                 (  2,                  31.77, 164.83,  381.98729),
+                 (  3,                  10.92,  22.06,  507.70626),
+                 (  4,                   7.24,   7.52,  570.52601),
+                 (  5,                   5.84,  66.45,  608.20820),
+                 (  6,                   2.93,  99.17,  633.32360)),
+                None),
 
     #############################################
     ### CASSINI DIVISION - French et al (XXX) ###
@@ -328,12 +337,12 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # See below
     
     # 2005 MAY 1 - 2005 AUG 1
-    ('RINGLET_2005-MAY-1_2005-AUG-1', 'A Ring',
+    ('RINGLET_2005-MAY-1_2005-AUG-1', 'Keeler-A Ring OE',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136767.20, 7.55,  0.00,   0.00,    0.00000),)),
 
     # 2006 JAN 1 - 2009 JULY 1
-    ('RINGLET_2006-JAN-1_2009-JULY-1', 'A Ring',
+    ('RINGLET_2006-JAN-1_2009-JULY-1', 'Keeler-A Ring OE',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),     
                 ((  1, 136770.09, 1.78,  0.00,   0.00,    0.00000),
                  (  3,                   2.28,   8.31,  403.85329),
@@ -347,29 +356,30 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  ( 18,                   1.95,   4.62,  570.85163))),
 
     # 2010 JAN 1 - 2013 AUG 1
-    ('RINGLET_2010-JAN-1_2013-AUG-1', 'A Ring',
+    ('RINGLET_2010-JAN-1_2013-AUG-1', 'Keeler-A Ring OE',
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136772.74, 4.25,  0.00,   0.00,    0.00000),
                  (  9,                   6.14,  27.17,  537.45029),
                  ( 12,                   7.94,  12.84,  554.11853))),
 
     # Fill in the other dates, when the Keeler gap edge is OK but the A ring edge
-    # isn't.
-    ('GAP_1990-JAN-1_2005-MAY-1', 'Keeler', # Before 2005-MAY-1
-                None,
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    # isn't. The A ring fits are circular from Dick French
+    # ringfit_v1.8.Sa025S-RF-V4800circ.out
+    ('RINGLET_1990-JAN-1_2005-MAY-1', 'Keeler-A Ring OE Circ', # Before 2005-MAY-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
                                        
-    ('GAP_2005-AUG-1_2006-JAN-1', 'Keeler', # Between 2005-AUG-1 and 2006-JAN-1
-                None,
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    ('RINGLET_2005-AUG-1_2006-JAN-1', 'Keeler-A Ring OE Circ', # Between 2005-AUG-1 and 2006-JAN-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
-    ('GAP_2009-JULY-1_2010-JAN-1', 'Keeler', # Between 2009-JULY-1 and 2010-JAN-1
-                None,
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    ('RINGLET_2009-JULY-1_2010-JAN-1', 'Keeler-A Ring OE Circ', # Between 2009-JULY-1 and 2010-JAN-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
-    ('GAP_2013-AUG-1_2030-JAN-1', 'Keeler', # After 2013-AUG-1
-                None,
-                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),)),
+    ('RINGLET_2013-AUG-1_2030-JAN-1', 'Keeler-A Ring OE Circ', # After 2013-AUG-1
+                ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
+                ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
     ########################################
     ### OTHER SORT-OF-CIRCULAR FEATURES  ###
@@ -811,13 +821,15 @@ def _find_resolutions_by_a(obs, extend_fov, a):
     return min_res, max_res
 
 def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur, 
-                    extend_fov):
+                    min_sub_radius, max_sub_radius, extend_fov):
     if blur is None:
         blur = 1.
     a = feature[0][1]
     rms = feature[0][2]
-    if not min_radius < a < max_radius:
-        return None
+    if not min_sub_radius < a < max_sub_radius:
+        if not min_radius < a < max_radius:
+            return None
+        return -1.
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
     if min_res is None:
         return None # Something went wrong and we couldn't find a resolution
@@ -830,7 +842,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     
     We first attempt to return at least fiducial_feature_threshold features
     that satisfy resolution requirements. If we can't, then we relax the
-    constraints until we can and return the amount that we had to relax. 
+    constraints until we can and return the amount that we had to relax.
+    
+    The number of features is based on how many are in the subset of the
+    FOV that is guaranteed to be in the image. But the feature list
+    returned actually includes all the features that are in the entire
+    extended FOV.
     """
     
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
@@ -845,8 +862,14 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
+    
+    min_sub_radius = np.min(radii[extend_fov[1]*2:-extend_fov[1]*2,
+                                  extend_fov[0]*2:-extend_fov[0]*2])
+    max_sub_radius = np.max(radii[extend_fov[1]*2:-extend_fov[1]*2,
+                                  extend_fov[0]*2:-extend_fov[0]*2])
 
-    logger.debug('Radii %.2f to %.2f', min_radius, max_radius) 
+    logger.debug('Extended radii %.2f to %.2f', min_radius, max_radius)
+    logger.debug('Internal radii %.2f to %.2f', min_sub_radius, max_sub_radius) 
 
     margin_pixels = (rings_config['fiducial_feature_margin'] +
                      max(extend_fov[0], extend_fov[1]))
@@ -863,6 +886,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         # or are completely outside the radius range
         feature_list = []
         best_blur = None
+        num_features = 0
+        num_features_in_frame = 0
         for fiducial_feature in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
             entry_type_str, feature_name, inner, outer = fiducial_feature
             entry_type_list = entry_type_str.split('_')
@@ -876,48 +901,75 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             name2 = feature_name
             if name2 is None:
                 name2 = 'UNNAMED'
+            inner_out_of_frame = False
+            outer_out_of_frame = False
             if inner is not None:
                 ret = _fiducial_is_ok(obs, inner, min_radius, max_radius, 
-                                      rms_gain, blur, extend_fov)
-                if ret is None or ret != 1.:
-                    inner = None
-                if ret is not None and ret != 1.:
-                    blur_list.append(ret)
+                                      rms_gain, blur, 
+                                      min_sub_radius, max_sub_radius,
+                                      extend_fov)
+                if ret == -1.:
+                    inner_out_of_frame = True
+                else:
+                    if ret is None or ret != 1.:
+                        inner = None
+                    if ret is not None and ret != 1.:
+                        blur_list.append(ret)
             if outer is not None:
                 ret = _fiducial_is_ok(obs, outer, min_radius, max_radius, 
-                                      rms_gain, blur, extend_fov)
-                if ret is None or ret != 1.:
-                    outer = None
-                if ret is not None and ret != 1.:
-                    blur_list.append(ret)
+                                      rms_gain, blur, 
+                                      min_sub_radius, max_sub_radius,
+                                      extend_fov)
+                if ret == -1.:
+                    outer_out_of_frame = True
+                else:
+                    if ret is None or ret != 1.:
+                        outer = None
+                    if ret is not None and ret != 1.:
+                        blur_list.append(ret)
             if inner is not None or outer is not None:
                 feature_list.append((entry_type, feature_name, inner, outer))
                 if inner:
-                    logger.debug('Keeping inner feature %s %s %.2f', 
-                                 name2, entry_type, inner[0][1])
+                    logger.debug(
+                         'Keeping inner feature %s %s %.2f out of frame %s', 
+                         name2, entry_type, inner[0][1],
+                         str(inner_out_of_frame))
                 if outer:
-                    logger.debug('Keeping outer feature %s %s %.2f', 
-                                 name2, entry_type, outer[0][1])
+                    logger.debug(
+                         'Keeping outer feature %s %s %.2f out of frame %s', 
+                         name2, entry_type, outer[0][1],
+                         str(outer_out_of_frame))
+                if inner is not None:
+                    num_features += 1
+                if inner is not None and not inner_out_of_frame:
+                    num_features_in_frame += 1
+                if outer is not None:
+                    num_features += 1
+                if outer is not None and not outer_out_of_frame:
+                    num_features_in_frame += 1
 
-        num_features = int(np.sum([(x[2] is not None) + (x[3] is not None)
-                                   for x in feature_list]))
-        if num_features >= min_features or phase == 1:
+        if num_features_in_frame >= min_features:
+            logger.debug('Found enough features in frame')
+            break
+
+        if phase == 1:
             break
 
         blur_list.sort()
         
-        if len(blur_list) < min_features-num_features:
+        if len(blur_list) < min_features-num_features_in_frame:
+            logger.debug('Not enough features in frame to try blurring')
             break
         
-        blur = blur_list[min_features-num_features-1]
+        blur = blur_list[min_features-num_features_in_frame-1]
 
     if blur is not None:
         blur = blur/rms_gain
             
-    logger.debug('Returning %d fiducial features, blur %s',
-                 num_features, str(blur))
+    logger.debug('Returning %d fiducial features, %d in frame, blur %s',
+                 num_features, num_features_in_frame, str(blur))
 
-    return num_features, feature_list, blur
+    return num_features_in_frame, feature_list, blur
 
 
 # Given an I/F or occultation profile, blur out the areas that aren't
@@ -1014,7 +1066,10 @@ def _make_ephemeris_radii(obs, descr_list):
             mode, main_a, rms, amp, long_peri, rate_peri = descr
         else:
             mode, amp, long_peri, rate_peri = descr
-        
+
+        if mode > 90:
+            mode -= 90
+                    
         last_radii = obs.ext_bp.radial_mode(
                             last_radii.key,
                             mode, _RINGS_FIDUCIAL_FEATURES_FRENCH2016_EPOCH, 
@@ -1434,6 +1489,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             metadata['end_time'] = time.time()
             return None, metadata, None
     else:
+        logger.info('Curvature OK')
         metadata['curvature_ok'] = True     
    
     num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
@@ -1451,6 +1507,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata, None
+    else:
+        logger.info('Enough fiducial features (%d)', num_features)
     
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
@@ -1476,10 +1534,6 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                                      label_avoid_mask,
                                                      extend_fov, rings_config)
     
-#    model = ma.masked_equal(model, 0.)
-#    model = ma.masked_equal(model, 10000.)
-#    model[model==0] = 0.001
-
     if not np.any(model):
         logger.info('Model is empty - aborting')
         metadata['end_time'] = time.time()

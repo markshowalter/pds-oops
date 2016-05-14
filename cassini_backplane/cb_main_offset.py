@@ -67,16 +67,28 @@ if len(command_list) == 0:
 #    command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # Good star match
 #    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring - tests A ring special case for PNG
 #    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results --offset-xy "-30,36"' # Star streaks through the rings but stars in wrong place
-#    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results --stars-only' # High res A ring edge - only works with blurring
+#    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring
+#    command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model
+
 
 #    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results' # Rhea and Dione next to each other
 #    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
 #    command_line_str = 'N1511728708_2 --force-offset --image-console-level debug --display-offset-results' # Rhea whole image
     
 #    command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+
+#    command_line_str = 'N1495327885_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+#    command_line_str = 'N1498373872_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+#    command_line_str = 'N1541685510_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+#    command_line_str = 'N1588249321_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+    command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+#    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge - XXX THINKS SATURN IS BOOTSTRAPPABLE
+#    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
+
+
     
     
-#    command_line_str = 'N1527933271_1 --force-offset --image-console-level debug --display-offset-results' # Titan phase 163 CLEAR
+#    command_line_str = 'N1527933271_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 163 CLEAR
 #    command_line_str = 'N1635365617_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 109 CLEAR
     
     # TITAN
@@ -112,14 +124,16 @@ if len(command_list) == 0:
 
 #    command_line_str = 'N1702239215_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS 14,-6) (TITAN 13,-4)
 #    command_line_str = 'N1702240651_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 14,-3)
-#    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
-#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --disp1lay-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
+#    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug --display-offset-results ' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
+#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
 
 #    command_line_str = 'W1506215893_1 N1506215893_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM 
 #    command_line_str = 'W1716174363_1 N1716174363_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1613101946_1 N1613101946_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
-    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
+#    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
+
+#    command_line_str = 'N1491361411_3 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # TEST
 
     command_list = command_line_str.split()
 
@@ -220,9 +234,6 @@ parser.add_argument(
 parser.add_argument(
     '--no-allow-saturn', dest='allow_saturn', action='store_false',
     help='Do not include saturn in navigation')
-parser.add_argument(
-    '--force-titan-only', action='store_true', default=False,
-    help='Force the use of Titan photometric navigation')
 
 file_add_selection_arguments(parser)
 
@@ -255,8 +266,6 @@ def collect_cmd_line(image_path):
         ret += ['--no-allow-moons']
     if not arguments.allow_saturn:
         ret += ['--no-allow-saturn']
-    if arguments.force_titan_only:
-        ret += ['--force-titan-only']
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -307,7 +316,7 @@ def wait_for_all():
 
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
-                             force_titan_only=False, botsim_offset=None):
+                             botsim_offset=None):
     offset_metadata = file_read_offset_metadata(image_path, overlay=False)
     if offset_metadata is not None:
         if not force_offset:
@@ -373,7 +382,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                       allow_rings=allow_rings,
                                       allow_moons=allow_moons,
                                       allow_saturn=allow_saturn,
-                                      force_titan_only=force_titan_only,
                                       botsim_offset=botsim_offset)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
@@ -502,7 +510,6 @@ main_logger.info('Allow stars:   %s', str(arguments.allow_stars))
 main_logger.info('Allow rings:   %s', str(arguments.allow_rings))
 main_logger.info('Allow moons:   %s', str(arguments.allow_moons))
 main_logger.info('Allow Saturn:  %s', str(arguments.allow_saturn))
-main_logger.info('Force Titan:   %s', str(arguments.force_titan_only))
 main_logger.info('BOTSIM offset: %s', str(botsim_offset))
 main_logger.info('Subprocesses:  %d', arguments.max_subprocesses)
 main_logger.info('')
@@ -516,7 +523,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     allow_rings=arguments.allow_rings, 
                     allow_moons=arguments.allow_moons, 
                     allow_saturn=arguments.allow_saturn,
-                    force_titan_only=arguments.force_titan_only,
                     botsim_offset=botsim_offset):
         num_files_processed += 1
     else:

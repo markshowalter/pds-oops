@@ -82,9 +82,10 @@ def titan_find_symmetry_offset(
                                is not a perfect solution to the problem.
                                
     Returns:
-        None if offset finding failed.
+        metadata, a dictionary containing
         
-        Otherwise the offset as (u_offset, v_offset), RMS
+        'offset'               The final offset, None if no offset was found.
+        'confidence'           The confidence level (0-1) of the navigation.
     """ 
     set_obs_bp(obs)
     data = obs.data
@@ -344,6 +345,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         metadata is a dictionary containing
 
         'offset'           The final navigated offset.
+        'confidence'       The confidence level (0-1) of the navigation.
         'symmetry_offset'  The offset used to create the axis of symmetry.
         'num_images'       The number of WAC images that went into making the
                            baseline profile used for navigation.
@@ -362,7 +364,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['symmetry_offset'] = None
     metadata['offset'] = None
     metadata['num_images'] = None
-    
+    metadata['confidence'] = 0.
     set_obs_bp(obs)
     data = obs.data
 
@@ -374,6 +376,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
             filter = obs.filter2
         elif obs.filter2 != 'CL2':
             filter += '+' + obs.filter2
+
+    titan_orig_inv_list = obs.inventory(['TITAN'], return_type='full')
 
     # Create the enlarged Titan
     atmos_height = titan_config['atmosphere_height']
@@ -409,19 +413,41 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
                  'Radius (pix) %d', titan_center[0], titan_center[1],
                  titan_resolution, titan_radius, titan_radius_pix)
 
+    # Hierarchy of confidence that Titan is really fully visible in the image
     u_min = titan_inv['u_min_unclipped']
     u_max = titan_inv['u_max_unclipped']
     v_min = titan_inv['v_min_unclipped']
     v_max = titan_inv['v_max_unclipped']
 
-    if (u_min < extend_fov[0] or 
-        u_max > obs.data.shape[1]-1-extend_fov[0] or
-        v_min < extend_fov[1] or
-        v_max > obs.data.shape[0]-1-extend_fov[1]):
-        logger.info('Titan+atmosphere not entirely visible - aborting')
+    titan_orig_inv = titan_orig_inv_list['TITAN']
+    u_min2 = titan_orig_inv['u_min_unclipped']
+    u_max2 = titan_orig_inv['u_max_unclipped']
+    v_min2 = titan_orig_inv['v_min_unclipped']
+    v_max2 = titan_orig_inv['v_max_unclipped']
+
+    if (u_min >= extend_fov[0] and 
+        u_max < obs.data.shape[1]-extend_fov[0] and
+        v_min >= extend_fov[1] and
+        v_max < obs.data.shape[0]-extend_fov[1]):
+        logger.info('Titan+atmosphere entirely visible with extended FOV')
+        confidence_size = 1.
+    elif (u_min >= 0 and 
+          u_max < obs.data.shape[1] and
+          v_min >= 0 and
+          v_max < obs.data.shape[0]):
+        logger.info('Titan+atmosphere entirely visible only without extended FOV')
+        confidence_size = 0.8
+    elif (u_min2 >= 0 and 
+          u_max2 < obs.data.shape[1] and
+          v_min2 >= 0 and
+          v_max2 < obs.data.shape[0]):
+        logger.info('Titan body entirely visible only without extended FOV')
+        confidence_size = 0.2
+    else:
+        logger.info('Titan body not entirely visible - aborting')
         metadata['end_time'] = time.time()
         return metadata
-    
+        
     phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     ret = _find_baseline(filter, phase_angle)
 
@@ -437,7 +463,9 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     logger.info('Baseline profile for filter %s phase angle %.2f was '+
                 'constructed from %d images', filter, phase_angle*oops.DPR,
                 num_images)
-    
+
+    confidence_images = 1. - 0.8 / num_images
+        
     # Find the projected angle of the solar illumination to the center of
     # Titan's disc.
     bp_incidence = obs.bp.incidence_angle('TITAN+ATMOSPHERE')
@@ -507,20 +535,27 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     new_offset = (int(offset[0] - np.cos(sun_angle)*along_track_pixel),
                   int(offset[1] - np.sin(sun_angle)*along_track_pixel))
 
-    logger.info('Final Titan offset U,V %d,%d', 
-                new_offset[0], new_offset[1])
+    confidence = confidence_size * confidence_images
+    
+    logger.info('Final Titan offset U,V %d,%d (%.2f)', 
+                new_offset[0], new_offset[1], confidence)
     metadata['offset'] = new_offset
+    metadata['confidence'] = confidence
 
     new_titan_x = np.roll(baseline_x, -along_track_distance)
     new_titan_x = new_titan_x[:-abs(along_track_distance)]
     new_profile = profile[:-abs(along_track_distance)]
     
-    if True:
+    if False:
         plt.figure()
         plt.plot(baseline_x, baseline_profile, '-', color='black')
         plt.plot(baseline_x, profile, '-', color='red')
         plt.plot(new_titan_x, new_profile, '-', color='green')
         plt.show()
+
+    # We can't leave this hanging around but it confuses things...especially
+    # inventory()
+    del oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE']
 
     metadata['end_time'] = time.time()
 
