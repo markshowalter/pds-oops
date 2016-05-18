@@ -69,7 +69,9 @@ def _aberrate_star(obs, star):
 
 def _compute_dimmest_visible_star_vmag(obs, stars_config):
     """Compute the VMAG of the dimmest star likely visible."""
-    min_dn = stars_config[('min_detectable_dn', obs.detector)] # photons / pixel
+    min_dn = stars_config[('min_detectable_dn', obs_detector(obs))] # photons / pixel
+    if min_dn == 0:
+        return 1000
     fake_star = Star()
     fake_star.temperature = SCLASS_TO_SURFACE_TEMP['G0']
     min_mag = stars_config['min_vmag']
@@ -93,7 +95,7 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
 
     logger.debug('Mag range %7.4f to %7.4f', mag_min, mag_max)
     
-    min_dn = stars_config[('min_detectable_dn', obs.detector)]
+    min_dn = stars_config[('min_detectable_dn', obs_detector(obs))]
     
     # Get a list of all reasonable stars with the given magnitude range.
     
@@ -128,10 +130,13 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
                           SCLASS_TO_B_MINUS_V[default_star_class]/2.)
             star.johnson_mag_b = (star.vmag-
                           SCLASS_TO_B_MINUS_V[default_star_class]/2.)
-        star.dn = compute_dn_from_star(obs, star)
-        if star.dn < min_dn:
-            discard_dn += 1
-            continue
+        if min_dn == 0:
+            star.dn = 1000-star.vmag
+        else:
+            star.dn = compute_dn_from_star(obs, star)
+            if star.dn < min_dn:
+                discard_dn += 1
+                continue
         if star.spectral_class[0] == 'M':
             # M stars are too dim and too red to be seen
             discard_class += 1
@@ -331,7 +336,7 @@ def stars_create_model(obs, star_list, offset=None, ignore_conflicts=False,
                         abs(star.move_v)/max_move_steps)
         move_gran = np.clip(move_gran, 0.1, 1.0)
         
-        gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+        gausspsf = GaussianPSF(sigma=PSF_SIGMA[obs_detector(obs)],
                                movement=(star.move_v,star.move_u),
                                movement_granularity=move_gran)
         
@@ -421,7 +426,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                             abs(star.move_v)/max_move_steps)
             move_gran = np.clip(move_gran, 0.1, 1.0)
             
-            gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+            gausspsf = GaussianPSF(sigma=PSF_SIGMA[obs_detector(obs)],
                                    movement=(star.move_v,star.move_u),
                                    movement_granularity=move_gran)
             
@@ -674,7 +679,7 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
                     abs(star.move_v)/max_move_steps)
     move_gran = np.clip(move_gran, 0.1, 1.0)
     
-    gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+    gausspsf = GaussianPSF(sigma=PSF_SIGMA[obs_detector(obs)],
                            movement=(star.move_v,star.move_u),
                            movement_granularity=move_gran)
         
@@ -742,13 +747,19 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
     if stars_config is None:
         stars_config = STARS_DEFAULT_CONFIG
         
+    if not stars_config['perform_photometry']:
+        for star in star_list:
+            star.integrated_dn = 0.
+            star.photometry_confidence = 1.
+        return len(star_list)
+    
     offset_u = 0
     offset_v = 0
     if offset is not None:
         offset_u, offset_v = offset
         
     image = obs.data
-    min_dn = stars_config[('min_detectable_dn', obs.detector)]
+    min_dn = stars_config[('min_detectable_dn', obs_detector(obs))]
     
     for star in star_list:
         u = int(np.round(star.u)) + offset_u
@@ -972,7 +983,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
     
     # Restrict the search size    
     search_size_max_u, search_size_max_v = MAX_POINTING_ERROR[obs.data.shape, 
-                                                              obs.detector]
+                                                              obs_detector(obs)]
     search_size_max_u = int(search_size_max_u*search_multiplier)
     search_size_max_v = int(search_size_max_v*search_multiplier)
     
@@ -982,8 +993,14 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
     peak_margin = 3 # Amount on each side of a correlation peak to black out
     # Make sure we have peaks that can cover 2 complete "lines" in the
     # correlation
-    trial_max_offsets = (max(2*search_size_max_u+1, 2*search_size_max_v+1) //
-                       (peak_margin*2+1)) + 4
+    if stars_config['perform_photometry']:
+        trial_max_offsets = (max(2*search_size_max_u+1, 
+                                 2*search_size_max_v+1) //
+                             (peak_margin*2+1)) + 4
+    else:
+        # No point in doing more than one offset if we're not going to do
+        # photometry
+        trial_max_offsets = 1
         
     # Find the best offset using the current star list.
     # Then look to see if any of the stars correspond to known
@@ -1154,7 +1171,7 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
         psf_size_u = (psf_size_u // 2) * 2 + 1
         psf_size_v = psf_size + np.round(abs(star.move_v))
         psf_size_v = (psf_size_v // 2) * 2 + 1
-        gausspsf = GaussianPSF(sigma=ISS_PSF_SIGMA[obs.detector],
+        gausspsf = GaussianPSF(sigma=PSF_SIGMA[obs_detector(obs)],
                                movement=(star.move_v,star.move_u))
         ret = gausspsf.find_position(calib_data, (psf_size_v,psf_size_u),
                       (v,u), search_limit=(1.5, 1.5),
@@ -1210,8 +1227,8 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
 
     if stars_config is None:
         stars_config = STARS_DEFAULT_CONFIG
-        
-    min_dn = stars_config[('min_detectable_dn', obs.detector)]
+
+    min_dn = stars_config[('min_detectable_dn', obs_detector(obs))]
     min_stars, min_stars_conf = stars_config['min_stars_low_confidence']
     min_stars_hc, min_stars_hc_conf = stars_config['min_stars_high_confidence']
     
@@ -1220,8 +1237,14 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     set_obs_ext_bp(obs, extend_fov)
     set_obs_ext_data(obs, extend_fov)
     obs.star_body_list = None # Body inventory cache
-    obs.calib_dn_ext_data = None # DN-calibrated, extended data
-    
+
+    if stars_config['calibrated_data']:
+        obs.calib_dn_ext_data = None # DN-calibrated, extended data
+    else:
+        obs.calib_dn_ext_data = obs.ext_data
+        filtered_data = obs.calib_dn_ext_data
+            
+
     # Get the Star list and initialize our new fields
     star_list = stars_list_for_obs(obs,
                                   extend_fov=obs.extend_fov,
@@ -1364,7 +1387,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                 continue
             
             # Try with a small search area, then enlarge
-            for search_multipler in [0.25, 0.5, 0.75, 1.]:
+            for search_multipler in stars_config['search_multipliers']:
                 #
                 #            *** LEVEL 3 ***
                 #

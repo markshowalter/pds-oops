@@ -65,6 +65,7 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
 # The maximum pointing error we allow in the (V,U) directions.
 MAX_POINTING_ERROR_NAC = (85,75)  # Pixels
 MAX_POINTING_ERROR_WAC = (15,15)
+MAX_POINTING_ERROR_LORRI = (40,40)
 MAX_POINTING_ERROR = {((1024,1024), 'NAC'): MAX_POINTING_ERROR_NAC,
                       ((1024,1024), 'WAC'): MAX_POINTING_ERROR_WAC,
                       (( 512, 512), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//2,
@@ -74,14 +75,19 @@ MAX_POINTING_ERROR = {((1024,1024), 'NAC'): MAX_POINTING_ERROR_NAC,
                       (( 256, 256), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//4,
                                              MAX_POINTING_ERROR_NAC[1]//4),
                       (( 256, 256), 'WAC'): (MAX_POINTING_ERROR_WAC[0]//4,
-                                             MAX_POINTING_ERROR_WAC[1]//4)
+                                             MAX_POINTING_ERROR_WAC[1]//4),
+                      ((1024,1024), 'LORRI'): MAX_POINTING_ERROR_LORRI,
                      }
 
 # The FOV size of the ISS cameras in radians.
-ISS_FOV_SIZE = {'NAC': 0.35*oops.RPD, 'WAC': 3.48*oops.RPD}
+FOV_SIZE = {'NAC': 0.35*oops.RPD, 
+            'WAC': 3.48*oops.RPD,
+            'LORRI': 0.29*oops.RPD}
 
 # The Gaussian sigma of the ISS camera PSFs in pixels.
-ISS_PSF_SIGMA = {'NAC': 0.54, 'WAC': 0.77}
+PSF_SIGMA = {'NAC': 0.54, 
+             'WAC': 0.77,
+             'LORRI': 0.5} # XXX
 
 
 ########################
@@ -104,9 +110,22 @@ FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE']
 ##################
 
 STARS_DEFAULT_CONFIG = {
+    # True if data is already calibrated as I/F and needs to be converted back
+    # to raw DN.
+    'calibrated_data': True,
+    
     # Allow non-integer offsets; these use astrometry to refine the mean
     # star offset.
     'allow_fractional_offsets': True,
+    
+    # The order of multipliers to use to gradually expand the search area.
+    'search_multipliers': [0.25, 0.5, 0.75, 1.],
+
+    # Maximum number of stars to use.
+    'max_stars': 30,
+    
+    # Verify offset with photometry?
+    'perform_photometry': True,
     
     # Minimum number of stars that must photometrically match for an offset
     # to be considered acceptable and the corresponding confidence.
@@ -119,9 +138,6 @@ STARS_DEFAULT_CONFIG = {
     # valid.
     'min_confidence': 0.9,
 
-    # Maximum number of stars to use.
-    'max_stars': 30,
-    
     # Minimum PSF size for modeling a star (must be odd). The PSF is square.
     # This will be added to the smearing in each dimension to create a final
     # possibly-rectangular PSF.

@@ -120,9 +120,9 @@ _CISSCAL_FILTER_TRANSMISSION_CACHE = {}
 
 def _cisscal_filter_transmission(obs):
     """Return the (wavelengths, transmission) for the joint filters."""
-    key = (obs.detector, obs.filter1, obs.filter2)
+    key = (obs_detector(obs), obs.filter1, obs.filter2)
     if key not in _CISSCAL_FILTER_TRANSMISSION_CACHE:
-        filter_filename = ('iss' + obs.detector.lower()[:2] + 
+        filter_filename = ('iss' + obs_detector(obs).lower()[:2] + 
                            obs.filter1.lower())
         filter_filename += obs.filter2.lower() + '_systrans.tab'
         systrans_filename = os.path.join(CISSCAL_CALIB_ROOT, 'efficiency',
@@ -140,11 +140,11 @@ _CISSCAL_QE_CORRECTION_CACHE = {}
 
 def _cisscal_qe_correction(obs):
     """Return the (wavelengths, vals) for QE correction."""
-    key = obs.detector
+    key = obs_detector(obs)
     if key not in _CISSCAL_QE_CORRECTION_CACHE:    
         qecorr_filename = os.path.join(
                                CISSCAL_CALIB_ROOT, 'correction',
-                               obs.detector.lower()+'_qe_correction.tab')
+                               obs_detector(obs).lower()+'_qe_correction.tab')
         qecorr_list = _read_cisscal_calib_file(qecorr_filename)
         qecorr_wl = [x[0] for x in qecorr_list] # Wavelength in nm
         qecorr_val = [x[1] for x in qecorr_list]
@@ -283,15 +283,15 @@ def calibrate_iof_image_as_flux(obs):
 
     logger = logging.getLogger(_LOGGING_NAME+'.calibrate_iof_image_as_flux')
 
-    key = (obs.detector, obs.filter1, obs.filter2)
+    key = (obs_detector(obs), obs.filter1, obs.filter2)
     if key in _IOF_FLUX_CONVERSION_FACTOR_CACHE:
         factor = _IOF_FLUX_CONVERSION_FACTOR_CACHE[key]
         logger.debug('Calibration for %s %s %s cached; factor = %f',
-                     obs.detector, obs.filter1, obs.filter2, factor)
+                     obs_detector(obs), obs.filter1, obs.filter2, factor)
         return obs.data * factor
 
     logger.debug('Calibrating %s %s %s', 
-                 obs.detector, obs.filter1, obs.filter2)
+                 obs_detector(obs), obs.filter1, obs.filter2)
 
     # Undo Step 4 by multiplying by system transmission
     # efficiency including solar flux
@@ -321,15 +321,15 @@ def calibrate_iof_image_as_dn(obs, data=None):
         # Can be overriden if we want to calibrate some other data block
         data = obs.data
         
-    key = (obs.detector, obs.filter1, obs.filter2, obs.texp)
+    key = (obs_detector(obs), obs.filter1, obs.filter2, obs.texp)
     if key in _IOF_DN_CONVERSION_FACTOR_CACHE:
         factor = _IOF_DN_CONVERSION_FACTOR_CACHE[key]
         logger.debug('Calibration for %s %s %s %.2f cached; factor = %f',
-                     obs.detector, obs.filter1, obs.filter2, obs.texp, factor)
+                     obs_detector(obs), obs.filter1, obs.filter2, obs.texp, factor)
         return data * factor
 
     logger.debug('Calibrating %s %s %s', 
-                 obs.detector, obs.filter1, obs.filter2)
+                 obs_detector(obs), obs.filter1, obs.filter2)
     
     # 4) dividebyefficiency.pro
     #        FLUX = SOLAR_FLUX / (PI * DIST^2)
@@ -346,8 +346,8 @@ def calibrate_iof_image_as_dn(obs, data=None):
     sum_factor = obs.data.shape[0] / 1024. * obs.data.shape[1] / 1024.
     
     factor = (factor / sum_factor *
-              (_CISSCAL_DETECTOR_SOLID_ANGLE[obs.detector] *
-               _CISSCAL_DETECTOR_OPTICS_AREA[obs.detector]))
+              (_CISSCAL_DETECTOR_SOLID_ANGLE[obs_detector(obs)] *
+               _CISSCAL_DETECTOR_OPTICS_AREA[obs_detector(obs)]))
     # photons / s
     
     # 2) dividebyexpot.pro
@@ -358,8 +358,8 @@ def calibrate_iof_image_as_dn(obs, data=None):
     
     # 1) dntoelectrons.pro
     #        ELECTRONS = DN * GAIN / GAIN_RATIO[GAIN_MODE_ID]
-    factor = (factor / _CISSCAL_DETECTOR_GAIN[obs.detector] *
-              _CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
+    factor = (factor / _CISSCAL_DETECTOR_GAIN[obs_detector(obs)] *
+              _CISSCAL_DETECTOR_GAIN_RATIO[obs_detector(obs)][obs.gain_mode])
 
     _IOF_DN_CONVERSION_FACTOR_CACHE[key] = factor
 
@@ -644,7 +644,7 @@ def _compute_stellar_spectrum(obs, star):
     planck_v_sum = np.sum(planck_v)
     # Predicted photons seen through V - photons / cm^2 / s
     predicted_v = _v_magnitude_to_photon_flux(star.johnson_mag_v,
-                                              obs.detector)
+                                              obs_detector(obs))
 #    logger.debug('Star %9d Temp %9.2f Predicted V-band total flux %e', 
 #                 star.unique_number, star.temperature, predicted_v)
     scale_factor_v = predicted_v / planck_v_sum
@@ -655,7 +655,7 @@ def _compute_stellar_spectrum(obs, star):
     planck_b_sum = np.sum(planck_b)
     # Predicted photons seen through V - photons / cm^2 / s
     predicted_b = _b_magnitude_to_photon_flux(star.johnson_mag_b,
-                                              obs.detector)
+                                              obs_detector(obs))
 #    logger.debug('Star %9d Temp %9.2f Predicted V-band total flux %e', 
 #                 star.unique_number, star.temperature, predicted_v)
     scale_factor_b = predicted_b / planck_b_sum
@@ -699,7 +699,7 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
         assert conv_wl[0] == weights_wl[0] and conv_wl[-1] == weights_wl[-1]
     
         conv_flux_avg = conv_flux_sum / integrate.simps(weights, weights_wl)
-        conv_flux_avg /= CISSCAL_DETECTOR_SOLID_ANGLE[obs.detector]
+        conv_flux_avg /= CISSCAL_DETECTOR_SOLID_ANGLE[obs_detector(obs)]
         logger.debug('Total flux through %s+%s = %e /nm/sr',
                      obs.filter1, obs.filter2, conv_flux_avg)
     
@@ -711,7 +711,7 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     sum_factor = obs.data.shape[0] / 1024. * obs.data.shape[1] / 1024.
     
     data = (conv_flux_sum / sum_factor *
-            _CISSCAL_DETECTOR_OPTICS_AREA[obs.detector])
+            _CISSCAL_DETECTOR_OPTICS_AREA[obs_detector(obs)])
     # photons / s
     
     # 2) dividebyexpot.pro
@@ -722,8 +722,8 @@ def _compute_dn_from_spectrum(obs, spectrum_wl, spectrum):
     
     # 1) dntoelectrons.pro
     #        ELECTRONS = DN * GAIN / GAIN_RATIO[GAIN_MODE_ID]
-    dn = (electrons / _CISSCAL_DETECTOR_GAIN[obs.detector]
-                    * _CISSCAL_DETECTOR_GAIN_RATIO[obs.detector][obs.gain_mode])
+    dn = (electrons / _CISSCAL_DETECTOR_GAIN[obs_detector(obs)]
+            * _CISSCAL_DETECTOR_GAIN_RATIO[obs_detector(obs)][obs.gain_mode])
     
     logger.debug('Returned DN = %f', dn)
     

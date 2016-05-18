@@ -196,3 +196,10 @@ def compute_sun_saturn_distance(obs):
 # MISCELLANEOUS
 #
 #==============================================================================
+
+def obs_detector(obs):
+    if obs.instrument == 'ISS':
+        return obs.detector
+    return obs.instrument
+
+    
