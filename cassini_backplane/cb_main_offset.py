@@ -68,8 +68,8 @@ if len(command_list) == 0:
 #    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # High res A ring edge - only works with blurring - tests A ring special case for PNG
 #    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results --offset-xy "-30,36"' # Star streaks through the rings but stars in wrong place
 #    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring
-#    command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model
-
+    command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model
+#     command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # Distant WAC ring
 
 #    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results' # Rhea and Dione next to each other
 #    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
@@ -81,7 +81,7 @@ if len(command_list) == 0:
 #    command_line_str = 'N1498373872_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
 #    command_line_str = 'N1541685510_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
 #    command_line_str = 'N1588249321_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
-    command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
+#     command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge
 #    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge - XXX THINKS SATURN IS BOOTSTRAPPABLE
 #    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
 

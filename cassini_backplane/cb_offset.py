@@ -585,7 +585,7 @@ def master_find_offset(obs,
             
     # Try relaxing varying constraints on the bodies until we find one that
     # works.
-    model_phase_info_list = [(1.00, False, False, False, False),
+    model_phase_info_list = [(0.95, False, False, False, False),
                              (0.75,  True, False, False, False),
                              (0.75, False, False,  True, False),
                              (0.50,  True, False,  True, False),
@@ -1073,6 +1073,8 @@ def offset_create_overlay_image(obs, metadata,
                                           gamma)
 
     stars_metadata = metadata['stars_metadata']
+    titan_metadata = metadata['titan_metadata']
+    
     if stars_metadata is not None:
         star_list = stars_metadata['full_star_list']
         if star_list is not None:
@@ -1148,8 +1150,10 @@ def offset_create_overlay_image(obs, metadata,
         model_offset = metadata['model_offset']
         titan_offset = metadata['titan_offset']
         
-        if stars_offset is None:
+        if stars_metadata is None:
             data_line = 'Stars N/A'
+        elif stars_offset is None:
+            data_line = 'Stars None'
         else:
             if offset_winner == 'STARS':
                 data_line = 'STARS'
@@ -1165,8 +1169,10 @@ def offset_create_overlay_image(obs, metadata,
             else:
                 data_line += ' | Model'
             data_line += ' %d,%d' % model_offset
-        if titan_offset is None:
+        if titan_metadata is None:
             data_line += ' | Titan N/A'
+        elif titan_offset is None:
+            data_line += ' | Titan None'
         else:
             if offset_winner == 'TITAN':
                 data_line += ' | TITAN'

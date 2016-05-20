@@ -270,7 +270,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     title += '    ' + cspice.et2utc(obs.midtime, 'C', 0)
 
     if canvas_size is None:
-        canvas_size = (obs.data.shape[1], obs.data.shape[0])
+        canvas_size = (max(obs.data.shape[1], 1024),
+                       min(obs.data.shape[0], 768))
     imgdisp = ImageDisp([ext_data], [overlay], canvas_size=canvas_size, 
                         title=title,
                         allow_enlarge=True,
@@ -406,7 +407,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    if metadata['titan_offset'] is None:
+    if metadata['titan_metadata'] is None:
+        offset = 'N/A'
+    elif metadata['titan_offset'] is None:
         offset = 'None'
     else:
         offset = '%d, %d (%.2f)' % (metadata['titan_offset'][0],

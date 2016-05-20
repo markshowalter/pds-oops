@@ -89,16 +89,21 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     #       If mode == 1, data: a, rms, ae, long_peri, rate_peri
     #       If mode  > 1, data: amplitude, phase, pattern speed
     
+    # Features are listed in order from closer to Saturn to farther from
+    # Saturn
+    
     ###########################################################
     ### C RING - Nicholson et al, Icarus 241 (2014) 373-396 ###
     ###########################################################
     
-    # Colombo Gap - #487, #43
+    # No C ring features have inclinations
+    
+    # Colombo Gap - #487, #43 - 178 km
     ('GAP', 'Colombo',
                 ((  1,  77747.89, 0.23,  3.11,  96.90,   22.57346),),  # IEG
                 ((  1,  77926.01, 0.27,  4.89, 280.02,   22.57696),)), # OEG
 
-    # Titan Ringlet - #63, #62
+    # Titan Ringlet - #63, #62 - 23 km
     ('RINGLET', 'Titan',
                 ((  1,  77867.13, 0.62, 17.39, 270.54,   22.57503),    # IER
                  (  0,                   3.84,  40.93, 1391.16334),
@@ -109,24 +114,24 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  3,                   1.54, 110.60,  949.74161),
                  (  4,                   0.90,  80.30, 1065.62338))),
 
-    # Maxwell Gap - #163, #164
+    # Maxwell Gap - #163, #164 - 267 km
     ('GAP', 'Maxwell',
                 ((  1,  87342.77, 0.43,  0.00,   0.00,    0.00000),),  # IEG
                 ((  1,  87610.12, 0.41,  1.11, 228.54,   14.69150),)), # OEG
 
-    # Maxwell Ringlet - #61, #60
+    # Maxwell Ringlet - #61, #60 - 59 km
     ('RINGLET', 'Maxwell',
                 ((  1,  87480.29, 0.23, 18.93,  55.60,   14.69572),),  # IER
                 ((  1,  87539.36, 0.16, 58.02,  57.20,   14.69314),    # OER
                  (  2,                   0.19,  73.26,  599.52336),
                  (  4,                   0.29,  16.55,  891.94002))),
 
-    # Bond Gap - #111, #110
+    # Bond Gap - #111, #110 - 37 km
     ('GAP', 'Bond',
                 ((  1,  88686.01, 0.76,  0.00,   0.00,    0.00000),),  # IEG 
                 ((  1,  88723.04, 0.30,  0.00,   0.00,    0.00000),)), # OEG
      
-    # Bond Ringlet - #59, #58
+    # Bond Ringlet - #59, #58 - 17 km
     ('RINGLET', 'Bond',
                 ((  1,  88701.89, 0.28,  0.00,   0.00,    0.00000),    # IER
                  (  0,                   0.17,  79.75, 1146.43579),
@@ -141,13 +146,13 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
 
     # Dawes Ringlet - Not included because the edge is not sharp
 
-    # Dawes Gap - #56, #112
+    # Dawes Gap - #56, #112 - 20 km
     ('GAP', 'Dawes',
-                ((  1,  90200.38, 0.75,  6.10,  69.24,   13.18027),
+                ((  1,  90200.38, 0.75,  6.10,  69.24,   13.18027),    # IEG
                  (  2,                   5.27,  62.92,  572.50536),
                  (  3,                   1.46,  41.67,  758.94278),
                  (  5,                   0.89,  71.02,  908.10954)),
-                ((  1,  90220.77, 0.32,  2.29, 241.79,   13.17088),
+                ((  1,  90220.77, 0.32,  2.29, 241.79,   13.17088),    # OEG
                  (  2,                   0.43, 157.21,  572.48458))),
 
         
@@ -158,7 +163,7 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     #######################################################################                         
     
     ('GAP', 'B Ring',
-                ((  1, 117569.41, 7.56, 22.89,  66.89,    5.08300),
+                ((  1, 117569.41, 7.56, 22.89,  66.89,    5.08300),    # IEG
                  (  2,                  37.94, 117.29,  382.07925),
                  (  2,                  31.77, 164.83,  381.98729),
                  (  3,                  10.92,  22.06,  507.70626),
@@ -171,57 +176,57 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ### CASSINI DIVISION - French et al (XXX) ###
     #############################################
 
-    # Huygens Ringlet - #54, #53
+    # Huygens Ringlet - #54, #53 - 18 km
     ('RINGLET', 'Huygens',
-                ((  1, 117805.55, 1.30, 27.81, 137.53,    5.02872),
-                 ( 91,                   0.59, 115.57,   -4.98852),
-                 ( 92,                   2.09,  81.56,  381.98744),
+                ((  1, 117805.55, 1.30, 27.81, 137.53,    5.02872),    # IER
+                 ( 91,                   0.59, 115.57,   -4.98852), # Incl
+                 (  2,                   2.09,  81.56,  381.98744),
                  (-10,                   0.74,  14.73,  831.59967),
                  ( -5,                   0.85,  43.95,  906.74404),
                  ( -4,                   1.85,  32.20,  944.31186),
                  ( -3,                   1.20,  84.52, 1006.92419),
                  ( -2,                   1.12, 168.38, 1132.15800)),
                 # The first of the two fits
-                ((  1, 117823.65, 1.50, 28.03, 141.77,    5.02587),
-                 ( 91,                   0.58,  96.86,   -4.97462),
+                ((  1, 117823.65, 1.50, 28.03, 141.77,    5.02587),    # OER
+                 ( 91,                   0.58,  96.86,   -4.97462), # Incl
                  (  2,                   1.54, 105.43,  380.68870),
-                 ( 92,                   1.84,  71.33,  381.98878),
+                 (  2,                   1.84,  71.33,  381.98878),
                  (  5,                   0.71,  26.40,  606.07903))),
                                
-    # Strange Ringlet - #560, #561
+    # Strange Ringlet - #560, #561 - 2 km
     ('RINGLET', 'Strange',
-                ((  1, 117907.04, 1.63,  7.63, 153.21,    5.00570),
-                 ( 91,                   7.44, 117.20,   -4.97620),
+                ((  1, 117907.04, 1.63,  7.63, 153.21,    5.00570),    # IER
+                 ( 91,                   7.44, 117.20,   -4.97620), # Incl
                  (  0,                   2.42,   9.73,  750.48932),
                  (  2,                   3.75, 105.79,  380.25154),
-                 ( 92,                   1.29,  75.92,  381.97024),
+                 (  2,                   1.29,  75.92,  381.97024),
                  (  3,                   2.49,  37.53,  505.33539),
                  (  5,                   1.06,  29.00,  605.39489)),
-                ((  1, 117908.77, 1.99,  7.40, 153.83,    5.00735),
-                 ( 91,                   7.39, 120.60,   -4.97938),
+                ((  1, 117908.77, 1.99,  7.40, 153.83,    5.00735),    # OER
+                 ( 91,                   7.39, 120.60,   -4.97938), # Incl
                  (  0,                   2.56,  19.83,  750.47956),
                  (  2,                   4.13, 106.14,  380.25204),
-                 ( 92,                   1.55,  77.43,  381.96666),
+                 (  2,                   1.55,  77.43,  381.96666),
                  (  3,                   2.60,  33.24,  505.33449),
                  ( -1,                   1.14, 352.19, 1505.96783))),
                                
     # Huygens Gap - #20 OEG only
     ('GAP', 'Huygens',
                 None,
-                ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),
-                 ( 91,                   0.44, 245.70,   -4.98425),
+                ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),    # OEG
+                 ( 91,                   0.44, 245.70,   -4.98425), # Incl
                  (  0,                   1.82, 143.78,  750.25165),
-                 ( 92,                   1.34,  76.25,  381.98386),
+                 (  2,                   1.34,  76.25,  381.98386),
                  ( -4,                   0.35,  45.39,  942.82221),
                  ( -3,                   0.40,  84.88, 1005.34987),
                  ( -1,                   0.82,  67.16, 1505.51205))),
                 
-    # Herschel Gap - #19, #16
+    # Herschel Gap - #19, #16 - 95 km
     ('GAP', 'Herschel',
-                ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),
-                 ( 91,                   0.34, 279.55,   -4.95092),
+                ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),    # IEG
+                 ( 91,                   0.34, 279.55,   -4.95092), # Incl
                  (  2,                   1.34,  95.16,  378.89248),
-                 ( 92,                   0.89,  82.69,  381.98160),
+                 (  2,                   0.89,  82.69,  381.98160),
                  (  3,                   0.71,   5.26,  503.53264),
                  (  4,                   0.35,  89.58,  565.85131),
                  (  5,                   0.36,  71.76,  603.24143),
@@ -229,91 +234,92 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  7,                   0.37,  45.09,  645.97255),
                  (  8,                   0.34,  31.40,  659.32551),
                  ( 10,                   0.25,  24.43,  678.02618)),
-                ((  1, 118283.52, 0.15,  0.24, 127.45,    4.94609),
-                 ( 91,                   0.25,  57.07,   -4.92430),
+                # The first fit with the single m=1 mode
+                ((  1, 118283.52, 0.15,  0.24, 127.45,    4.94609),    # OEG
+                 ( 91,                   0.25,  57.07,   -4.92430), # Incl
                  (  0,                   1.27, 232.50,  746.91637),
-                 ( 92,                   0.67,  76.01,  381.98441),
+                 (  2,                   0.67,  76.01,  381.98441),
                  ( -3,                   0.11,  96.61, 1000.83562),
                  ( -2,                   0.11, 144.86, 1125.34236),
                  ( -1,                   0.23, 197.18, 1498.79019))),
                                
-    # Herschel Ringlet - #18, #17        
+    # Herschel Ringlet - #18, #17 - 29 km        
     ('RINGLET', 'Herschel',
-                ((  1, 118234.30, 0.26,  1.49, 172.81,    4.96229),
-                 ( 91,                   1.49, 274.14,   -4.92970),
+                ((  1, 118234.30, 0.26,  1.49, 172.81,    4.96229),    # IER
+                 ( 91,                   1.49, 274.14,   -4.92970), # Incl
                  (  0,                   0.32, 237.88,  747.36440),
-                 ( 92,                   0.69,  79.00,  381.98129)),
-                ((  1, 118263.25, 0.35,  1.76, 264.77,    4.95659),
-                 ( 91,                   2.12, 294.58,   -4.93101),
+                 (  2,                   0.69,  79.00,  381.98129)),
+                ((  1, 118263.25, 0.35,  1.76, 264.77,    4.95659),    # OER
+                 ( 91,                   2.12, 294.58,   -4.93101), # Incl
                  (  2,                   0.37,   6.80,  378.53785),
-                 ( 92,                   0.72,  77.59,  381.98303),
+                 (  2,                   0.72,  77.59,  381.98303),
                  (  3,                   0.32,  32.76,  503.04880),
                  (  4,                   0.20,  76.13,  565.30770),
                  (  5,                   0.22,  54.38,  602.66098))),
 
-    # Russell Gap - #123, #13
+    # Russell Gap - #123, #13 - 38 km
     ('GAP', 'Russell',
-                ((  1, 118589.92, 0.25,  7.60, 236.73,    4.90922),
+                ((  1, 118589.92, 0.25,  7.60, 236.73,    4.90922),    # IEG
                  (  2,                   0.23, 165.64,  376.94996),
-                 ( 92,                   0.51,  80.23,  381.98584),
+                 (  2,                   0.51,  80.23,  381.98584),
                  (  3,                   0.25,  92.19,  500.95134)),
-                ((  1, 118628.40, 0.09,  0.11,  73.68,    4.90829),
-                 ( 92,                   0.47,  78.01,  381.98525))),
+                ((  1, 118628.40, 0.09,  0.11,  73.68,    4.90829),    # OEG
+                 (  2,                   0.47,  78.01,  381.98525))),
 
-    # Jeffreys Gap - #120, #15
+    # Jeffreys Gap - #120, #15 - 37 km
     ('GAP', 'Jeffreys',
-                ((  1, 118929.63, 0.13,  3.26, 333.51,    4.85753),
-                 ( 91,                   0.17, 292.09,   -4.82576),
-                 ( 92,                   0.44,  75.98,  381.99151)),
-                ((  1, 118966.70, 0.12,  0.08, 114.89,    4.80910),
-                 ( 92,                   0.37,  74.90,  381.98629))),
+                ((  1, 118929.63, 0.13,  3.26, 333.51,    4.85753),    # IEG
+                 ( 91,                   0.17, 292.09,   -4.82576), # Incl
+                 (  2,                   0.44,  75.98,  381.99151)),
+                ((  1, 118966.70, 0.12,  0.08, 114.89,    4.80910),    # OEG
+                 (  2,                   0.37,  74.90,  381.98629))),
 
-    # Kuiper Gap - #119, #118      
+    # Kuiper Gap - #119, #118 - 5 km
     ('GAP', 'Kuiper',
-                ((  1, 119401.67, 0.16,  0.93,  19.55,    4.79845),
-                 ( 91,                   0.18, 226.51,   -4.78025),
-                 ( 92,                   0.25,  79.87,  381.98534)),
-                ((  1, 119406.30, 0.13,  0.10, 220.24,    4.75654),
-                 ( 92,                   0.29,  79.03,  381.98449))),
+                ((  1, 119401.67, 0.16,  0.93,  19.55,    4.79845),    # IEG
+                 ( 91,                   0.18, 226.51,   -4.78025), # Incl
+                 (  2,                   0.25,  79.87,  381.98534)),
+                ((  1, 119406.30, 0.13,  0.10, 220.24,    4.75654),    # OEG
+                 (  2,                   0.29,  79.03,  381.98449))),
 
-    # Laplace Gap - #115, #114 
+    # Laplace Gap - #115, #114 - 239 km
     ('GAP', 'Laplace',
-                ((  1, 119844.78, 0.26,  3.25, 310.11,    4.72673),
-                 ( 91,                   0.25,  10.17,   -4.69233),
-                 ( 92,                   0.29,  82.70,  381.98579)),
-                ((  1, 120085.65, 0.10,  1.34, 308.79,    4.71705),
-                 ( 92,                   0.22,  76.51,  381.98639))),
+                ((  1, 119844.78, 0.26,  3.25, 310.11,    4.72673),    # IEG
+                 ( 91,                   0.25,  10.17,   -4.69233), # Incl
+                 (  2,                   0.29,  82.70,  381.98579)),
+                ((  1, 120085.65, 0.10,  1.34, 308.79,    4.71705),    # OEG
+                 (  2,                   0.22,  76.51,  381.98639))),
                                
-    # Laplace Ringlet - #14, #12
+    # Laplace Ringlet - #14, #12 - 41 km
     ('RINGLET', 'Laplace',
-                ((  1, 120036.53, 0.20,  1.19, 236.12,   4.71250),
+                ((  1, 120036.53, 0.20,  1.19, 236.12,   4.71250),     # IER
                  (  0,                   2.22, 160.05, 730.64946),
-                 ( 92,                   0.27,  75.51, 381.98821),
+                 (  2,                   0.27,  75.51, 381.98821),
                  ( -4,                   0.13,  19.39, 918.04749),
                  ( -2,                   0.74, 141.40,1100.71164),
                  ( -1,                   0.61, 193.60,1466.03143)),
-                ((  1, 120077.75, 0.14,  2.79,  51.49,   4.72457),
+                ((  1, 120077.75, 0.14,  2.79,  51.49,   4.72457),     # OER
                  (  2,                   0.62,  86.10, 369.88543),
-                 ( 92,                   0.22,  78.01, 381.98827),
+                 (  2,                   0.22,  78.01, 381.98827),
                  (  3,                   0.42,  34.20, 491.60221),
                  (  4,                   0.25,  46.96, 552.46291),
                  (  6,                   0.12,  16.13, 613.31846))),
     
-    # Bessel Gap - #127, #11
+    # Bessel Gap - #127, #11 - 13 km
     ('GAP', 'Bessel',
-                ((  1, 120231.17, 0.44,  1.78, 263.16,    4.68450),
-                 ( 92,                   0.29,  73.47,  381.97875),
+                ((  1, 120231.17, 0.44,  1.78, 263.16,    4.68450),    # IEG
+                 (  2,                   0.29,  73.47,  381.97875),
                  (  8,                   0.36,  10.70,  642.50158)),
-                ((  1, 120243.71, 0.23,  0.64, 206.50,    4.68561),
+                ((  1, 120243.71, 0.23,  0.64, 206.50,    4.68561),    # OEG
                  (  0,                   0.21, 350.29,  728.80170),
-                 ( 92,                   0.23,  75.99,  381.98988),
+                 (  2,                   0.23,  75.99,  381.98988),
                  ( -1,                   0.14, 302.16, 1462.27593))),
 
-    # Barnard Gap - #10, #9
+    # Barnard Gap - #10, #9 - 12 km
     ('GAP', 'Barnard',
-                ((  1, 120303.69, 0.43,  0.44, 200.07,    4.68212),
+                ((  1, 120303.69, 0.43,  0.44, 200.07,    4.68212),    # IEG
                  (  2,                   0.61,  44.12,  368.82370),
-                 ( 92,                   0.25,  67.07,  381.99503),
+                 (  2,                   0.25,  67.07,  381.99503),
                  (  3,                   1.31, 108.47,  490.20424),
                  (  4,                   1.64,  46.00,  550.89054),
                  (  5,                   1.36,  27.61,  587.28565),
@@ -323,8 +329,8 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  9,                   0.71,   8.38,  652.04071),
                  ( 10,                   0.42,   1.75,  660.13055),
                  ( 13,                   0.36,  26.84,  676.93190)),
-                ((  1, 120316.04, 0.11,  0.23, 166.62,    4.66313),
-                 ( 92,                   0.22,  79.36,  381.98624),
+                ((  1, 120316.04, 0.11,  0.23, 166.62,    4.66313),    # OEG
+                 (  2,                   0.22,  79.36,  381.98624),
                  (  5,                   0.19,  58.97,  587.28403))),
                                
 
@@ -413,7 +419,7 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                 ((  1,  77162.11501, 0.127343, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.5803149,  95.1273754,  22.5786349))),
 
-    # #38, #37
+    # #38, #37 - 41 km
     ('RINGLET', None,
                 ((  1,  79222.04152, 0.113388, 0.0000000,   0.0000000,   0.0000000),
                  (  1,                         0.2341692, 287.4580718,  22.5734575)),
@@ -445,17 +451,17 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                 None,
                 ((  1, 88592.73625, 0.115294, 0.0000000,   0.0000000,   0.0000000),)),
 
-    # #27, #41
+    # #27, #41 - 103 km
     ('RINGLET', None,
                 ((  1, 89190.58600, 0.086866, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 89294.05618, 0.181465, 0.0000000,   0.0000000,   0.0000000),)),
 
-    # #26, #25
+    # #26, #25 - 148 km
     ('RINGLET', None,
                 ((  1, 89789.57831, 0.081971, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 89937.78988, 0.141344, 0.0000000,   0.0000000,   0.0000000),)),
 
-    # #24, #23
+    # #24, #23 - 508 km
     ('RINGLET', None,
                 ((  1, 90406.12658, 0.094128, 0.0000000,   0.0000000,   0.0000000),),
                 ((  1, 90613.79856, 0.156829, 0.0000000,   0.0000000,   0.0000000),)),
@@ -826,16 +832,18 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
         blur = 1.
     a = feature[0][1]
     rms = feature[0][2]
+    out_of_frame = False
     if not min_sub_radius < a < max_sub_radius:
         if not min_radius < a < max_radius:
-            return None
-        return -1.
+            return None, None
+        out_of_frame = True
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
     if min_res is None:
-        return None # Something went wrong and we couldn't find a resolution
+        return None, None # Something went wrong; we couldn't find a resolution
     if rms*rms_gain/blur > max_res:
-        return (rms*rms_gain/blur)/max_res # Additional blurring needed
-    return 1. # OK as is
+        # Additional blurring needed
+        return (rms*rms_gain/blur)/max_res, out_of_frame
+    return 1., out_of_frame # OK as is
     
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     """Return a list of fiducial features in the image.
@@ -858,7 +866,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     set_obs_ext_bp(obs, extend_fov)
 
     min_features = rings_config['fiducial_feature_threshold']
-    
+    min_feature_width = rings_config['fiducial_min_feature_width']
+
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
@@ -868,9 +877,18 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     max_sub_radius = np.max(radii[extend_fov[1]*2:-extend_fov[1]*2,
                                   extend_fov[0]*2:-extend_fov[0]*2])
 
+    logger.debug('Looking for features based on RMS residual vs. resolution')
     logger.debug('Extended radii %.2f to %.2f', min_radius, max_radius)
     logger.debug('Internal radii %.2f to %.2f', min_sub_radius, max_sub_radius) 
 
+    resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                   astype('float'))
+
+    min_res = np.min(resolutions)
+    max_res = np.max(resolutions)
+    
+    logger.debug('Resolution %.2f to %.2f', min_res, max_res)
+    
     margin_pixels = (rings_config['fiducial_feature_margin'] +
                      max(extend_fov[0], extend_fov[1]))
     rms_gain = rings_config['fiducial_rms_gain']
@@ -898,46 +916,104 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 end_date = cspice.utc2et(entry_type_list[2])
                 if not (start_date < obs.midtime < end_date):
                     continue
-            name2 = feature_name
-            if name2 is None:
-                name2 = 'UNNAMED'
+            pretty_name = feature_name
+            if pretty_name is None:
+                pretty_name = 'UNNAMED'
+            print pretty_name
+            
             inner_out_of_frame = False
             outer_out_of_frame = False
             if inner is not None:
-                ret = _fiducial_is_ok(obs, inner, min_radius, max_radius, 
-                                      rms_gain, blur, 
-                                      min_sub_radius, max_sub_radius,
-                                      extend_fov)
-                if ret == -1.:
-                    inner_out_of_frame = True
-                else:
-                    if ret is None or ret != 1.:
-                        inner = None
-                    if ret is not None and ret != 1.:
-                        blur_list.append(ret)
+                ret_inner, inner_out_of_frame = _fiducial_is_ok(
+                                            obs, inner, min_radius, max_radius, 
+                                            rms_gain, blur, 
+                                            min_sub_radius, max_sub_radius,
+                                            extend_fov)
+                if ret_inner is None or ret_inner != 1.:
+                    inner = None
             if outer is not None:
-                ret = _fiducial_is_ok(obs, outer, min_radius, max_radius, 
-                                      rms_gain, blur, 
-                                      min_sub_radius, max_sub_radius,
-                                      extend_fov)
-                if ret == -1.:
-                    outer_out_of_frame = True
-                else:
-                    if ret is None or ret != 1.:
-                        outer = None
-                    if ret is not None and ret != 1.:
-                        blur_list.append(ret)
+                ret_outer, outer_out_of_frame = _fiducial_is_ok(
+                                            obs, outer, min_radius, max_radius, 
+                                            rms_gain, blur, 
+                                            min_sub_radius, max_sub_radius,
+                                            extend_fov)
+                if ret_outer is None or ret_outer != 1.:
+                    outer = None
+            print ret_inner, ret_outer
+
+            # Features aren't THAT big, so just use the resolution for the 
+            # inner or outer, whichever we have
+            if inner is not None:       
+                (min_res_inner_outer, 
+                 max_res_inner_outer) = _find_resolutions_by_a(
+                                              obs, extend_fov, inner[0][1])
+            elif outer is not None:
+                (min_res_inner_outer, 
+                 max_res_inner_outer) = _find_resolutions_by_a(
+                                              obs, extend_fov, outer[0][1])
+
+            # For single-sided features, see if there is another feature that
+            # is too close
+            if (inner is None) != (outer is None):
+                for inner_outer in [inner, outer]:
+                    bad = False
+                    if inner_outer is None:
+                        continue
+                    for fiducial_feature2 in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+                        (entry_type_str2, feature_pretty_name, inner2, 
+                         outer2) = fiducial_feature
+                        for inner_outer2 in [inner2, outer2]:
+                            if inner_outer2 is None:
+                                continue
+                            feature_dist = (inner_outer2[0][1]-
+                                inner_outer[0][1]) / min_res_inner_outer
+                            if (feature_dist != 0 and 
+                                feature_dist < min_feature_width):
+                                logger.debug(
+                                     'Ignoring partial %s %s %.2f - '+
+                                     'feature too close to another (%d pixels)',
+                                     pretty_name, entry_type, inner_outer[0][1],
+                                     feature_dist)
+                                bad = True
+                                break
+                            if bad:
+                                break
+                        if bad:
+                            break
+                    if bad:
+                        if inner_outer == inner:
+                            inner = None
+                        else:
+                            outer = None
+                            
+            if inner is not None and outer is not None:
+                # See if the gap or ringlet is too small to be seen in
+                # the image
+                feature_width = ((outer[0][1]-inner[0][1]) / 
+                                 min_res_inner_outer)
+                if feature_width < min_feature_width:
+                    logger.debug(
+                         'Ignoring complete %s %s %.2f to %.2f - '+
+                         'feature too narrow (%d pixels)',
+                         pretty_name, entry_type, inner[0][1], outer[0][1],
+                         feature_width)
+                    inner = None
+                    outer = None
             if inner is not None or outer is not None:
                 feature_list.append((entry_type, feature_name, inner, outer))
                 if inner:
+                    if ret_inner is not None and ret_inner != 1.:
+                        blur_list.append(ret_inner)
                     logger.debug(
-                         'Keeping inner feature %s %s %.2f out of frame %s', 
-                         name2, entry_type, inner[0][1],
+                         'Keeping inner feature %s %s %.2f (out of frame %s)', 
+                         pretty_name, entry_type, inner[0][1],
                          str(inner_out_of_frame))
                 if outer:
+                    if ret_outer is not None and ret_outer != 1.:
+                        blur_list.append(ret_outer)
                     logger.debug(
-                         'Keeping outer feature %s %s %.2f out of frame %s', 
-                         name2, entry_type, outer[0][1],
+                         'Keeping outer feature %s %s %.2f (out of frame %s)', 
+                         pretty_name, entry_type, outer[0][1],
                          str(outer_out_of_frame))
                 if inner is not None:
                     num_features += 1
@@ -949,7 +1025,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                     num_features_in_frame += 1
 
         if num_features_in_frame >= min_features:
-            logger.debug('Found enough features in frame')
+            logger.debug('Found enough (%d vs. %d) features in frame',
+                         num_features_in_frame, min_features)
             break
 
         if phase == 1:
@@ -958,7 +1035,9 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         blur_list.sort()
         
         if len(blur_list) < min_features-num_features_in_frame:
-            logger.debug('Not enough features in frame to try blurring')
+            logger.debug('Not enough (%d vs. %d) features in frame to try '+
+                         'blurring', len(blur_list), 
+                         min_features-num_features_in_frame)
             break
         
         blur = blur_list[min_features-num_features_in_frame-1]
@@ -1088,6 +1167,11 @@ def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
         shade_sign = 1.
 
     shade = 1.-shade_sign*(radii-a)/resolutions
+    # Since the radius is actually the middle of a pixel, when radii==a the
+    # shading should be 0.5! Only if a is 0.5*resolution beyond the radius
+    # should it be 1.
+    shade -= 0.5
+    
     shade[shade < 0.] = 0.
     shade[shade > 1.] = 0.
     shade *= max
@@ -1126,9 +1210,6 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                              rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
-    text_ringlet_threshold = rings_config['text_ringlet_gap_threshold']
-    text_threshold = rings_config['text_threshold']
-    
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
@@ -1183,9 +1264,9 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
     # Then go back and add the ringlets, which might fill in the gaps.
     for do_type in ['GAP', 'RINGLET']:
         for entry_type, feature_name, inner, outer in feature_list:
-            name2 = feature_name
-            if name2 is None:
-                name2 = 'UNNAMED'
+            pretty_name = feature_name
+            if pretty_name is None:
+                pretty_name = 'UNNAMED'
             if entry_type != do_type:
                 continue
             inner_radii = None
@@ -1218,79 +1299,62 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 inner_radii = inner_radii_bp.vals.astype('float')
             if outer_radii_bp is not None:
                 outer_radii = outer_radii_bp.vals.astype('float')
-            if inner_radii is not None and outer_radii is not None:
-                # We have both edges for a ringlet or gap - just make it solid
+            if (inner_radii is not None and outer_radii is not None
+                and entry_type == 'RINGLET'):
+                # We have both edges for a ringlet - just make it solid
                 logger.debug('Adding %s %s a=%.2f to %.2f', 
-                             name2, entry_type, inner_a, outer_a)
+                             pretty_name, entry_type, inner_a, outer_a)
                 inner_above = inner_radii >= inner_a
                 outer_below = outer_radii <= outer_a
                 intersect = np.logical_and(inner_above, outer_below)
-                if entry_type == 'GAP':
-                    model[intersect] = 0.
-                else:
-                    model[intersect] += 1.
-                shade_dir = entry_type == 'GAP'
-                shade = _shade_antialias(inner_radii, inner_a, shade_dir,
+                model[intersect] += 1.
+                shade = _shade_antialias(inner_radii, inner_a, False,
                                          resolutions, max=0.5)
-                if entry_type == 'GAP':
-                    model -= shade
-                else:
-                    model += shade
+                model += shade
                 shade = _shade_antialias(outer_radii, outer_a, not shade_dir,
                                          resolutions, max=0.5)
-                if entry_type == 'GAP':
-                    model -= shade
+                model += shade
+                if feature_name and feature_name.upper() == 'A RING':
+                    # We need to fake this one out - it's really the Keeler
+                    # OEG and the A Ring outer edge
+                    intersect_list.append(obs.ext_bp.border_atop(
+                                          inner_radii_bp.key,
+                                          inner_a).vals.astype('bool'))
+                    text_name_list.append('Keeler OEG')
+                    intersect_list.append(obs.ext_bp.border_atop(
+                                          outer_radii_bp.key,
+                                          outer_a).vals.astype('bool'))
+                    text_name_list.append('A Ring Outer Edge')                        
                 else:
-                    model += shade
-                # If the ringlet or gap is wide enough that you can really see 
-                # it in the image, then it's worth labeling
-                if (outer_a-inner_a)/min_res >= text_ringlet_threshold:
-                    # Somewhere it's at least 3 pixels wide and can probably be
-                    # seen
-                    if feature_name and feature_name.upper() == 'A RING':
-                        # We need to fake this one out - it's really the Keeler
-                        # OEG and the A Ring outer edge
-                        intersect_list.append(obs.ext_bp.border_atop(
-                                              inner_radii_bp.key,
-                                              inner_a).vals.astype('bool'))
-                        text_name_list.append('Keeler OEG')
-                        intersect_list.append(obs.ext_bp.border_atop(
-                                              outer_radii_bp.key,
-                                              outer_a).vals.astype('bool'))
-                        text_name_list.append('A Ring Outer Edge')                        
+                    intersect_list.append(intersect)
+                    if feature_name:
+                        text_name_list.append(feature_name + ' ' + 
+                                              entry_type.capitalize())
                     else:
-                        intersect_list.append(intersect)
-                        if feature_name:
-                            text_name_list.append(feature_name + ' ' + 
-                                                  entry_type.capitalize())
-                        else:
-                            text_name_list.append('a=%.2f-%.2f %s' % 
-                                                  (inner_a, outer_a, entry_type.capitalize()))
+                        text_name_list.append('a=%.2f-%.2f %s' % 
+                              (inner_a, outer_a, entry_type.capitalize()))
             else:
                 named_full_gap = False
                 if (inner_radii is not None and outer_radii is not None and
                     entry_type == 'GAP'):
                     # Go ahead and name the full gap here even though we're going
                     # to shade the edges separately later
-                    if (outer_a-inner_a)/min_res >= text_ringlet_threshold:
-                        # Somewhere it's at least 3 pixels wide and can probably be
-                        # seen
-                        inner_above = inner_radii >= inner_a
-                        outer_below = outer_radii <= outer_a
-                        intersect_list.append(np.logical_and(inner_above, 
-                                                             outer_below))
-                        if feature_name:
-                            text_name_list.append(feature_name + ' Gap')
-                        else:
-                            text_name_list.append('a=%.2f-%.2f Gap' % (inner_a, 
-                                                                       outer_a))
-                        named_full_gap = True
+                    inner_above = inner_radii >= inner_a
+                    outer_below = outer_radii <= outer_a
+                    intersect_list.append(np.logical_and(inner_above, 
+                                                         outer_below))
+                    if feature_name:
+                        text_name_list.append(feature_name + ' Gap')
+                    else:
+                        text_name_list.append('a=%.2f-%.2f Gap' % (inner_a, 
+                                                                   outer_a))
+                    named_full_gap = True
                     # Fall through to...
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
-                    logger.debug('Adding %s %s a=%.2f shade_above %d',
-                                 name2, entry_type, inner_a, shade_above)
+                    logger.debug('Adding %s inner %s a=%.2f shade_above %d',
+                                 pretty_name, entry_type, inner_a, shade_above)
                     model = _shade_model(model, inner_radii, inner_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
@@ -1309,8 +1373,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 if outer_radii is not None:
                     # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
-                    logger.debug('Adding %s %s a=%.2f shade_above %d',
-                                 name2, entry_type, outer_a, shade_above)
+                    logger.debug('Adding %s outer %s a=%.2f shade_above %d',
+                                 pretty_name, entry_type, outer_a, shade_above)
                     model = _shade_model(model, outer_radii, outer_a, 
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)

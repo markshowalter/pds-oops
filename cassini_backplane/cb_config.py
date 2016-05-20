@@ -63,30 +63,30 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
 ########################
 
 # The maximum pointing error we allow in the (V,U) directions.
-MAX_POINTING_ERROR_NAC = (85,75)  # Pixels
-MAX_POINTING_ERROR_WAC = (15,15)
+MAX_POINTING_ERROR_NAC =   (85,75)  # Pixels
+MAX_POINTING_ERROR_WAC =   (15,15)
 MAX_POINTING_ERROR_LORRI = (40,40)
-MAX_POINTING_ERROR = {((1024,1024), 'NAC'): MAX_POINTING_ERROR_NAC,
-                      ((1024,1024), 'WAC'): MAX_POINTING_ERROR_WAC,
-                      (( 512, 512), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//2,
-                                             MAX_POINTING_ERROR_NAC[1]//2),
-                      (( 512, 512), 'WAC'): (MAX_POINTING_ERROR_WAC[0]//2,
-                                             MAX_POINTING_ERROR_WAC[1]//2),
-                      (( 256, 256), 'NAC'): (MAX_POINTING_ERROR_NAC[0]//4,
-                                             MAX_POINTING_ERROR_NAC[1]//4),
-                      (( 256, 256), 'WAC'): (MAX_POINTING_ERROR_WAC[0]//4,
-                                             MAX_POINTING_ERROR_WAC[1]//4),
+MAX_POINTING_ERROR = {((1024,1024), 'NAC'):   MAX_POINTING_ERROR_NAC,
+                      ((1024,1024), 'WAC'):   MAX_POINTING_ERROR_WAC,
+                      (( 512, 512), 'NAC'):   (MAX_POINTING_ERROR_NAC[0]//2,
+                                               MAX_POINTING_ERROR_NAC[1]//2),
+                      (( 512, 512), 'WAC'):   (MAX_POINTING_ERROR_WAC[0]//2,
+                                               MAX_POINTING_ERROR_WAC[1]//2),
+                      (( 256, 256), 'NAC'):   (MAX_POINTING_ERROR_NAC[0]//4,
+                                               MAX_POINTING_ERROR_NAC[1]//4),
+                      (( 256, 256), 'WAC'):   (MAX_POINTING_ERROR_WAC[0]//4,
+                                               MAX_POINTING_ERROR_WAC[1]//4),
                       ((1024,1024), 'LORRI'): MAX_POINTING_ERROR_LORRI,
                      }
 
 # The FOV size of the ISS cameras in radians.
-FOV_SIZE = {'NAC': 0.35*oops.RPD, 
-            'WAC': 3.48*oops.RPD,
+FOV_SIZE = {'NAC':   0.35*oops.RPD, 
+            'WAC':   3.48*oops.RPD,
             'LORRI': 0.29*oops.RPD}
 
 # The Gaussian sigma of the ISS camera PSFs in pixels.
-PSF_SIGMA = {'NAC': 0.54, 
-             'WAC': 0.77,
+PSF_SIGMA = {'NAC':   0.54, 
+             'WAC':   0.77,
              'LORRI': 0.5} # XXX
 
 
@@ -132,7 +132,7 @@ STARS_DEFAULT_CONFIG = {
     # Also the minimum number of stars that must match to give a confidence 
     # of 1.0.
     'min_stars_low_confidence': (3, 0.75),
-    'min_stars_high_confidence': (6, 1.0),
+    'min_stars_high_confidence': (8, 1.0),
 
     # The minimum photometry confidence allowed for a star to be considered
     # valid.
@@ -275,8 +275,12 @@ RINGS_DEFAULT_CONFIG = {
     # is blurred out during correlation.
     'fiducial_rms_gain': 2,
     
-    # When manufacturing a model from an ephemeris list, each feature is
-    # approximately this many pixels wide.
+    # A full gap or ringlet must be at least this many pixels wide at some
+    # place in the image to use it
+    'fiducial_min_feature_width': 3,
+    
+    # When manufacturing a model from an ephemeris list, each one-sided feature 
+    # is shaded approximately this many pixels wide.
     'fiducial_ephemeris_width': 30,
      
     # There must be at least this number of pixels of curvature present for
@@ -286,14 +290,6 @@ RINGS_DEFAULT_CONFIG = {
     # The minimum ring emission angle in the image must be at least this
     # many degrees away from 90 for rings to be used for correlation.
     'emission_threshold': 5., 
-    
-    # When making the text overlay, only label a full ringlet or gap if it's
-    # at least this many pixels wide somewhere in the image.
-    'text_ringlet_gap_threshold': 2,
-    
-    # When making the text overlay, only label a non-full ringlet or gap
-    # if...
-    'text_threshold': 0, # XXX
     
     # Remove the shadow of Saturn from the model
     'remove_saturn_shadow': False,
