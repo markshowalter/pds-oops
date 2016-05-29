@@ -87,7 +87,7 @@ stars_config = {
     'too_bright_factor': None
 }
 
-obs = lorri.from_file('c:/Temp/LOR_0034607523_0X630_SCI_1.FIT')
+obs = lorri.from_file('j:/Temp/LOR_0034676524_0X630_SCI_1.FIT')
 
 stars_metadata = stars_find_offset(obs, extend_fov=(0,0), stars_config=stars_config)
 

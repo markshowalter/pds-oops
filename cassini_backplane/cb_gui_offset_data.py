@@ -281,7 +281,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     gridcolumn = 0
 
     label_width = 17
-    val_width = 16
+    val_width = 17
 
     addon_control_frame = imgdisp.addon_control_frame
 
@@ -462,14 +462,14 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     
     fiducial_features = 'N/A'
     
-    if rings_metadata and 'fiducial_features' in rings_metadata:
-        num_features = int(np.sum([(x[1] is not None) + (x[2] is not None)
-                       for x in rings_metadata['fiducial_features']]))
+    num_features = 'N/A'
+    if rings_metadata is not None:
+        num_features = rings_metadata['num_good_fiducial_features']
         fiducial_features = str(num_features)
         if rings_metadata['fiducial_features_ok']:
             fiducial_features += ' (OK)'
         else:
-            fiducial_features += ' NOT OK'
+            fiducial_features += ' (NOT OK)'
 
     label = ttk.Label(addon_control_frame, text='Ring # Features:', 
                      anchor='w', width=label_width)

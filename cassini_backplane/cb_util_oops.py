@@ -111,6 +111,9 @@ def set_obs_ext_bp(obs, extend_fov, force=False):
     
     Sets obs.extend_fov, obs.ext_meshgrid, and obs.ext_bp.
     """
+    if extend_fov is None:
+        extend_fov = (0,0)
+
     if extend_fov == (0,0):
         set_obs_bp(obs)
         obs.extend_fov = extend_fov

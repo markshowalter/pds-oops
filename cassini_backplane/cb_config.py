@@ -63,7 +63,7 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
 ########################
 
 # The maximum pointing error we allow in the (V,U) directions.
-MAX_POINTING_ERROR_NAC =   (85,75)  # Pixels
+MAX_POINTING_ERROR_NAC =   (110,75)  # Pixels
 MAX_POINTING_ERROR_WAC =   (15,15)
 MAX_POINTING_ERROR_LORRI = (40,40)
 MAX_POINTING_ERROR = {((1024,1024), 'NAC'):   MAX_POINTING_ERROR_NAC,
@@ -132,7 +132,7 @@ STARS_DEFAULT_CONFIG = {
     # Also the minimum number of stars that must match to give a confidence 
     # of 1.0.
     'min_stars_low_confidence': (3, 0.75),
-    'min_stars_high_confidence': (8, 1.0),
+    'min_stars_high_confidence': (6, 1.0),
 
     # The minimum photometry confidence allowed for a star to be considered
     # valid.
@@ -263,11 +263,6 @@ RINGS_DEFAULT_CONFIG = {
     # There must be at least this many fiducial features for rings to be used
     # for correlation.
     'fiducial_feature_threshold': 3,
-    
-    # There must be at least this many pixels beyond a fiducial feature in the
-    # non-extended image for it to count as being in the image for counting
-    # purposes.
-    'fiducial_feature_margin': 50,
     
     # The RMS error of a feature must be this many times less than the
     # coarsest resolution of the feature in the image in order for the feature

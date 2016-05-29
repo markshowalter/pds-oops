@@ -464,7 +464,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
                 'constructed from %d images', filter, phase_angle*oops.DPR,
                 num_images)
 
-    confidence_images = 1. - 0.8 / num_images
+    confidence_images = 0.9 - 0.7 / num_images
         
     # Find the projected angle of the solar illumination to the center of
     # Titan's disc.

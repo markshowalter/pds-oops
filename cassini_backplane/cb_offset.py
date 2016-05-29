@@ -59,7 +59,8 @@ def _combine_models(model_list, solid=False, masked=False):
         new_model = np.zeros(model_list[0].shape, dtype=np.float32)
     for model in model_list:
         if solid:
-            new_model[model != 0] = model[model != 0]
+            new_model[model != 0] = _normalize(model, 
+                                               masked=masked)[model != 0]
         else:
             new_model += _normalize(model, masked=masked)
 
@@ -370,58 +371,77 @@ def master_find_offset(obs,
     large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
     large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
     large_bodies_by_range.sort(key=lambda x: x[1]['range'])
-#    large_bodies_by_size = [(x, large_body_dict[x]) for x in large_body_dict]
-#    # Sort by area of the enclosing square
-#    large_bodies_by_size.sort(key=lambda x: 
-#                  reverse=True)
-    
+
     logger.info('Large body inventory %s', [x[0] for x in large_bodies_by_range])
 
-    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
-        
-    for front_body_name, inv in large_bodies_by_range:
+    # See if the main rings take up the entire image AND are in front of
+    # all bodies.
+    # It could make sense in this case to empty the body list, but the rings
+    # are sometimes transparent and we want to be able to handle things like
+    # Pan and Daphnis embedded in the rings.
+    entirely_rings = False
+    min_rings_dist = None
+    corner_radii = obs.ext_corner_bp.ring_radius('saturn:ring').mvals
+    radii_good = np.logical_and(corner_radii > RINGS_MIN_RADIUS,
+                                corner_radii < RINGS_MAX_RADIUS)
+    if np.all(radii_good): # Corner version is for performance
+        radii = obs.ext_bp.ring_radius('saturn:ring').mvals
+        radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
+                                    radii < RINGS_MAX_RADIUS)
+        if np.all(radii_good): # Check all pixels
+            dist = obs.ext_bp.distance('saturn:ring').vals.astype('float')
+            min_rings_dist = np.min(dist)
+            found_front_body = False
+            for body_name, inv in large_bodies_by_range:
+                if inv['range'] < min_rings_dist:
+                    found_front_body = True
+                    logger.debug('Image is entirely rings but %s is in front',
+                                 body_name)
+                    break
+            if not found_front_body:
+                logger.info('Image is entirely rings')
+                entirely_rings = True
+                metadata['rings_only'] = True
+
+    front_body_name = None
+    if len(large_bodies_by_range) > 0:
+        body_name, inv = large_bodies_by_range[0]
         size = (inv['u_max']-inv['u_min'])*(inv['v_max']-inv['v_min']) 
         if size >= offset_config['min_body_area']:
-            break
-    else:
+            front_body_name = body_name
+
+    if front_body_name in FUZZY_BODY_LIST:
         front_body_name = None
 
     entirely_body = False
         
     if front_body_name is not None:
         # See if the front-most actually visible body takes up the entire image    
-        if ((front_body_name == 'SATURN' and allow_saturn) or
-            (front_body_name != 'SATURN' and allow_moons)):
-            corner_body_mask = (
-                obs.ext_corner_bp.where_intercepted(front_body_name).
-                    vals)
-            if np.all(corner_body_mask):
-                logger.info('Image appears to be covered by %s', front_body_name)
+        corner_body_mask = (
+            obs.ext_corner_bp.where_intercepted(front_body_name).
+                vals)
+        if np.all(corner_body_mask):
+            if entirely_rings and min_rings_dist < inv['range']:
+                logger.info('Image is covered by %s, which is hidden by rings', 
+                            front_body_name)
+                front_body_name = None
+                # In this case there's no point at all in still having a body
+                # list since the closest body fills the whole frame and is
+                # also hidden by the rings. There won't be anything to see or
+                # anything to navigate on.
+                large_bodies_by_range = []
+            else:
                 entirely_body = front_body_name
                 metadata['body_only'] = front_body_name
-
-    if front_body_name in FUZZY_BODY_LIST:
-        front_body_name = None
-
+                logger.info('Image is covered by %s and is unobstructed', 
+                            front_body_name)
+                
+    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
     metadata['bootstrap_body'] = front_body_name
     if front_body_name is not None:
         logger.info('Bootstrap body %s', metadata['bootstrap_body'])
 
 
-    # See if the main rings take up the entire image
-    # XXX THIS IS NOT A VALID TEST    
-    entirely_rings = False
-    radii = obs.ext_corner_bp.ring_radius('saturn:ring').vals.astype('float')
-    if len(large_bodies_by_range) == 0:
-        radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
-                                    radii < RINGS_MAX_RADIUS)
-        if np.all(radii_good):  
-            logger.info('Image appears to be entirely rings')
-            entirely_rings = True
-            metadata['rings_only'] = True
-#            entirely_rings = False # XXX
-    
-    
                     ######################
                     # OFFSET USING STARS #
                     ######################
@@ -475,7 +495,7 @@ def master_find_offset(obs,
     # MAKE MODELS FOR THE BODIES IN THE IMAGE, EVEN THE FUZZY ONES
     # (BECAUSE WE'LL WANT THEM IN THE OVERLAY LATER)
     #
-    if (allow_saturn or allow_moons) and not entirely_rings:
+    if (allow_saturn or allow_moons):
         for body_name, inv in large_bodies_by_range:
             if body_name == 'SATURN' and not allow_saturn:
                 continue
@@ -543,14 +563,14 @@ def master_find_offset(obs,
         good_body = True
 
 
-                    ######################
-                    # CREATE RING MODELS #
-                    ######################
+                    #####################
+                    # CREATE RING MODEL #
+                    #####################
     
     if allow_rings:
         rings_model, rings_metadata, rings_overlay_text = rings_create_model(
                                          obs, extend_fov=extend_fov,
-                                         always_create_model=create_overlay,
+                                         always_create_model=True,
                                          label_avoid_mask=label_avoid_mask,
                                          rings_config=rings_config)
         metadata['rings_metadata'] = rings_metadata
@@ -558,12 +578,14 @@ def master_find_offset(obs,
             label_avoid_mask = np.logical_or(label_avoid_mask,
                                              rings_overlay_text)
 
-    rings_curvature_ok = (metadata['rings_metadata'] is not None and
-                          metadata['rings_metadata']['curvature_ok'])
-    rings_features_ok = (metadata['rings_metadata'] is not None and
-                         metadata['rings_metadata']['fiducial_features_ok'])
-    rings_features_blurred = (metadata['rings_metadata'] is not None and
-                              metadata['rings_metadata']['fiducial_blur'])
+    rings_curvature_ok = (rings_metadata is not None and
+                          rings_metadata['curvature_ok'])
+    rings_features_ok = (rings_metadata is not None and
+                         rings_metadata['fiducial_features_ok'])
+    rings_any_features = (rings_metadata is not None and
+                          len(rings_metadata['fiducial_features'])>0)
+    rings_features_blurred = (rings_metadata is not None and
+                              rings_metadata['fiducial_blur'])
     
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
@@ -584,19 +606,103 @@ def master_find_offset(obs,
     previously_used_model_contents = []
             
     # Try relaxing varying constraints on the bodies until we find one that
-    # works.
-    model_phase_info_list = [(0.95, False, False, False, False),
-                             (0.75,  True, False, False, False),
-                             (0.75, False, False,  True, False),
-                             (0.50,  True, False,  True, False),
-                             (0.25, False,  True, False, False),
-                             (0.10, False, False, False,  True),
-                             (0.05,  True,  True,  True,  True)] 
+    # works. Constraints are:
+    #     override_bodies_curvature_ok
+    #     override_bodies_limb_ok
+    #     override_rings_curvature_ok
+    #     override_fiducial_features_ok
+    #     rings_allow_blur
+
+    model_phase_info_list = []
+    
+    # Try everything conservatively
+    model_phase_info_list.append((0.95, False, False, False, False, False))
+    
+    can_override_body_curvature = False
+    for body_model, body_metadata, body_text in navigable_bodies_model_list:
+        if not body_metadata['curvature_ok']:
+            can_override_body_curvature = True
+            break
+    
+    can_override_ring_curvature = False
+    can_override_ring_features_ok = False
+    if rings_any_features:
+        if not rings_curvature_ok:
+            can_override_ring_curvature = True
+        if not rings_features_ok and rings_any_features:
+            can_override_ring_features_ok = True
+
+    can_override_body_limb = False
+    for body_model, body_metadata, body_text in navigable_bodies_model_list:
+        if not body_metadata['limb_ok']:
+            can_override_body_limb = True
+            break
+
+    # If we have both bodies and rings in the image, then we can relax the
+    # various constraints and be more likely to get a good result because
+    # the body and rings are likely to constrain different directions.
+    if len(navigable_bodies_model_list) > 0 and rings_any_features:
+        for const_body_curve in [False,True]:
+            if const_body_curve and not can_override_body_curvature:
+                continue
+            for const_body_limb in [False,True]:
+                if const_body_limb and not can_override_body_limb:
+                    continue
+                for const_ring_curve in [False,True]:
+                    if const_ring_curve and not can_override_ring_curvature:
+                        continue
+                    for const_ring_features in [False,True]:
+                        if (const_ring_features and 
+                            not can_override_ring_features_ok):
+                            continue
+                        if (not const_body_curve and
+                            not const_body_limb and
+                            not const_ring_curve and
+                            not const_ring_features):
+                            # Already did this case
+                            continue
+                        score = (0.9 - 0.1*const_body_curve -
+                                       0.1*const_body_limb -
+                                       0.1*const_ring_curve -
+                                       0.1*const_ring_features)
+                        model_phase_info_list.append((score,
+                                                      const_body_curve,
+                                                      const_body_limb,
+                                                      const_ring_curve,
+                                                      const_ring_features,
+                                                      False))
+    else:
+        # Try overriding just body curvature
+        if can_override_body_limb:
+            model_phase_info_list.append((0.35, False,  True, False, False, False))
+
+        # Try overriding just body limbs
+        if can_override_body_limb:
+            model_phase_info_list.append((0.25, False,  True, False, False, False))
+
+
+    if rings_curvature_ok:
+        # Almost done...try ring blurring
+        if rings_features_blurred is not None:
+            model_phase_info_list.append((0.20, False, False, False, False,  True))
+        
+        # Try too few features
+        if can_override_ring_features_ok:
+            model_phase_info_list.append((0.10, False, False, False,  True, False))
+            
+        # Try ring blurring but with too few features - this is likely to be an
+        # awful result
+        if rings_features_blurred is not None and can_override_ring_features_ok:
+            model_phase_info_list.append((0.05, False, False, False,  True,  True))
+
+    model_phase_info_list.sort(reverse=True)
+    
     for model_phase_info in model_phase_info_list:
         (model_confidence, 
          override_bodies_curvature_ok, 
          override_bodies_limb_ok,
          override_rings_curvature_ok,
+         override_rings_features_ok,
          rings_allow_blur) = model_phase_info
 
         if botsim_offset is not None:
@@ -614,10 +720,12 @@ def master_find_offset(obs,
                     str(override_bodies_limb_ok))
         logger.info('   override_rings_curvature_ok  %s', 
                     str(override_rings_curvature_ok))
+        logger.info('   override_rings_features_ok   %s', 
+                    str(override_rings_features_ok))
         logger.info('   rings_allow_blur             %s', 
                     str(rings_allow_blur))
         
-        model_list = []
+        body_model_list = []
         used_model_str_list = []
         
         # XXX Need to deal with moons on the far side of the rings
@@ -634,7 +742,7 @@ def master_find_offset(obs,
                       body_metadata['limb_ok']) or
                  not body_metadata['size_ok'])):
                 continue
-            model_list.append(body_model)
+            body_model_list.append(body_model)
             used_model_str_list.append(body_name)
 
         if override_rings_curvature_ok and len(model_list) == 0:
@@ -646,12 +754,13 @@ def master_find_offset(obs,
         ### Now deal with rings
         
         model_blur_amount = None
+        use_rings_model = False
         
         if (rings_model is not None and 
             (override_rings_curvature_ok or rings_curvature_ok) and 
-            rings_features_ok and
-            (rings_allow_blur or rings_features_blurred is None)): 
-            model_list.append(rings_model)
+            (override_rings_features_ok or rings_features_ok) and
+            (rings_allow_blur or rings_features_blurred is None)):
+            use_rings_model = True 
             used_model_str_list.append('RINGS')
             model_blur_amount = rings_features_blurred
             if rings_features_blurred is not None:
@@ -660,7 +769,7 @@ def master_find_offset(obs,
         metadata['model_contents'] = used_model_str_list
         logger.info('Model contains %s', str(used_model_str_list))
         final_model = None
-        if len(model_list) == 0:
+        if len(body_model_list) == 0 and not use_rings_model:
             logger.info('Nothing to model - no offset found')
             continue
     
@@ -672,8 +781,12 @@ def master_find_offset(obs,
             
         # We have at least one viable component of the model,
         # so combine everything together and try to find the offset
-        final_model = _combine_models(model_list, solid=True, 
+        body_model_list.reverse()
+        final_model = _combine_models(body_model_list, solid=True, 
                                       masked=masked_model)
+        if use_rings_model:
+            final_model = _combine_models([final_model, rings_model],
+                                          masked=masked_model)
 
         gaussian_blur = offset_config['default_gaussian_blur']
         if model_blur_amount is not None:
@@ -880,32 +993,33 @@ def master_find_offset(obs,
                     offset = model_offset
                     metadata['used_objects_type'] = 'MODEL'
 
+    logger.info('Summary:')
     if stars_offset is None:
-        logger.info('Final star offset     N/A')
+        logger.info('  Final star offset     N/A')
     else:
-        logger.info('Final star offset     U,V %.2f,%.2f (%.2f) good stars %d', 
+        logger.info('  Final star offset     U,V %.2f,%.2f (%.2f) good stars %d', 
                     stars_offset[0], stars_offset[1],
                     stars_confidence, stars_metadata['num_good_stars'])
 
     if model_offset is None:
-        logger.info('Final model offset    N/A')
+        logger.info('  Final model offset    N/A')
     else:
-        logger.info('Final model offset    U,V %d,%d (%.2f)', 
+        logger.info('  Final model offset    U,V %d,%d (%.2f)', 
                     model_offset[0], model_offset[1], model_confidence)
 
     if titan_offset is None:
-        logger.info('Final Titan offset    N/A')
+        logger.info('  Final Titan offset    N/A')
     else:
-        logger.info('Final Titan offset    U,V %d,%d (%.2f)', 
+        logger.info('  Final Titan offset    U,V %d,%d (%.2f)', 
                     titan_offset[0], titan_offset[1], titan_confidence)
 
     if botsim_offset is not None:
-        logger.info('FINAL OFFSET SET BY BOTSIM')
+        logger.info('  FINAL OFFSET SET BY BOTSIM')
         
     if offset is None:
-        logger.info('Final combined offset FAILED')
+        logger.info('  Final combined offset FAILED')
     else:
-        logger.info('Final combined offset U,V %.2f,%.2f (%.2f)', 
+        logger.info('  Final combined offset U,V %.2f,%.2f (%.2f)', 
                     offset[0], offset[1], metadata['confidence'])
 
     metadata['offset'] = offset
@@ -933,6 +1047,7 @@ def master_find_offset(obs,
         o_bodies_text_list = [x[2] for x in bodies_model_list]
         label_avoid_mask = np.zeros(obs.data.shape, dtype=np.bool)
         if len(o_bodies_model_list) > 0:
+            o_bodies_model_list.reverse()
             bodies_combined = _combine_models(o_bodies_model_list, solid=True,
                                               masked=masked_model)
             bodies_overlay = _normalize(bodies_combined) * 255

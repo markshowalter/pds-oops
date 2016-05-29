@@ -156,13 +156,19 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  2,                   0.43, 157.21,  572.48458))),
 
         
+    #############################################
+    ### CASSINI DIVISION - French et al (XXX) ###
+    #############################################
+
     #######################################################################                               
     ### B RING OUTER EDGE - Nicholson, et al. Icarus 227 (2014) 152-175 ###
     ### From Dick French                                                ###
     ### ringfit_v1.8.Sa025S-RF-V5697c.out                               ###
     #######################################################################                         
-    
-    ('GAP', 'B Ring',
+
+    # B ring outer edge is the same as the Huygens Gap inner edge    
+    # Huygens Gap - #20 OEG
+    ('GAP', 'Huygens',
                 ((  1, 117569.41, 7.56, 22.89,  66.89,    5.08300),    # IEG
                  (  2,                  37.94, 117.29,  382.07925),
                  (  2,                  31.77, 164.83,  381.98729),
@@ -170,11 +176,13 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  4,                   7.24,   7.52,  570.52601),
                  (  5,                   5.84,  66.45,  608.20820),
                  (  6,                   2.93,  99.17,  633.32360)),
-                None),
-
-    #############################################
-    ### CASSINI DIVISION - French et al (XXX) ###
-    #############################################
+                ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),    # OEG
+                 ( 91,                   0.44, 245.70,   -4.98425), # Incl
+                 (  0,                   1.82, 143.78,  750.25165),
+                 (  2,                   1.34,  76.25,  381.98386),
+                 ( -4,                   0.35,  45.39,  942.82221),
+                 ( -3,                   0.40,  84.88, 1005.34987),
+                 ( -1,                   0.82,  67.16, 1505.51205))),
 
     # Huygens Ringlet - #54, #53 - 18 km
     ('RINGLET', 'Huygens',
@@ -210,17 +218,6 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  3,                   2.60,  33.24,  505.33449),
                  ( -1,                   1.14, 352.19, 1505.96783))),
                                
-    # Huygens Gap - #20 OEG only
-    ('GAP', 'Huygens',
-                None,
-                ((  1, 117930.90, 0.45,  2.20, 248.98,    5.03372),    # OEG
-                 ( 91,                   0.44, 245.70,   -4.98425), # Incl
-                 (  0,                   1.82, 143.78,  750.25165),
-                 (  2,                   1.34,  76.25,  381.98386),
-                 ( -4,                   0.35,  45.39,  942.82221),
-                 ( -3,                   0.40,  84.88, 1005.34987),
-                 ( -1,                   0.82,  67.16, 1505.51205))),
-                
     # Herschel Gap - #19, #16 - 95 km
     ('GAP', 'Herschel',
                 ((  1, 118188.42, 0.41,  8.27, 347.32,    4.97362),    # IEG
@@ -776,6 +773,8 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     
     # Now for this optimal radius, find the pixel values of the minimum
     # and maximum available longitudes as well as a point halfway between.
+    # Then see how far it is from the line between the extrema points
+    # to the point of closest approach for the halfway point.
     
     line_radius = np.empty(3)
     line_radius[:] = best_radius
@@ -807,6 +806,8 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
 ### Fiducial Features ###
 
 def _find_resolutions_by_a(obs, extend_fov, a):
+    """Find the minimum and maximum resolutions at a given semi-major axis."""
+    
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
     
@@ -818,7 +819,6 @@ def _find_resolutions_by_a(obs, extend_fov, a):
     u = u.astype('int')
     v = v.astype('int')
     feature_res = resolutions[v,u]
-    
     if len(feature_res) == 0:
         return None, None
     min_res = np.min(feature_res)
@@ -828,6 +828,11 @@ def _find_resolutions_by_a(obs, extend_fov, a):
 
 def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur, 
                     min_sub_radius, max_sub_radius, extend_fov):
+    """Decide if a fiducial feature can be used based on its RMS residual.
+    
+    If the residual is too large, return the amount the image would need to be
+    blurred to make it OK.
+    """
     if blur is None:
         blur = 1.
     a = feature[0][1]
@@ -835,10 +840,12 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
     out_of_frame = False
     if not min_sub_radius < a < max_sub_radius:
         if not min_radius < a < max_radius:
+            # It's not in the extended FOV at all
             return None, None
+        # It's not in the extended FOV, but is in the original image
         out_of_frame = True
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
-    if min_res is None:
+    if max_res is None:
         return None, None # Something went wrong; we couldn't find a resolution
     if rms*rms_gain/blur > max_res:
         # Additional blurring needed
@@ -850,12 +857,13 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     
     We first attempt to return at least fiducial_feature_threshold features
     that satisfy resolution requirements. If we can't, then we relax the
-    constraints until we can and return the amount that we had to relax.
+    constraints imposed by the RMS residuals until we can and return the 
+    amount that we had to relax.
     
     The number of features is based on how many are in the subset of the
     FOV that is guaranteed to be in the image. But the feature list
     returned actually includes all the features that are in the entire
-    extended FOV.
+    extended FOV in case they end up being useful.
     """
     
     logger = logging.getLogger(_LOGGING_NAME+'.rings_fiducial_features')
@@ -878,8 +886,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                                   extend_fov[0]*2:-extend_fov[0]*2])
 
     logger.debug('Looking for features based on RMS residual vs. resolution')
-    logger.debug('Extended radii %.2f to %.2f', min_radius, max_radius)
-    logger.debug('Internal radii %.2f to %.2f', min_sub_radius, max_sub_radius) 
+    logger.debug('Extended FOV radii %.2f to %.2f', min_radius, max_radius)
+    logger.debug('Internal FOV radii %.2f to %.2f', min_sub_radius, max_sub_radius) 
 
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
@@ -889,19 +897,17 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     
     logger.debug('Resolution %.2f to %.2f', min_res, max_res)
     
-    margin_pixels = (rings_config['fiducial_feature_margin'] +
-                     max(extend_fov[0], extend_fov[1]))
     rms_gain = rings_config['fiducial_rms_gain']
-    
-    margin_km = 0#margin_pixels * max_res XXX
     
     blur = None
     blur_list = []
+    
+    # We do two phases - the first one is to determine the amount of blur, if
+    # any. If there is no blur needed, we exit the loop early. Otherwise, 
+    # during the second phase we apply the blur.
     for phase in [0,1]:
         logger.debug('Trying blur %s', str(blur))
         
-        # Eliminate any features that don't match the observation date
-        # or are completely outside the radius range
         feature_list = []
         best_blur = None
         num_features = 0
@@ -910,6 +916,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             entry_type_str, feature_name, inner, outer = fiducial_feature
             entry_type_list = entry_type_str.split('_')
             entry_type = entry_type_list[0]
+            # Eliminate any features that don't match the observation date
             if len(entry_type_list) > 1:
                 assert len(entry_type_list) == 3
                 start_date = cspice.utc2et(entry_type_list[1])
@@ -919,10 +926,11 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             pretty_name = feature_name
             if pretty_name is None:
                 pretty_name = 'UNNAMED'
-            print pretty_name
             
             inner_out_of_frame = False
             outer_out_of_frame = False
+            ret_inner = None
+            ret_outer = None
             if inner is not None:
                 ret_inner, inner_out_of_frame = _fiducial_is_ok(
                                             obs, inner, min_radius, max_radius, 
@@ -930,6 +938,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                                             min_sub_radius, max_sub_radius,
                                             extend_fov)
                 if ret_inner is None or ret_inner != 1.:
+                    # If more blurring is required, then it's not a good 
+                    # candidate during this phase.
                     inner = None
             if outer is not None:
                 ret_outer, outer_out_of_frame = _fiducial_is_ok(
@@ -938,8 +948,9 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                                             min_sub_radius, max_sub_radius,
                                             extend_fov)
                 if ret_outer is None or ret_outer != 1.:
+                    # If more blurring is required, then it's not a good 
+                    # candidate during this phase
                     outer = None
-            print ret_inner, ret_outer
 
             # Features aren't THAT big, so just use the resolution for the 
             # inner or outer, whichever we have
@@ -953,39 +964,49 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                                               obs, extend_fov, outer[0][1])
 
             # For single-sided features, see if there is another feature that
-            # is too close
+            # is too close. If there is, then throw away the current feature
+            # because it won't be readily distinguishable in the real image.
+            
+            #### XXXX ### THIS IS NOT WORKING W1466448054_1
+            
             if (inner is None) != (outer is None):
-                for inner_outer in [inner, outer]:
-                    bad = False
-                    if inner_outer is None:
+                feature = inner
+                if feature is None:
+                    feature = outer
+                    
+                bad = False
+                for fiducial_feature2 in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+                    (entry_type_str2, feature_pretty_name, inner2, 
+                     outer2) = fiducial_feature2
+                    if fiducial_feature == fiducial_feature2:
                         continue
-                    for fiducial_feature2 in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
-                        (entry_type_str2, feature_pretty_name, inner2, 
-                         outer2) = fiducial_feature
-                        for inner_outer2 in [inner2, outer2]:
-                            if inner_outer2 is None:
-                                continue
-                            feature_dist = (inner_outer2[0][1]-
-                                inner_outer[0][1]) / min_res_inner_outer
-                            if (feature_dist != 0 and 
-                                feature_dist < min_feature_width):
-                                logger.debug(
-                                     'Ignoring partial %s %s %.2f - '+
-                                     'feature too close to another (%d pixels)',
-                                     pretty_name, entry_type, inner_outer[0][1],
-                                     feature_dist)
-                                bad = True
-                                break
-                            if bad:
-                                break
-                        if bad:
-                            break
+                    # If the feature we're going to compare against is itself
+                    # too narrow to be seen, then don't bother with the 
+                    # comparison
+                    if inner2 is not None and outer2 is not None:
+                        feature_width = ((outer2[0][1]-inner2[0][1]) / 
+                                         min_res_inner_outer)
+                        if feature_width < min_feature_width:
+                            continue
+                    for inner_outer2 in [inner2, outer2]:
+                        if inner_outer2 is None:
+                            continue
+                        feature_dist_pix = abs(inner_outer2[0][1]-
+                            feature[0][1]) / min_res_inner_outer
+                        if (feature_dist_pix < min_feature_width):
+                            logger.debug(
+                             'Ignoring partial %s %s %.2f - '+
+                             'feature too close to another (a=%.2f, %d pixels)',
+                             pretty_name, entry_type, feature[0][1],
+                             inner_outer2[0][1], feature_dist_pix)
+                            bad = True
                     if bad:
-                        if inner_outer == inner:
-                            inner = None
-                        else:
-                            outer = None
-                            
+                        break
+                if bad:
+                    continue
+                
+            # If there is a full gap or ringlet, see if it's big enough to be
+            # readily seen.  
             if inner is not None and outer is not None:
                 # See if the gap or ringlet is too small to be seen in
                 # the image
@@ -997,31 +1018,35 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                          'feature too narrow (%d pixels)',
                          pretty_name, entry_type, inner[0][1], outer[0][1],
                          feature_width)
-                    inner = None
-                    outer = None
+                    continue
+
+            # Everything is going well...we can at least use this to determine
+            # the blur amount
+            if ret_inner is not None and ret_inner != 1.:
+                blur_list.append(ret_inner)
+            if ret_outer is not None and ret_outer != 1.:
+                blur_list.append(ret_outer)
+
+            # And maybe we can even use it as a real feature right now
             if inner is not None or outer is not None:
                 feature_list.append((entry_type, feature_name, inner, outer))
-                if inner:
-                    if ret_inner is not None and ret_inner != 1.:
-                        blur_list.append(ret_inner)
-                    logger.debug(
-                         'Keeping inner feature %s %s %.2f (out of frame %s)', 
-                         pretty_name, entry_type, inner[0][1],
-                         str(inner_out_of_frame))
-                if outer:
-                    if ret_outer is not None and ret_outer != 1.:
-                        blur_list.append(ret_outer)
-                    logger.debug(
-                         'Keeping outer feature %s %s %.2f (out of frame %s)', 
-                         pretty_name, entry_type, outer[0][1],
-                         str(outer_out_of_frame))
-                if inner is not None:
-                    num_features += 1
-                if inner is not None and not inner_out_of_frame:
+
+            if inner is not None:
+                logger.debug(
+                     'Keeping inner feature %s %s %.2f (out of frame %s)', 
+                     pretty_name, entry_type, inner[0][1],
+                     str(inner_out_of_frame))
+                num_features += 1
+                if not inner_out_of_frame:
                     num_features_in_frame += 1
+            if outer is not None:
+                logger.debug(
+                     'Keeping outer feature %s %s %.2f (out of frame %s)', 
+                     pretty_name, entry_type, outer[0][1],
+                     str(outer_out_of_frame))
                 if outer is not None:
                     num_features += 1
-                if outer is not None and not outer_out_of_frame:
+                if not outer_out_of_frame:
                     num_features_in_frame += 1
 
         if num_features_in_frame >= min_features:
@@ -1311,10 +1336,11 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 shade = _shade_antialias(inner_radii, inner_a, False,
                                          resolutions, max=0.5)
                 model += shade
-                shade = _shade_antialias(outer_radii, outer_a, not shade_dir,
+                shade = _shade_antialias(outer_radii, outer_a, True,
                                          resolutions, max=0.5)
                 model += shade
-                if feature_name and feature_name.upper() == 'A RING':
+                if (feature_name and 
+                    feature_name.upper().startswith('KEELER-A RING')):
                     # We need to fake this one out - it's really the Keeler
                     # OEG and the A Ring outer edge
                     intersect_list.append(obs.ext_bp.border_atop(
@@ -1337,18 +1363,32 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 named_full_gap = False
                 if (inner_radii is not None and outer_radii is not None and
                     entry_type == 'GAP'):
-                    # Go ahead and name the full gap here even though we're going
-                    # to shade the edges separately later
-                    inner_above = inner_radii >= inner_a
-                    outer_below = outer_radii <= outer_a
-                    intersect_list.append(np.logical_and(inner_above, 
-                                                         outer_below))
-                    if feature_name:
-                        text_name_list.append(feature_name + ' Gap')
+                    if (feature_name and 
+                        feature_name.upper().startswith('HUYGENS')):
+                        # We need to fake this one out - it's really the B Ring
+                        # OE and the Huygens Gap outer edge
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              inner_radii_bp.key,
+                                              inner_a).vals.astype('bool'))
+                        text_name_list.append('B Ring Outer Edge')
+                        intersect_list.append(obs.ext_bp.border_atop(
+                                              outer_radii_bp.key,
+                                              outer_a).vals.astype('bool'))
+                        text_name_list.append('Huygens OEG')                        
+                        named_full_gap = True
                     else:
-                        text_name_list.append('a=%.2f-%.2f Gap' % (inner_a, 
-                                                                   outer_a))
-                    named_full_gap = True
+                        # Go ahead and name the full gap here even though we're 
+                        # going to shade the edges separately later
+                        inner_above = inner_radii >= inner_a
+                        outer_below = outer_radii <= outer_a
+                        intersect_list.append(np.logical_and(inner_above, 
+                                                             outer_below))
+                        if feature_name:
+                            text_name_list.append(feature_name + ' Gap')
+                        else:
+                            text_name_list.append('a=%.2f-%.2f Gap' % (inner_a, 
+                                                                       outer_a))
+                        named_full_gap = True
                     # Fall through to...
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
@@ -1489,7 +1529,13 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                     correlation.
             'emission_ok'           True if the emission angle is sufficient 
                                     for correlation.
-            'fiducial_features'     The list of fiducial features in view.
+            'num_good_fiducial_features'
+                                    The number of fiducial features that are
+                                    fully contained within the sub-image
+                                    guaranteed to be visible even with
+                                    extended_fov.
+            'fiducial_features'     The list of fiducial features in the 
+                                    extended FOV.
             'fiducial_blur'         The amount the RMS residual of the features
                                     had to be reduced in order to get enough.
                                     1 means nothing was reduced. Otherwise
@@ -1515,6 +1561,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['shadow_bodies'] = []
     metadata['curvature_ok'] = False
     metadata['emission_ok'] = False
+    metadata['num_good_fiducial_features'] = 0
     metadata['fiducial_features'] = []
     metadata['fiducial_features_ok'] = False
     metadata['fiducial_blur'] = None
@@ -1558,6 +1605,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
    
     num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
                                          obs, extend_fov, rings_config)
+    metadata['num_good_fiducial_features'] = num_features
     metadata['fiducial_features'] = fiducial_features
     metadata['fiducial_blur'] = fiducial_blur
     
@@ -1566,7 +1614,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['fiducial_features_ok'] = fiducial_features_ok
     
     if not fiducial_features_ok:
-        logger.info('Insufficient number (%d) of fiducial features', 
+        logger.info('Insufficient number (%d) of in-frame fiducial features', 
                     num_features)
         if not always_create_model:
             metadata['end_time'] = time.time()
@@ -1762,20 +1810,12 @@ def _rings_restrict_longitude_radius_to_obs(obs, longitude, radius,
     if offset is not None:
         offset_u, offset_v = offset
         
-    if extend_fov is not None:
-        set_obs_ext_bp(obs, extend_fov)
-        bp = obs.ext_bp
-        u_min = -obs.extend_fov[0]
-        v_min = -obs.extend_fov[1]
-        u_max = obs.data.shape[1]-1 + obs.extend_fov[0]
-        v_max = obs.data.shape[0]-1 + obs.extend_fov[1]
-    else:
-        set_obs_bp(obs)
-        bp = obs.bp
-        u_min = 0
-        v_min = 0
-        u_max = obs.data.shape[1]-1
-        v_max = obs.data.shape[0]-1
+    set_obs_ext_bp(obs, extend_fov)
+    bp = obs.ext_bp
+    u_min = 0
+    v_min = 0
+    u_max = obs.data.shape[1]-1 + obs.extend_fov[0]*2
+    v_max = obs.data.shape[0]-1 + obs.extend_fov[1]*2
 
     bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
     bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float')
