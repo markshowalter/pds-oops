@@ -15,22 +15,16 @@ import oops
 #####################
 
 # Root of the cassini_backplane source directory.
-CB_ROOT = os.environ['CB_ROOT']
+CB_SOURCE_ROOT = os.environ['CB_SOURCE_ROOT']
 
-# Cassini ISS calibrated 2XXX volume.
-COISS_2XXX_DERIVED_ROOT = os.environ['COISS_2XXX_DERIVED_ROOT']
+# CB support files such as Voyager ring profiles.
+CB_SUPPORT_FILES_ROOT = os.environ['CB_SUPPORT_ROOT']
 
 # Cassini ISS non-calibrated volumes.
 COISS_ROOT = os.environ['COISS_ROOT']
 
-# CB-generated offset and backplane files.
-RESULTS_ROOT = os.environ['CB_RESULTS_ROOT']
-
-# The UCAC4 star catalog.
-STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG']
-
-# CB support files such as Voyager ring profiles.
-SUPPORT_FILES_ROOT = os.environ['CB_SUPPORT_ROOT']
+# Cassini ISS calibrated 2XXX volume.
+COISS_2XXX_DERIVED_ROOT = os.environ['COISS_2XXX_DERIVED_ROOT']
 
 # Cassini ISS moon maps.
 COISS_3XXX_ROOT = os.path.join(COISS_ROOT, 'COISS_3xxx')
@@ -38,11 +32,17 @@ COISS_3XXX_ROOT = os.path.join(COISS_ROOT, 'COISS_3xxx')
 # Cassini UVIS.
 COUVIS_8XXX_ROOT = os.path.join(COISS_ROOT, 'COUVIS_8xxx_lien_resolution')
 
+# CB-generated offset and backplane files.
+CB_RESULTS_ROOT = os.environ['CB_RESULTS_ROOT']
+
 # Contains solar flux, filter transmission convolved with quantum efficiency
 CISSCAL_CALIB_ROOT = os.getenv('CISSCAL_CALIB_PATH')
 
 # Contains filter transmission and PSF data
 CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
+
+# The UCAC4 star catalog.
+STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG']
 
 
 ####################################
@@ -51,10 +51,12 @@ CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
 
 PYTHON_EXE = os.environ['PYTHON_EXE']
 
-CBMAIN_OFFSET_PY = os.path.join(CB_ROOT, 'cb_main_offset.py')
-DISPLAY_OFFSET_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
+CBMAIN_OFFSET_PY = os.path.join(CB_SOURCE_ROOT, 'cb_main_offset.py')
+CBMAIN_REPROJECT_BODY_PY = os.path.join(CB_SOURCE_ROOT, 'cb_main_reproject_body.py')
+CBMAIN_MOSAIC_BODY_PY = os.path.join(CB_SOURCE_ROOT, 'cb_main_mosaic_body.py')
+DISPLAY_OFFSET_METADATA_PY = os.path.join(CB_SOURCE_ROOT, 'utilities',
                                           'display_offset_metadata.py')
-DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_ROOT, 'utilities',
+DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_SOURCE_ROOT, 'utilities',
                                           'display_mosaic_metadata.py')
 
 
@@ -293,32 +295,6 @@ RINGS_DEFAULT_CONFIG = {
     'remove_body_shadows': False
 }
 
-BOOTSTRAP_DEFAULT_CONFIG = {
-    # These bodies can be used for bootstrapping.
-    # Includes the orbital period (seconds) and the maximum allowable
-    # resolution (km/pix).
-    'body_list': {'DIONE':     (  2.736915 * 86400, 15.),
-                  'ENCELADUS': (  1.370218 * 86400, 15.),
-                  'IAPETUS':   ( 79.3215   * 86400, 15.),
-                  'MIMAS':     (  0.942    * 86400, 15.),
-                  'PHOEBE':    (550.564636 * 86400, 15.),
-                  'RHEA':      (  4.518212 * 86400, 15.),
-                  'TETHYS':    (  1.887802 * 86400, 15.)
-                  },
-    
-    # The fraction of an orbit that a moon can move and still be OK for
-    # creating a mosaic.
-    'orbit_frac': 0.25,
-    
-    # The resolution in longitude and latitude (radians) for the mosaic.
-    'lon_resolution': 0.1 * oops.RPD,
-    'lat_resolution': 0.1 * oops.RPD,
-
-    # The latlon coordinate type and direction for the mosaic.
-    'latlon_type': 'centric',
-    'lon_direction': 'east',
-}
-
 OFFSET_DEFAULT_CONFIG = {
     # A body has to be at least this many pixels in area for us to pay 
     # attention to it for bootstrapping purposes.
@@ -375,4 +351,36 @@ OFFSET_DEFAULT_CONFIG = {
     # If the secondary correlation peak isn't at least this fraction of the
     # primary correlation peak, correlation fails.
     'secondary_corr_peak_threshold': 0.75,
+}
+
+BOOTSTRAP_DEFAULT_CONFIG = {
+    # These bodies can be used for bootstrapping.
+    'body_list': ['DIONE', 'ENCELADUS', 'IAPETUS', 'MIMAS', 'RHEA', 'TETHYS'],
+
+    # The maximum phase angle that can be used to create part of a mosaic.
+    'max_phase_angle': 135. * oops.RPD,
+    
+    # The minimum square size of a moon to be used to create part of a mosaic.
+    'min_area': 128*128,
+
+    # The size of the longitude and latitude bins used to create multiple
+    # mosaics.
+    'mosaic_lon_bin_size': 30. * oops.RPD,
+    'mosaic_lat_bin_size': 30. * oops.RPD,
+        
+    # The resolution in longitude and latitude (radians) for the mosaic.
+    'lon_resolution': 0.5 * oops.RPD,
+    'lat_resolution': 0.5 * oops.RPD,
+
+    # The latlon coordinate type and direction for the mosaic.
+    'latlon_type': 'centric',
+    'lon_direction': 'east',
+    
+    # The minimum fraction of of moon that is available from cartographic
+    # data in order for a bootstrapped offset to be attempted.
+    'min_coverage_frac': 0.25,
+    
+    # The maximum difference in resolution allowable between the mosaic
+    # and the image to be bootstrapped.
+    'max_res_factor': 4,
 }

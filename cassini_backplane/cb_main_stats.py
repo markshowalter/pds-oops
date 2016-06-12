@@ -25,7 +25,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--has-offset-file --verbose --volume COISS_2052'
+    command_line_str = '--has-offset-file --verbose'
 
     command_list = command_line_str.split()
 

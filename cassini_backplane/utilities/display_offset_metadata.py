@@ -13,7 +13,7 @@ from cb_config import *
 from cb_gui_offset_data import *
 from cb_util_file import *
 
-results_dir = os.path.join(RESULTS_ROOT, 'offsets')
+results_dir = os.path.join(CB_RESULTS_ROOT, 'offsets')
 
 command_list = sys.argv[1:]
 
@@ -26,13 +26,13 @@ parser.add_argument(
 
 arguments = parser.parse_args(command_list)
 
-#root = tk.Tk()
-#root.withdraw()
+root = tk.Tk()
+root.withdraw()
 
 if arguments.image_path is not None:
     img_path = arguments.image_path
     metadata = file_read_offset_metadata(img_path)
-    obs = read_iss_file(img_path)
+    obs = file_read_iss_file(img_path)
     display_offset_data(obs, metadata)
 else:
     file_initialdir = results_dir
@@ -44,9 +44,9 @@ else:
         if offset_path == '' or offset_path == ():
             break
     
-        file_initialdir, _ = os.path.split(offset_path)
+        metadata = file_read_offset_metadata_path(offset_path)
+
         img_path = file_offset_to_img_path(offset_path)
+        obs = file_read_iss_file(img_path)
         
-        metadata = file_read_offset_metadata(img_path)
-        obs = read_iss_file(img_path)
-        display_offset_data(obs, metadata, show_bodies=False)
+        display_offset_data(obs, metadata)

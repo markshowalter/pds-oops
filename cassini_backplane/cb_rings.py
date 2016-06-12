@@ -1135,7 +1135,7 @@ def _compute_ring_radial_data(source, resolution):
     if source == 'voyager':
         global _RING_VOYAGER_IF_DATA
         if not _RING_VOYAGER_IF_DATA:
-            if_table = PdsTable(os.path.join(SUPPORT_FILES_ROOT,
+            if_table = PdsTable(os.path.join(CB_SUPPORT_FILES_ROOT,
                                              'IS2_P0001_V01_KM002.LBL'))
             _RING_VOYAGER_IF_DATA = Tabulation(
                    if_table.column_dict['RING_INTERCEPT_RADIUS'],

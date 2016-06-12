@@ -35,7 +35,6 @@ if len(command_list) == 0:
 #    command_line_str = '''--force-offset --image-console-level debug --display-offset-results
 #N1760870348_1'''
 #    command_line_str = '--force-offset N1496877261_8 --image-console-level debug --profile'
-#    command_line_str = '--first-image-num 1507717036 --last-image-num 1507748838 --main-console-level debug --max-subprocesses 1 --profile' #--max-subprocesses 4'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
 
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
@@ -72,7 +71,7 @@ if len(command_list) == 0:
 #    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
 #    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
 
-#    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results' # Rhea and Dione overlapping
+#    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Rhea and Dione overlapping
 #    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
 #    command_line_str = 'N1511728708_2 --force-offset --image-console-level debug --display-offset-results' # Rhea whole image
     
@@ -120,7 +119,35 @@ if len(command_list) == 0:
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
 
-#    command_line_str = 'N1491361411_3 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # TEST
+    command_line_str = 'N1602268640_2 --force-offset --image-console-level debug --display-offset-results' # 
+
+
+# MOSAIC TEST
+#    command_line_str = 'N1597187315_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars --body-cartographic-data ENCELADUS=T:/cdaps-results/mosaics/ENCELADUS/ENCELADUS_0.00_-30.00_F_F_BL1_0001'
+
+# BOOTSTRAPPING - ENCELADUS
+
+#    command_line_str = '--force-offset --first-image-num 1487299402 --last-image-num 1487302209 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1516151439 --last-image-num 1516171418 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1597175743 --last-image-num 1597239766 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1602263870 --last-image-num 1602294337 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1604136974 --last-image-num 1604218747 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1637450504 --last-image-num 1637482321 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1652858990 --last-image-num 1652867484 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1660419699 --last-image-num 1660446193 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1669795989 --last-image-num 1669856551 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1671569397 --last-image-num 1671602206 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1694646860 --last-image-num 1694652019 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1694646860 --last-image-num 1694652019 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1697700931 --last-image-num 1697717648 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1702359393 --last-image-num 1702361420 --image-logfile-level debug --max-subprocesses 2'
+
+# BOOTSRAPPING - MIMAS
+
+#    command_line_str = '--force-offset --first-image-num 1501627117 --last-image-num 1501651303 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1521584495 --last-image-num 1521620702 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1644777693 --last-image-num 1644802455 --image-logfile-level debug --max-subprocesses 2'
+#    command_line_str = '--force-offset --first-image-num 1717565987 --last-image-num 1717571685 --image-logfile-level debug --max-subprocesses 2'
 
     command_list = command_line_str.split()
 
@@ -136,7 +163,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
-            to $(RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
+            to $(CB_RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 
@@ -150,13 +177,13 @@ parser.add_argument(
     '--image-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for each image file; 
             defaults to 
-            $(RESULTS_ROOT)/logs/<image-path>/<image_filename>.log''')
+            $(CB_RESULTS_ROOT)/logs/<image-path>/<image_filename>-OFFSET-<datetime>.log''')
 parser.add_argument(
     '--image-logfile-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
-    '--image-console-level', metavar='LEVEL', default='info',
+    '--image-console-level', metavar='LEVEL', default='none',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
@@ -221,6 +248,10 @@ parser.add_argument(
 parser.add_argument(
     '--no-allow-saturn', dest='allow_saturn', action='store_false',
     help='Do not include saturn in navigation')
+parser.add_argument(
+    '--body-cartographic-data', dest='body_cartographic_data', action='append',
+    metavar='BODY=MOSAIC',
+    help='The mosaic providing cartographic data for the given BODY')
 
 file_add_selection_arguments(parser)
 
@@ -236,12 +267,10 @@ arguments = parser.parse_args(command_list)
 def collect_cmd_line(image_path):
     ret = []
     ret += ['--is-subprocess']
-    ret += ['--first-image-num', '1']
-    ret += ['--last-image-num', '0']
     ret += ['--main-logfile-level', 'none']
     ret += ['--main-console-level', 'none']
     ret += ['--image-logfile-level', arguments.image_logfile_level]
-    ret += ['--image-console-level', 'none']
+    ret += ['--image-console-level', arguments.image_console_level]
     ret += ['--force-offset']
     if arguments.profile:
         ret += ['--profile']
@@ -259,7 +288,7 @@ def collect_cmd_line(image_path):
 
 SUBPROCESS_LIST = []
 
-def run_and_maybe_wait(args, image_path):
+def run_and_maybe_wait(args, image_path, bootstrapped):
     said_waiting = False
     while len(SUBPROCESS_LIST) == arguments.max_subprocesses:
         if not said_waiting:
@@ -268,7 +297,14 @@ def run_and_maybe_wait(args, image_path):
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
-                metadata = file_read_offset_metadata(old_image_path)
+                bootstrapped = SUBPROCESS_LIST[i][2]
+                if bootstrapped:
+                    bootstrap_pref = 'force'
+                else:
+                    bootstrap_pref = 'no'
+                metadata = file_read_offset_metadata(
+                                             old_image_path,
+                                             bootstrap_pref=bootstrap_pref)
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -280,14 +316,21 @@ def run_and_maybe_wait(args, image_path):
     main_logger.debug('Spawning subprocess %s', str(args))
         
     pid = subprocess.Popen(args)
-    SUBPROCESS_LIST.append((pid, image_path))
+    SUBPROCESS_LIST.append((pid, image_path, bootstrapped))
 
 def wait_for_all():
     while len(SUBPROCESS_LIST) > 0:
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
-                metadata = file_read_offset_metadata(old_image_path)
+                bootstrapped = SUBPROCESS_LIST[i][2]
+                if bootstrapped:
+                    bootstrap_pref = 'force'
+                else:
+                    bootstrap_pref = 'no'
+                metadata = file_read_offset_metadata(
+                                             old_image_path,
+                                             bootstrap_pref=bootstrap_pref)
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -303,8 +346,14 @@ def wait_for_all():
 
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
-                             botsim_offset=None):
-    offset_metadata = file_read_offset_metadata(image_path, overlay=False)
+                             botsim_offset=None, cartographic_data=None,
+                             bootstrapped=False):
+    if bootstrapped:
+        bootstrap_pref = 'force'
+    else:
+        bootstrap_pref = 'no'
+    offset_metadata = file_read_offset_metadata(image_path, overlay=False,
+                                                bootstrap_pref=bootstrap_pref)
     if offset_metadata is not None:
         if not force_offset:
             if redo_offset_error:
@@ -322,18 +371,20 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         main_logger.debug(
           'Processing %s - offset file exists but redoing offsets', image_path)
     else:
-        main_logger.debug('Processing %s - no offset file', image_path)
+        main_logger.debug('Processing %s - no previous offset file', image_path)
 
     if arguments.max_subprocesses:
         run_and_maybe_wait([PYTHON_EXE, CBMAIN_OFFSET_PY] + 
-                           collect_cmd_line(image_path), image_path) 
+                           collect_cmd_line(image_path), image_path,
+                           bootstrapped) 
         return True
 
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
         else:
-            image_log_path = file_img_to_log_path(image_path, bootstrap=False)
+            image_log_path = file_img_to_log_path(image_path, 'OFFSET', 
+                                                  bootstrap=bootstrapped)
         
         if os.path.exists(image_log_path):
             os.remove(image_log_path) # XXX Need option to not do this
@@ -344,6 +395,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_log_filehandler = None
 
     image_logger = logging.getLogger('cb')
+    
+    image_logger.info('Command line: %s', ' '.join(command_list))
     
     try:   
         obs = file_read_iss_file(image_path)
@@ -364,12 +417,15 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_pr.enable()
 
     try:
-        metadata = master_find_offset(obs, create_overlay=True,
-                                      allow_stars=allow_stars,
-                                      allow_rings=allow_rings,
-                                      allow_moons=allow_moons,
-                                      allow_saturn=allow_saturn,
-                                      botsim_offset=botsim_offset)
+        metadata = master_find_offset(
+                              obs, create_overlay=True,
+                              allow_stars=allow_stars,
+                              allow_rings=allow_rings,
+                              allow_moons=allow_moons,
+                              allow_saturn=allow_saturn,
+                              botsim_offset=botsim_offset,
+                              bodies_cartographic_data=cartographic_data,
+                              bootstrapped=bootstrapped)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
@@ -387,6 +443,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             ps.print_stats()
             ps.print_callers()
             image_logger.info('Profile results:\n%s', s.getvalue())
+        cb_logging.log_remove_file_handler(image_log_filehandler)
         return True
     
     try:
@@ -411,15 +468,21 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             ps.print_stats()
             ps.print_callers()
             image_logger.info('Profile results:\n%s', s.getvalue())
+        cb_logging.log_remove_file_handler(image_log_filehandler)
         return True
 
     png_image = offset_create_overlay_image(obs, metadata)
-    file_write_png_from_image(image_path, png_image)
+    file_write_png_from_image(image_path, png_image,
+                              bootstrap=metadata['bootstrapped'])
     
     if arguments.display_offset_results:
         display_offset_data(obs, metadata, canvas_size=None)
 
-    metadata = file_read_offset_metadata(image_path)
+    if bootstrapped:
+        bootstrap_pref = 'force'
+    else:
+        bootstrap_pref = 'no'
+    metadata = file_read_offset_metadata(image_path, bootstrap_pref=bootstrap_pref)
     filename = file_clean_name(image_path)
     results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)
@@ -488,29 +551,60 @@ start_time = time.time()
 num_files_processed = 0
 num_files_skipped = 0
 
-main_logger.info('')
 main_logger.info('**********************************')
 main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
 main_logger.info('**********************************')
+main_logger.info('')
+main_logger.info('Command line: %s', ' '.join(command_list))
+main_logger.info('')
+main_logger.info('Subprocesses:  %d', arguments.max_subprocesses)
 main_logger.info('')
 main_logger.info('Allow stars:   %s', str(arguments.allow_stars))
 main_logger.info('Allow rings:   %s', str(arguments.allow_rings))
 main_logger.info('Allow moons:   %s', str(arguments.allow_moons))
 main_logger.info('Allow Saturn:  %s', str(arguments.allow_saturn))
 main_logger.info('BOTSIM offset: %s', str(botsim_offset))
-main_logger.info('Subprocesses:  %d', arguments.max_subprocesses)
+
+cartographic_data = {}
+
+if arguments.body_cartographic_data:
+    main_logger.info('')
+    main_logger.info('Cartographic data provided:')
+    for cart in arguments.body_cartographic_data:
+        idx = cart.index('=')
+        if idx == -1:
+            main_logger.error('Bad format for --body-cartographic-data: %s', 
+                              cart)
+            sys.exit(-1)
+        body_name = cart[:idx].upper()
+        mosaic_path = cart[idx+1:]
+        cartographic_data[body_name] = mosaic_path
+        main_logger.info('    %-12s %s', body_name, mosaic_path)
+    main_logger.info('')
+    
+    for body_name in cartographic_data:
+        mosaic_path = cartographic_data[body_name]
+        mosaic_metadata = file_read_mosaic_metadata_path(mosaic_path)
+        if mosaic_metadata is None:
+            main_logger.error('No mosaic file %s', mosaic_path)
+            sys.exit(-1)
+        cartographic_data[body_name] = mosaic_metadata
+        
 main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
+    bootstrapped = len(cartographic_data) > 0
     if process_offset_one_image(
                     image_path,
                     allow_stars=arguments.allow_stars, 
                     allow_rings=arguments.allow_rings, 
                     allow_moons=arguments.allow_moons, 
                     allow_saturn=arguments.allow_saturn,
-                    botsim_offset=botsim_offset):
+                    botsim_offset=botsim_offset,
+                    cartographic_data=cartographic_data,
+                    bootstrapped=bootstrapped):
         num_files_processed += 1
     else:
         num_files_skipped += 1

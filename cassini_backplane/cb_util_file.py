@@ -12,6 +12,7 @@
 #    file_clean_name
 #    file_read_iss_file
 #    file_img_to_log_path
+#    file_offset_to_img_path
 #    file_read_offset_metadata
 #    file_write_offset_metadata
 #    file_img_to_png_file
@@ -27,6 +28,7 @@ import logging
 import argparse
 import copy
 import csv
+import datetime
 import numpy as np
 import msgpack
 import msgpack_numpy
@@ -141,6 +143,7 @@ def file_yield_image_filenames_from_arguments(arguments):
     if arguments.image_full_path:
         for image_path in arguments.image_full_path:
             yield image_path
+        return
     
     restrict_image_list = []
     if arguments.image_name is not None and arguments.image_name != [[]]:
@@ -204,11 +207,11 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
     searching_png = False
     
     if force_has_offset_file:
-        search_root = file_clean_join(RESULTS_ROOT, 'offsets')
+        search_root = file_clean_join(CB_RESULTS_ROOT, 'offsets')
         search_suffix = '-OFFSET.dat'
         searching_offset = True
     if force_has_png_file:
-        search_root = file_clean_join(RESULTS_ROOT, 'png')
+        search_root = file_clean_join(CB_RESULTS_ROOT, 'png')
         search_suffix = '.png'
         searching_png = True      
 
@@ -302,10 +305,12 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
         if done:
             break
 
-def file_clean_name(path):
+def file_clean_name(path, keep_bootstrap=False):
     _, filename = os.path.split(path)
     filename = filename.replace('.IMG', '')
     filename = filename.replace('_CALIB', '')
+    if not keep_bootstrap:
+        filename = filename.replace('-BOOTSTRAP', '')
     return filename
 
 def file_read_iss_file(path):
@@ -324,7 +329,7 @@ def file_read_iss_file(path):
 ###############################################################################
 
 
-def _results_path(img_path, file_type, root=RESULTS_ROOT, make_dirs=False):
+def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False):
     """Results path is of the form:
     
     <ROOT>/<file_type>/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
@@ -359,23 +364,35 @@ def _results_path(img_path, file_type, root=RESULTS_ROOT, make_dirs=False):
             pass
     return file_clean_join(part_dir1, filename)
 
-def file_img_to_log_path(img_path, bootstrap=False, make_dirs=True):
+
+### LOG FILES
+
+def file_img_to_log_path(img_path, log_type, bootstrap=False, make_dirs=True):
     fn = _results_path(img_path, 'logs', make_dirs=make_dirs)
+    fn += '-'+log_type
     if bootstrap:
-        fn += '-bootstrap'
-    fn += '.log'
+        fn += '-BOOTSTRAP'
+    log_datetime = datetime.datetime.now().isoformat()[:-7]
+    log_datetime = log_datetime.replace(':','-')
+    fn += '-' + log_datetime + '.log'
     return fn
 
-def _file_img_to_offset_path(img_path, make_dirs=False):
+
+### OFFSETS AND OVERLAYS
+
+def _file_img_to_offset_path(img_path, bootstrap=False, make_dirs=False):
     fn = _results_path(img_path, 'offsets', make_dirs=make_dirs)
+    if bootstrap:
+        fn += '-BOOTSTRAP'
     fn += '-OFFSET.dat'
     return fn
 
-def _file_offset_to_img_path(offset_path):
+def file_offset_to_img_path(offset_path):
     rdir, filename = os.path.split(offset_path)
     rdir, dir1 = os.path.split(rdir)
     rdir, dir2 = os.path.split(rdir)
     
+    filename = filename.replace('-BOOTSTRAP', '')
     filename = filename.replace('-OFFSET.dat', '')
     filename += '_CALIB.IMG'
 
@@ -384,8 +401,10 @@ def _file_offset_to_img_path(offset_path):
         
     return img_path
 
-def _file_img_to_overlay_path(img_path, make_dirs=False):
+def _file_img_to_overlay_path(img_path, bootstrap=False, make_dirs=False):
     fn = _results_path(img_path, 'overlays', make_dirs=make_dirs)
+    if bootstrap:
+        fn += '-BOOTSTRAP'
     fn += '-OVERLAY.dat'
     return fn
 
@@ -405,9 +424,29 @@ def _uncompress_bool(comp):
     res = np.frombuffer(zlib.decompress(flat), dtype='bool')
     return res
 
-def file_read_offset_metadata(img_path, overlay=True):
-    offset_path = _file_img_to_offset_path(img_path, make_dirs=False)
+def file_read_offset_metadata(img_path, bootstrap_pref='prefer', overlay=True):
+    # bootstrap is one of:
+    #    no        Don't use the bootstrap file
+    #    force     Force use of the bootstrap file
+    #    prefer    Prefer use of the bootstrap file, if it exists
+    assert bootstrap_pref in ('no', 'force', 'prefer')
     
+    if bootstrap_pref == 'no':
+        offset_path = _file_img_to_offset_path(img_path, bootstrap=False,
+                                               make_dirs=False)
+    elif bootstrap_pref == 'force':
+        offset_path = _file_img_to_offset_path(img_path, bootstrap=True,
+                                               make_dirs=False)
+    else:
+        offset_path = _file_img_to_offset_path(img_path, bootstrap=True,
+                                               make_dirs=False)
+        if not os.path.exists(offset_path):
+            offset_path = _file_img_to_offset_path(img_path, bootstrap=False,
+                                                   make_dirs=False)
+            
+    return file_read_offset_metadata_path(offset_path, overlay=overlay)
+
+def file_read_offset_metadata_path(offset_path, overlay=True):    
     if not os.path.exists(offset_path):
         return None
 
@@ -416,6 +455,8 @@ def file_read_offset_metadata(img_path, overlay=True):
                                object_hook=msgpack_numpy.decode)
     offset_fp.close()
 
+    metadata['offset_path'] = offset_path
+    
     # UCAC4Star class can't be directly serialized by msgpack
     if ('stars_metadata' in metadata and 
         metadata['stars_metadata'] is not None):
@@ -434,9 +475,12 @@ def file_read_offset_metadata(img_path, overlay=True):
             mask = bodies_metadata[key]['latlon_mask']
             mask = _uncompress_bool(mask)
             bodies_metadata[key]['latlon_mask'] = mask
-            
+
     if overlay:
-        overlay_path = _file_img_to_overlay_path(img_path, make_dirs=False)
+        bootstrap = offset_path.find('-BOOTSTRAP') != -1
+        overlay_path = _file_img_to_overlay_path(
+                                 file_offset_to_img_path(offset_path),
+                                 make_dirs=False, bootstrap=bootstrap)
         overlay_fp = open(overlay_path, 'rb')
         metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
                                            object_hook=msgpack_numpy.decode)
@@ -452,13 +496,15 @@ def file_read_offset_metadata(img_path, overlay=True):
     return metadata
 
 def file_write_offset_metadata(img_path, metadata, overlay=True):
-    """Write offset file for img_filename."""
+    """Write offset file for img_path."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
 
-    offset_path = _file_img_to_offset_path(img_path, make_dirs=True)
+    bootstrap = metadata['bootstrapped']
+    offset_path = _file_img_to_offset_path(img_path, bootstrap=bootstrap, make_dirs=True)
     logger.debug('Writing offset file %s', offset_path)
     
     metadata = copy.deepcopy(metadata)
+    metadata['offset_path'] = offset_path
     if 'ext_data' in metadata:
         del metadata['ext_data']
     if 'ext_overlay' in metadata:
@@ -501,7 +547,8 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
     offset_fp.close()
 
     if overlay:
-        overlay_path = _file_img_to_overlay_path(img_path, make_dirs=True)
+        overlay_path = _file_img_to_overlay_path(img_path, bootstrap=bootstrap,
+                                                 make_dirs=True)
         overlay_fp = open(overlay_path, 'wb')
         overlay_fp.write(msgpack.packb(metadata_overlay, 
                                        default=msgpack_numpy.encode))    
@@ -509,64 +556,172 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
 
     return offset_path
 
-def file_img_to_png_path(img_path, make_dirs=False):
+
+### PNG
+
+def file_img_to_png_path(img_path, bootstrap=False, make_dirs=False):
     fn = _results_path(img_path, 'png', make_dirs=make_dirs)
+    if bootstrap:
+        fn += '-BOOTSTRAP'
     fn += '.png'
     return fn
 
-def file_write_png_from_image(img_path, image):
-    fn = file_img_to_png_path(img_path, make_dirs=True)
+def file_write_png_from_image(img_path, image, bootstrap=False):
+    fn = file_img_to_png_path(img_path, bootstrap=bootstrap,
+                              make_dirs=True)
     im = Image.fromarray(image)
     im.save(fn)
+
+
+### BOOTSTRAP DATA FILES
+
+def file_bootstrap_good_image_path(body_name, make_dirs=False):
+    assert os.path.exists(CB_RESULTS_ROOT)
+    root = file_clean_join(CB_RESULTS_ROOT, 'bootstrap')
+    if make_dirs and not os.path.exists(root):
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
+
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-good.data')
+
+def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
+    assert os.path.exists(CB_RESULTS_ROOT)
+    root = file_clean_join(CB_RESULTS_ROOT, 'bootstrap')
+    if make_dirs and not os.path.exists(root):
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
+
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-candidate.data')
     
-def file_mosaic_path(metadata, root=RESULTS_ROOT, make_dirs=True):
+    
+### REPROJECTED BODIES
+
+def file_img_to_reproj_body_path(img_path, body_name, lat_res, lon_res, 
+                                 latlon_type, lon_dir,
+                                 make_dirs=False):
+    fn = _results_path(img_path, 'reproj', make_dirs=make_dirs)
+    fn += '-%.3f_%.3f-%s-%s-REPROJBODY-%s.dat' % (
+              lat_res*oops.DPR, lon_res*oops.DPR, latlon_type, lon_dir,
+              body_name.upper())
+    return fn
+
+def file_write_reproj_body(img_path, metadata):
+    """Write reprojection metadata file for img_path."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body')
+
+    reproj_path = file_img_to_reproj_body_path(img_path, metadata['body_name'],
+                                               metadata['lat_resolution'],
+                                               metadata['lon_resolution'],
+                                               metadata['latlon_type'],
+                                               metadata['lon_direction'],
+                                               make_dirs=True)
+    logger.debug('Writing body reprojection file %s', reproj_path)
+    
+    reproj_fp = open(reproj_path, 'wb')
+    reproj_fp.write(msgpack.packb(metadata, 
+                                  default=msgpack_numpy.encode))    
+    reproj_fp.close()
+
+def file_read_reproj_body(img_path, body_name, lat_res, lon_res, 
+                          latlon_type, lon_dir):
+    """Read reprojection metadata file for img_path."""
+    reproj_path = file_img_to_reproj_body_path(img_path, body_name,
+                                               lat_res, lon_res, 
+                                               latlon_type, lon_dir, 
+                                               make_dirs=False)
+    
+    if not os.path.exists(reproj_path):
+        return None
+
+    reproj_fp = open(reproj_path, 'rb')
+    metadata = msgpack.unpackb(reproj_fp.read(), 
+                               object_hook=msgpack_numpy.decode)
+    reproj_fp.close()
+    
+    return metadata
+
+
+### MOSAICS
+    
+def file_mosaic_path(body_name, mosaic_root, root=CB_RESULTS_ROOT, 
+                     make_dirs=True, next_num=False, reset_num=False):
     """Mosaic filename is of the form:
     
-    <ROOT>/mosaics/<bodyname>/<firstimg>_<lastimg>_<#img>.dat
+        <ROOT>/mosaics/<bodyname>/<mosaic_root>_<#img>.dat
+    
+    The current maximum image number is stored in:
+
+        <ROOT>/mosaics/<bodyname>/last_mosaic_num.txt
     """
     assert os.path.exists(root)
-    if len(metadata['path_list']) == 0:
-        return None
     root = file_clean_join(root, 'mosaics')
     if make_dirs and not os.path.exists(root):
         try:
             os.mkdir(root)
         except OSError:
             pass
-    root = file_clean_join(root, metadata['body_name'])
+    root = file_clean_join(root, body_name)
     if make_dirs and not os.path.exists(root):
         try:
             os.mkdir(root)
         except OSError:
             pass
-    sorted_img_list = sorted(metadata['path_list'])
-    _, first_filename = os.path.split(sorted_img_list[0])
-    _, last_filename = os.path.split(sorted_img_list[-1])
-    filename = '%s_%s_%04d.dat' % (first_filename[:13],
-                                   last_filename[:13],
-                                   len(sorted_img_list))
-    
-    return file_clean_join(root, filename)
 
-def file_read_mosaic_metadata(path):
-    if not os.path.exists(path):
+    num_path = file_clean_join(root, mosaic_root+'-idx.txt')
+    if not reset_num and os.path.exists(num_path):
+        num_fp = open(num_path, 'r')
+        max_num = int(num_fp.readline())
+        num_fp.close()
+    else:
+        max_num = 0
+    
+    if next_num:
+        max_num += 1
+    
+        num_fp = open(num_path, 'w')
+        num_fp.write(str(max_num))
+        num_fp.close()
+        
+    mosaic_path = file_clean_join(root, '%s_%04d-MOSAIC.dat' % (mosaic_root,max_num))
+    
+    return mosaic_path
+
+def file_read_mosaic_metadata(body_name, mosaic_root):
+    """Read mosaic metadata."""
+    mosaic_path = file_mosaic_path(body_name, mosaic_root, next_num=False)
+    
+    return file_read_mosaic_metadata_path(mosaic_path)
+
+def file_read_mosaic_metadata_path(mosaic_path):
+    logger = logging.getLogger(_LOGGING_NAME+'.file_read_mosaic_metadata')
+    logger.debug('Reading mosaic file %s', mosaic_path)
+
+    if not os.path.exists(mosaic_path):
         return None
 
-    mosaic_fp = open(path, 'rb')
+    mosaic_fp = open(mosaic_path, 'rb')
     metadata = msgpack.unpackb(mosaic_fp.read(), 
                                object_hook=msgpack_numpy.decode)
     mosaic_fp.close()
 
+    metadata['full_path'] = mosaic_path    
+
     return metadata
 
-def file_write_mosaic_metadata(metadata):
+def file_write_mosaic_metadata(body_name, mosaic_root, metadata, 
+                               reset_num=False):
     """Write mosaic metadata."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_mosaic_metadata')
 
-    mosaic_path = file_mosaic_path(metadata)
+    mosaic_path = file_mosaic_path(body_name, mosaic_root, next_num=True,
+                                   reset_num=reset_num)
 
     logger.debug('Writing mosaic file %s', mosaic_path)
-    
+
     mosaic_fp = open(mosaic_path, 'wb')
     mosaic_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    

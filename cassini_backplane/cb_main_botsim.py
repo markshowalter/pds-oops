@@ -44,7 +44,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
-            to $(RESULTS_ROOT)/logs/cb_main_botsim/<datetime>.log''')
+            to $(CB_RESULTS_ROOT)/logs/cb_main_botsim/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 
@@ -58,7 +58,7 @@ parser.add_argument(
     '--image-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for each image file; 
             defaults to 
-            $(RESULTS_ROOT)/logs/<image-path>/<image_filename>.log''')
+            $(CB_RESULTS_ROOT)/logs/<image-path>/<image_filename>.log''')
 parser.add_argument(
     '--image-logfile-level', metavar='LEVEL', default='info',
     choices=LOGGING_LEVEL_CHOICES,
@@ -122,7 +122,8 @@ def run_and_maybe_wait(args, image_path):
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
-                metadata = file_read_offset_metadata(old_image_path)
+                metadata = file_read_offset_metadata(old_image_path,
+                                                     bootstrap='no')
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -141,7 +142,8 @@ def wait_for_all():
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
-                metadata = file_read_offset_metadata(old_image_path)
+                metadata = file_read_offset_metadata(old_image_path,
+                                                     bootstrap='no')
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -157,7 +159,8 @@ def wait_for_all():
 
 def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
     offset_metadata_wac = file_read_offset_metadata(image_path_wac, 
-                                                    overlay=False)
+                                                    overlay=False,
+                                                    bootstrap='prefer')
     if offset_metadata_wac is None:
         main_logger.info('Skipping %s - no WAC offset file', image_path_wac)
         return False
@@ -176,7 +179,8 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
     botsim_offset = (wac_offset[0]*10, wac_offset[1]*10)
     
     offset_metadata_nac = file_read_offset_metadata(image_path_nac, 
-                                                    overlay=False)
+                                                    overlay=False,
+                                                    bootstrap='prefer')
     if offset_metadata_nac is None:
         main_logger.info('Skipping %s - no NAC offset file', image_path_nac)
         return False
@@ -209,7 +213,7 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
         else:
-            image_log_path = file_img_to_log_path(image_path_nac, 
+            image_log_path = file_img_to_log_path(image_path_nac, 'BOTSIM', 
                                                   bootstrap=False)
         
         if os.path.exists(image_log_path):
@@ -295,7 +299,9 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
     if arguments.display_offset_results:
         display_offset_data(obs, metadata, canvas_size=None)
 
-    metadata = file_read_offset_metadata(image_path_nac)
+    metadata = file_read_offset_metadata(image_path_nac,
+                                         overlay=False,
+                                         bootstrap='no')
     filename = file_clean_name(image_path_nac)
     results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)

@@ -19,8 +19,9 @@ from cb_offset import *
 from cb_titan import *
 from cb_util_file import *
 from cb_util_image import *
+from cb_util_misc import *
 
-TITAN_FILENAMES_CSV = os.path.join(SUPPORT_FILES_ROOT, 'titan', 
+TITAN_FILENAMES_CSV = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', 
                                    'titan-file-list.csv')
 
 FILTER_COLOR = {
@@ -89,7 +90,7 @@ def process_image(filename, force=False, recompute=False):
     _, filespec = os.path.split(filename)
     filespec = filespec.replace('_CALIB.IMG', '')
     
-    pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
+    pickle_path = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
 
     if not force and not recompute and os.path.exists(pickle_path):
         print 'Pickle file already exists'
@@ -112,14 +113,7 @@ def process_image(filename, force=False, recompute=False):
         fp.close()
         return
 
-    if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
-        filter = 'CLEAR'
-    else:
-        filter = obs.filter1
-        if filter == 'CL1':
-            filter = obs.filter2
-        elif obs.filter2 != 'CL2':
-            filter += '+' + obs.filter2
+    filter = simple_filter_name(obs)
 
     # Titan parameters
     titan_inv_list = obs.inventory(['TITAN+ATMOSPHERE'], return_type='full')
@@ -236,7 +230,7 @@ def del_pickle_if_previously_computed(filename):
     _, filespec = os.path.split(filename)
     filespec = filespec.replace('_CALIB.IMG', '')
     
-    pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
+    pickle_path = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
     if not os.path.exists(pickle_path):
         return
     fp = open(pickle_path, 'rb')
@@ -250,7 +244,7 @@ def add_profile_to_list(filename, reinterp=False):
     _, filespec = os.path.split(filename)
     filespec = filespec.replace('_CALIB.IMG', '')
     
-    pickle_path = os.path.join(SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
+    pickle_path = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
 
     if not os.path.exists(pickle_path):
         return
@@ -570,7 +564,7 @@ if False:
     #plot_profiles_by_phase_filter()
     #plot_rescaled_filters()
     
-    pickle_file = os.path.join(SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
+    pickle_file = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
     fp = open(pickle_file, 'wb')
     pickle.dump(PHASE_BIN_GRANULARITY, fp)
     pickle.dump(BY_FILTER_DB, fp)

@@ -118,7 +118,10 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     if 'ext_data' not in metadata:
         ext_data = obs.data
         metadata['ext_data'] = ext_data
-        overlay = metadata['overlay']
+        if 'overlay' in metadata:
+            overlay = metadata['overlay']
+        else:
+            overlay = None
     else:
         ext_data = metadata['ext_data']
         overlay = metadata['ext_overlay']
@@ -266,6 +269,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         title = fn4 + '/' + fn2 + '/' + fn1
     else:
         title = fn4 + '/' + fn3 + '/' + fn2 + '/' + fn1
+    
+    if metadata['bootstrapped']:
+        title += ' (BOOTSTRAPPED)'
         
     title += '    ' + cspice.et2utc(obs.midtime, 'C', 0)
 
@@ -312,12 +318,19 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     label.grid(row=gridrow, column=gridcolumn+6, sticky='w')
 
     gridrow += 1
-    
+
+    bootstrap_str = 'No'
+    if metadata['bootstrap_candidate']:
+        bootstrap_str = 'Yes'
+        if (metadata['large_bodies'] is not None and
+            len(metadata['large_bodies']) > 0):
+            bootstrap_str += ' (' + metadata['large_bodies'][0][:2]+')'
+
     label = ttk.Label(addon_control_frame, text='Bootstrap Cand:', 
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     label = ttk.Label(addon_control_frame, 
-                     text=str(metadata['bootstrap_candidate']), 
+                     text=bootstrap_str, 
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
 
@@ -325,22 +338,24 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     label = ttk.Label(addon_control_frame, 
-                     text=str(metadata['bootstrapped']), 
+                     text=str(metadata['bootstrap_status']), 
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    label = ttk.Label(addon_control_frame, text='Bootstrap Mosaic:', 
-                     anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
-    mosaic_path = metadata['bootstrap_mosaic_path']
-    if mosaic_path is None:
-        mosaic_path = 'N/A'
-    else:
-        _, mosaic_path = os.path.split(mosaic_path)
-    label = ttk.Label(addon_control_frame,
-                     text=mosaic_path,
-                     anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+#    label = ttk.Label(addon_control_frame, text='Bootstrap Mosaic:', 
+#                     anchor='w', width=label_width)
+#    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+#
+#    mosaic_path = metadata['bootstrap_mosaic_path']
+#    if mosaic_path is None:
+#        mosaic_path = 'N/A'
+#    else:
+#        _, mosaic_path = os.path.split(mosaic_path)
+#    label = ttk.Label(addon_control_frame,
+#                     text=mosaic_path,
+#                     anchor='e', width=val_width)
+#    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+
     gridrow += 1
     
     sep = ttk.Separator(addon_control_frame)

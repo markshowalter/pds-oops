@@ -1,7 +1,7 @@
 ###############################################################################
 # cb_util_misc.py
 #
-# Routines related to image manipulation.
+# Miscellaneous routines.
 #
 # Exported routines:
 ###############################################################################
@@ -45,4 +45,26 @@ def find_shift_1d(a, b, n):
             best_rms = rms
             best_amt = amt
     return -best_amt
+
+def _simple_filter_name_helper(filter1, filter2, consolidate_pol):
+    if filter1 == 'CL1' and filter2 == 'CL2':
+        filter = 'CLEAR'
+    else:
+        filter = filter1
+        if (filter == 'CL1' or
+            (consolidate_pol and 
+             (filter == 'P0' or filter == 'P60' or filter == 'P120'))):
+            filter = 'P'
+        if filter2 != 'CL2':
+            filter += '+' + filter2
+
+    return filter
+
+def simple_filter_name(obs, consolidate_pol=False):
+    return _simple_filter_name_helper(obs.filter1, obs.filter2,
+                                      consolidate_pol=consolidate_pol)
+
+def simple_filter_name_metadata(metadata, consolidate_pol=False):
+    return _simple_filter_name_helper(metadata['filter1'], metadata['filter2'],
+                                      consolidate_pol=consolidate_pol)
 

@@ -106,7 +106,9 @@ def master_find_offset(obs,
                        rings_config=None,
 
                    botsim_offset=None,
-                   force_bootstrap_candidate=False):
+                   force_bootstrap_candidate=False,
+                   
+                   bootstrapped=False):
     """Reproject the moon into a rectangular latitude/longitude space.
     
     Inputs:
@@ -140,7 +142,10 @@ def master_find_offset(obs,
         force_bootstrap_candidate  True to force this image to be a bootstrap
                                  candidate even if we really could find a
                                  viable offset.
-
+                                 
+        bootstrapped             True if this offset pass is the result of
+                                 bootstrapping.
+                                 
     Returns:
         metadata           A dictionary containing information about the
                            offset result:
@@ -178,7 +183,7 @@ def master_find_offset(obs,
             'titan_offset'     The offset from Titan photometric navigation.
                                None if navigation failed.
             'large_bodies'     A list of the large bodies present in the image
-                               sorted in descending order by range.
+                               sorted in ascending order by range.
             'body_only'        False if the image doesn't consist entirely of
                                a single body and nothing else.
                                Otherwise the name of the body.
@@ -200,6 +205,8 @@ def master_find_offset(obs,
                                modeling not performed.
             'secondary_corr_ok' True if secondary model correlation was
                                successful. None if it wasn't performed.
+            'offset_path'      The path to the offset filename - filled in by
+                               the top-level program.
             'start_time'       The start time (s) of the entire offset process.
             'end_time'         The end time (s) of the entire offset process.
             
@@ -208,15 +215,8 @@ def master_find_offset(obs,
             'bootstrap_candidate'
                                True if the image is a good candidate for 
                                future bootstrapping attempts.
-            'bootstrap_body'   The largest (pixel size) body in the image.
             'bootstrapped'     True if the image was navigated using 
                                bootstrapping.
-            'bootstrap_mosaic_path'
-                               The file path where the mosaic data that was
-                               used to attempt bootstrapping this image
-                               is stored.
-            'bootstrap_mosaic_filenames'
-                               The list of filenames used to create the mosaic.
             'bootstrap_status' A string describing attempts at bootstrapping:
                                    None        Bootstrapping not attempted
                                
@@ -249,19 +249,21 @@ def master_find_offset(obs,
     
     logger.info('Processing %s', obs.full_path)
     logger.info('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
-                 'SAMPLING %s / GAIN %d',
-                 cspice.et2utc(obs.midtime, 'C', 0),
-                 obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
-                 obs.filter1, obs.filter2, obs.sampling,
-                 obs.gain_mode)
+                'SAMPLING %s / GAIN %d',
+                cspice.et2utc(obs.midtime, 'C', 0),
+                obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
+                obs.filter1, obs.filter2, obs.sampling,
+                obs.gain_mode)
     logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
                  'allow_rings %d',
                  allow_stars, allow_saturn, allow_moons, allow_rings)
     if bodies_cartographic_data is None:
         logger.info('No cartographic data provided')
     else:
-        logger.info('Cartographic data provided for: %s',
-                     str(sorted(bodies_cartographic_data.keys())))
+        for body_name in sorted(bodies_cartographic_data.keys()):
+            logger.info('Cartographic data provided for: %s = %s',
+                         body_name.upper(),
+                         bodies_cartographic_data[body_name]['full_path'])
         
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
@@ -347,10 +349,7 @@ def master_find_offset(obs,
     metadata['rings_overlay_text'] = None
     # Bootstrapping
     metadata['bootstrap_candidate'] = False
-    metadata['bootstrap_body'] = None
-    metadata['bootstrapped'] = False
-    metadata['bootstrap_mosaic_path'] = None
-    metadata['bootstrap_mosaic_filenames'] = None
+    metadata['bootstrapped'] = bootstrapped
     metadata['bootstrap_status'] = None
     
     
@@ -369,10 +368,22 @@ def master_find_offset(obs,
     # closeup of a single body and so the metadata has this information
     
     large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
+    # Make a list sorted by range, with the closest body first
     large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
     large_bodies_by_range.sort(key=lambda x: x[1]['range'])
 
-    logger.info('Large body inventory %s', [x[0] for x in large_bodies_by_range])
+    logger.info('Large body inventory by increasing range: %s', [x[0] for x in large_bodies_by_range])
+
+    # Now find the ring radii and distance for the main rings
+    # We use this in various places below
+    rings_radii = obs.ext_bp.ring_radius('saturn:ring')
+    rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS)
+    rings_radii = rings_radii.mask_where(rings_radii > RINGS_MAX_RADIUS)
+    rings_radii = rings_radii.mvals
+
+    rings_dist = obs.ext_bp.distance('saturn:ring')
+    rings_dist = rings_dist.mask_where(rings_radii.mask).mvals
+    min_rings_dist = np.min(rings_dist)
 
     # See if the main rings take up the entire image AND are in front of
     # all bodies.
@@ -380,28 +391,21 @@ def master_find_offset(obs,
     # are sometimes transparent and we want to be able to handle things like
     # Pan and Daphnis embedded in the rings.
     entirely_rings = False
-    min_rings_dist = None
-    corner_radii = obs.ext_corner_bp.ring_radius('saturn:ring').mvals
-    radii_good = np.logical_and(corner_radii > RINGS_MIN_RADIUS,
-                                corner_radii < RINGS_MAX_RADIUS)
-    if np.all(radii_good): # Corner version is for performance
-        radii = obs.ext_bp.ring_radius('saturn:ring').mvals
-        radii_good = np.logical_and(radii > RINGS_MIN_RADIUS,
-                                    radii < RINGS_MAX_RADIUS)
-        if np.all(radii_good): # Check all pixels
-            dist = obs.ext_bp.distance('saturn:ring').vals.astype('float')
-            min_rings_dist = np.min(dist)
-            found_front_body = False
-            for body_name, inv in large_bodies_by_range:
-                if inv['range'] < min_rings_dist:
-                    found_front_body = True
-                    logger.debug('Image is entirely rings but %s is in front',
-                                 body_name)
-                    break
-            if not found_front_body:
-                logger.info('Image is entirely rings')
-                entirely_rings = True
-                metadata['rings_only'] = True
+    if not np.any(rings_radii.mask): # All radii valid
+        found_front_body = False
+        if len(large_bodies_by_range) > 0:
+            inv = large_bodies_by_range[0][1]
+            if inv['range'] < min_rings_dist:
+                found_front_body = True
+        if found_front_body:
+            logger.debug('Image is entirely rings but %s is in front',
+                         body_name)
+        else:
+            logger.info('Image is entirely rings')
+            entirely_rings = True
+            metadata['rings_only'] = True
+    else:
+        logger.debug('Image is not entirely rings')
 
     front_body_name = None
     if len(large_bodies_by_range) > 0:
@@ -409,37 +413,45 @@ def master_find_offset(obs,
         size = (inv['u_max']-inv['u_min'])*(inv['v_max']-inv['v_min']) 
         if size >= offset_config['min_body_area']:
             front_body_name = body_name
+            logger.debug('Front body %s is sufficiently large', 
+                         front_body_name)
 
     if front_body_name in FUZZY_BODY_LIST:
         front_body_name = None
+        logger.debug('... but front body %s is fuzzy', front_body_name)
 
     entirely_body = False
         
     if front_body_name is not None:
-        # See if the front-most actually visible body takes up the entire image    
+        # See if the front-most actually visible body takes up the entire image
+        set_obs_corner_bp(obs)    
         corner_body_mask = (
             obs.ext_corner_bp.where_intercepted(front_body_name).
                 vals)
         if np.all(corner_body_mask):
-            if entirely_rings and min_rings_dist < inv['range']:
-                logger.info('Image is covered by %s, which is hidden by rings', 
-                            front_body_name)
+            inv = large_body_dict[front_body_name]
+            if np.any(rings_dist < inv['range']):
+                logger.info(
+                  'Image is covered by %s, which is hidden by rings', 
+                  front_body_name)
                 front_body_name = None
                 # In this case there's no point at all in still having a body
                 # list since the closest body fills the whole frame and is
                 # also hidden by the rings. There won't be anything to see or
-                # anything to navigate on.
+                # anything to navigate on. This should really only happen
+                # with Saturn.
                 large_bodies_by_range = []
             else:
                 entirely_body = front_body_name
                 metadata['body_only'] = front_body_name
-                logger.info('Image is covered by %s and is unobstructed', 
-                            front_body_name)
-                
+                logger.info('Image is covered by %s, which is not occluded '+
+                            'by anything', front_body_name)
+
+    if entirely_body and len(large_bodies_by_range) != 1:
+        logger.warn('Something is very wrong - image is entirely %s but there '+
+                    'are additional bodies in the body list!', entirely_body)
+        
     metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
-    metadata['bootstrap_body'] = front_body_name
-    if front_body_name is not None:
-        logger.info('Bootstrap body %s', metadata['bootstrap_body'])
 
 
                     ######################
@@ -448,7 +460,8 @@ def master_find_offset(obs,
     
     #
     # TRY TO FIND THE OFFSET USING STARS ONLY.
-    # XXX EVEN IF STAR PHOTOMETRY FAILS, WE COULD COMBINE WITH LATER MODELS!
+    #    XXX EVEN IF STAR PHOTOMETRY FAILS, WE COULD COMBINE THE STAR MODEL 
+    #    XXX WITH LATER MODELS!
     #
 
     stars_offset = None
@@ -501,6 +514,9 @@ def master_find_offset(obs,
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
+            # If the whole image is a single unobsctructed body, then
+            # we will want to bootstrap later, so don't bother making
+            # fancy models, just make the latlon mask.
             mask_only = (entirely_body == body_name and
                          (bodies_cartographic_data is None or
                           body_name not in bodies_cartographic_data))
@@ -520,6 +536,48 @@ def master_find_offset(obs,
                 label_avoid_mask = np.logical_or(label_avoid_mask,
                                                  body_overlay_text)
 
+    # We have all the body models and all the rings information. Go through
+    # the bodies and see if they are partially occluded by anything else
+    # and mark appropriately.
+    # Note that this includes being occluded by a moon or rings that will
+    # actually be outside the image once the final offset is found. It's
+    # a pain to get around this behavior, and it's unlikely to ever matter.
+    for body_idx in xrange(len(bodies_model_list)-1, -1, -1):
+        # Start with the backmost body and work forward
+        (body_model, body_metadata, 
+         body_overlay_text) = bodies_model_list[body_idx]
+        body_metadata['occluded_by'] = None
+        if body_idx > 0: # Not the frontmost body
+            # See if any bodies in front occlude this body
+            for body_idx2 in xrange(body_idx):
+                (body_model2, body_metadata2, 
+                 body_overlay_text2) = bodies_model_list[body_idx2]
+                if np.any(np.logical_and(body_model != 0, body_model2 != 0)):
+                    if body_metadata['occluded_by'] is None:
+                        body_metadata['occluded_by'] = []
+                    body_metadata['occluded_by'].append(body_metadata2['body_name'])
+            # See if the rings occlude this body
+            body_rings_dist = rings_dist[body_model != 0]
+            inv = body_metadata['inventory']
+            if np.any(body_rings_dist < inv['range']):
+                if body_metadata['occluded_by'] is None:
+                    body_metadata['occluded_by'] = []
+                body_metadata['occluded_by'].append('RINGS')
+        if body_metadata['occluded_by'] is not None:
+            logger.info('%s is occluded by %s', body_metadata['body_name'],
+                        str(body_metadata['occluded_by']))                
+    
+    if (entirely_body and 
+        bodies_metadata[entirely_body]['occluded_by'] is not None):
+        logger.warn('Something is very wrong - Image marked as entirely body '+
+                    'but body is occluded by something!')
+
+    if (entirely_body and 
+        bodies_metadata[entirely_body]['occluded_by'] is not None):
+        logger.debug('Marking as not entirely body %s due to occluding body',
+                     entirely_body)
+        entirely_body = None
+ 
     if entirely_body:
         if (entirely_body not in FUZZY_BODY_LIST and
             (bodies_cartographic_data is None or
@@ -527,14 +585,11 @@ def master_find_offset(obs,
             # Nothing we can do here except bootstrap
             metadata['bootstrap_candidate'] = True
             logger.info('Single body without cartographic data - '+
-                         'bootstrap candidate and returning')
+                        'bootstrap candidate and returning')
             metadata['end_time'] = time.time()
             return metadata
 
-    good_body = False # True if we have cartographic data OR
-                      #     the limb and curvature are both OK for
-                      #     at least one body
-    bad_body = False  # True if the closest useable body is not a good body
+    bad_body = False
     
     navigable_bodies_model_list = []
     for body_model, body_metadata, body_text in bodies_model_list:
@@ -553,15 +608,10 @@ def master_find_offset(obs,
                            (body_model, body_metadata, body_text))
         if ((bodies_cartographic_data is None or
              body_name not in bodies_cartographic_data) and
-            not body_metadata['curvature_ok'] or
-            not body_metadata['limb_ok'] or
-            not body_metadata['size_ok']):
-            if not good_body:
-                # Only if there isn't a good closer body
-                bad_body = True
-            continue
-        good_body = True
-
+            body_metadata['size_ok'] and
+            (not body_metadata['curvature_ok'] or
+             not body_metadata['limb_ok'])):
+            bad_body = True
 
                     #####################
                     # CREATE RING MODEL #
@@ -886,15 +936,16 @@ def master_find_offset(obs,
         
     # Out of the big model testing loop!
 
-    if model_offset is None:
-        if (rings_curvature_ok and not rings_features_ok and
-            not metadata['bootstrap_body']): # XXX
-            logger.info('Ring curvature OK but not enough fiducial '+
-                        'features - candidate for bootstrapping')
-            metadata['bootstrapping_candidate'] = True
-            metadata['bootstrap_body'] = 'RINGS'
-        if rings_features_ok and not rings_curvature_ok:
-            logger.info('Candidate for ring radial scan') # XXX
+# XXX IMPLEMENT RING BOOTSTRAPPING
+#    if model_offset is None:
+#        if (rings_curvature_ok and not rings_features_ok and
+#            not metadata['bootstrap_body']): # XXX
+#            logger.info('Ring curvature OK but not enough fiducial '+
+#                        'features - candidate for bootstrapping')
+#            metadata['bootstrapping_candidate'] = True
+#            metadata['bootstrap_body'] = 'RINGS'
+#        if rings_features_ok and not rings_curvature_ok:
+#            logger.info('Candidate for ring radial scan') # XXX
 
     if model_offset is not None:
         if ('RINGS' not in used_model_str_list and
@@ -1139,10 +1190,10 @@ def master_find_offset(obs,
                 # FIGURE OUT BOOTSTRAPPING IMPLICATIONS #
                 #########################################
     
-    # For moons, we mark a bootstrap candidate if the closest usable body
-    # is "bad" - bad limb or curvature, no cartographic data
-    if (offset is None and bad_body and not good_body and
-        metadata['bootstrap_body'] is not None):
+    # For moons, we mark a bootstrap candidate if any usable body
+    # is "bad" - bad limb or curvature, no cartographic data -
+    # but is still a good size
+    if offset is None and bad_body:
         logger.info('Marking as bootstrap candidate')
         metadata['bootstrap_candidate'] = True
     
@@ -1170,6 +1221,7 @@ def offset_create_overlay_image(obs, metadata,
     bodies_overlay_text = metadata['bodies_overlay_text']
     rings_overlay = metadata['rings_overlay']
     rings_overlay_text = metadata['rings_overlay_text']
+    bodies_metadata = metadata['bodies_metadata']
     
     gamma = 0.5
     
@@ -1298,11 +1350,21 @@ def offset_create_overlay_image(obs, metadata,
 
         model_contents = metadata['model_contents']
         if model_contents is not None and model_contents != []:
-            model_contents_str = '+'.join(model_contents)
+            new_model_contents = []
+            for model_content in sorted(model_contents):
+                sfx = ''
+                if (bodies_metadata and model_content in bodies_metadata and
+                    bodies_metadata[model_content]['cartographic_data_source']):
+                    sfx = '(CART)'
+                new_model_contents.append(model_content+sfx)
+            model_contents_str = '+'.join(new_model_contents)
             data_lines.append('Model: '+model_contents_str)
 
         if metadata['bootstrap_candidate']:
-            data_line = 'Bootstrap Cand ' + metadata['bootstrap_body']
+            data_line = 'Bootstrap Cand'
+            if (metadata['large_bodies'] is not None and
+                len(metadata['large_bodies']) > 0):
+                data_line += ' ' + metadata['large_bodies'][0]
             data_lines.append(data_line)
         
     text_size_h_list = []
@@ -1391,8 +1453,13 @@ def offset_result_str(metadata):
     if metadata['rings_only']:
         single_body_str = 'Filled with rings'
     bootstrap_str = None
-    if metadata['bootstrap_candidate']:
-        bootstrap_str = 'Bootstrap cand ' + metadata['bootstrap_body']
+    if metadata['bootstrapped']:
+        bootstrap_str = 'Bootstrapped'
+    elif metadata['bootstrap_candidate']:
+        bootstrap_str = 'Bootstrap cand'
+        if (metadata['large_bodies'] is not None and
+            len(metadata['large_bodies']) > 0):
+            bootstrap_str += ' ' + metadata['large_bodies'][0]
         
     ret += the_time + ' ' + ('%4s'%filter1) + '+' + ('%-5s'%filter2) + ' '
     ret += the_size

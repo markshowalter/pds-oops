@@ -47,10 +47,10 @@ _LOGGING_NAME = 'cb.' + __name__
 # Sometimes the bounding box returned by "inventory" is not quite big enough
 BODIES_POSITION_SLOP_FRAC = 0.05
 
-_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION = 0.1 * oops.RPD
-_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.1 * oops.RPD
+_BODIES_DEFAULT_REPRO_LAT_RESOLUTION = 0.1 * oops.RPD
+_BODIES_DEFAULT_REPRO_LON_RESOLUTION = 0.1 * oops.RPD
 _BODIES_DEFAULT_REPRO_ZOOM = 2
-_BODIES_DEFAULT_REPRO_ZOOM_ORDER = 3
+_BODIES_DEFAULT_REPRO_ZOOM_ORDER = 1
 _BODIES_LONGITUDE_SLOP = 1e-6 # Must be smaller than any longitude or radius
 _BODIES_LATITUDE_SLOP = 1e-6  # resolution we will be using
 _BODIES_MIN_LATITUDE = -oops.HALFPI
@@ -58,11 +58,12 @@ _BODIES_MAX_LATITUDE = oops.HALFPI-_BODIES_LATITUDE_SLOP*2
 _BODIES_MAX_LONGITUDE = oops.TWOPI-_BODIES_LONGITUDE_SLOP*2
 
 # Lambert is set mainly based on the depth of craters - if the incidence angle
-# is too large the crater interior is shadowed and we don't get a good
+# is too large the crater interior is too shadowed and we don't get a good
 # reprojection.
-_BODIES_REPRO_MAX_INCIDENCE = 80. * oops.RPD
-_BODIES_REPRO_MAX_EMISSION = 80. * oops.RPD
+_BODIES_REPRO_MAX_INCIDENCE = 70. * oops.RPD
+_BODIES_REPRO_MAX_EMISSION = 70. * oops.RPD
 _BODIES_REPRO_MAX_RESOLUTION = None
+_BODIES_REPRO_EDGE_MARGIN = 3
 
 
 def _bodies_create_cartographic(bp, body_data):
@@ -161,10 +162,10 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
 
     # Don't do anything too close to the edges (and text
     # has height)
-    dist_from_center[:extend_fov[1]+5,:] = 1e38
-    dist_from_center[-extend_fov[1]-5:,:] = 1e38
-    dist_from_center[:,:extend_fov[0]+1] = 1e38
-    dist_from_center[:,-extend_fov[0]:] = 1e38
+    dist_from_center[:extend_fov[1]*2+5,:] = 1e38
+    dist_from_center[-extend_fov[1]*2-5:,:] = 1e38
+    dist_from_center[:,:extend_fov[0]*2+1] = 1e38
+    dist_from_center[:,-extend_fov[0]*2:] = 1e38
     
     # Mask out the areas where bodies are sitting so we don't draw text over
     # them
@@ -186,14 +187,6 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         
     # Give us a few pixels margin from the edge of a moon
     dist_from_center = filt.maximum_filter(dist_from_center, 3)
-
-    # Don't do anything too close to any edge if possible so when the
-    # mask is shifted by the final offset we don't lose text
-    pointing_error = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
-    if np.any(dist_from_center[pointing_error[1]+extend_fov[1]+5:,:] != 1e38):
-        dist_from_center[:pointing_error[1]+extend_fov[1]+5,:] = 1e38
-    if np.any(dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] != 1e38):
-        dist_from_center[-(pointing_error[1]+extend_fov[1]+5):,:] = 1e38
 
     label_avoid_mask = np.logical_or(label_avoid_mask, 
                                      dist_from_center == 1e38)
@@ -274,43 +267,73 @@ def bodies_create_model(obs, body_name, inventory,
     """Create a model for a body.
     
     Inputs:
-        obs                The Observation.
-        body_name          The name of the moon.
-        inventory          The entry returned from the inventory() method of
-                           an Observation for this body. Used to find the
-                           clipping rectangle.
-        extend_fov         The amount beyond the image in the (U,V) dimension
-                           to generate the model.
-        cartographic_data  A dictionary of body names containing cartographic
-                           data in lat/lon format. Each entry contains metadata
-                           in the format returned by bodies_mosaic_init.
+        obs                    The Observation.
+        body_name              The name of the moon.
+        inventory              The entry returned from the inventory() method of
+                               an Observation for this body. Used to find the
+                               clipping rectangle.
+        extend_fov             The amount beyond the image in the (U,V) 
+                               dimension to generate the model.
+        cartographic_data      A dictionary of body names containing 
+                               cartographic
+                               data in lat/lon format. Each entry contains 
+                               metadata in the format returned by 
+                               bodies_mosaic_init.
         always_create_model    True to always return a model even if the 
-                           body is too small or the curvature or limb is bad.
-                           This is overriden by mask_only.
-        label_avoid_mask   A mask giving places where text labels should
-                           not be placed (i.e. labels from another
-                           model are already there). None if no mask.
-        bodies_config      Configuration parameters.
-        mask_only          Only compute the latlon mask and don't spent time
-                           actually trying to make a model.
+                               body is too small or the curvature or limb is 
+                               bad.
+                               This is overriden by mask_only.
+        label_avoid_mask       A mask giving places where text labels should
+                               not be placed (i.e. labels from another
+                               model are already there). None if no mask.
+        bodies_config          Configuration parameters.
+        mask_only              Only compute the latlon mask and don't spent time
+                               actually trying to make a model.
                                  
     Returns:
         model, metadata, text
         
         metadata is a dictionary containing
 
-        'body_name'        The name of the body.
-        'size_ok'          True if the body is large enough to bother with.
-        'curvature_ok'     True if sufficient curvature is visible to permit
-                           correlation.
-        'limb_ok'          True if the limb is sufficiently sharp to permit
-                           correlation.
-        'entirely_visible' True if the body is entirely visible even if shifted
-                           to the maximum extent.
-        'latlon_mask'      A mask showing which lat/lon are visible in the
-                           image.
-        'start_time'       The time (s) when bodies_create_model was called.
-        'end_time'         The time (s) when bodies_create_model returned.
+        'body_name'            The name of the body.
+        'size_ok'              True if the body is large enough to bother with.
+        'inventory'            The inventory entry for this body.
+        'cartographic_data_source' The path of the mosaic used to provide the 
+                               cartographic data. None if no data provided.
+        'curvature_ok'         True if sufficient curvature is visible to permit
+                               correlation.
+        'limb_ok'              True if the limb is sufficiently sharp to permit
+                               correlation.
+        'entirely_visible'     True if the body is entirely visible even if 
+                               shifted to the maximum extent specified by
+                               extend_fov. This is based purely on geometry, 
+                               not looking at whether other objects occlude it.
+        'occluded_by'          A list of body names or 'RINGS' that occlude some
+                               or all of this body. This is set in the main
+                               offset loop, not in this procedure. None if
+                               Nothing occludes it or it hasn't been processed
+                               by the main loop yet.
+        'in_saturn_shadow'     True if the body is in Saturn's shadow and only
+                               illuminated by Saturn-shine.
+        'sub_solar_lon'        The sub-solar longitude (IAU, West).
+        'sub_solar_lat'        The sub-solar latitude.
+        'sub_observer_lon'     The sub-observer longitude (IAU, West).
+        'sub_observer_lat'     The sub-observer latitude.
+        'phase_angle'          The phase angle at the body's center.
+
+        'start_time'           The time (s) when bodies_create_model was called.
+        'end_time'             The time (s) when bodies_create_model returned.
+
+            These are used for bootstrapping:
+            
+        'latlon_mask'          A mask showing which lat/lon are visible in the
+                               image.
+        'mask_lat_resolution'  The latitude resolution in latlon_mask.
+        'mask_lon_resolution'  The longitude resolution in latlon_mask.
+        'mask_latlon_type'     The type of lat/lon ('centric', 'graphic', or
+                               'squashed') in latlon_mask.
+        'mask_lon_direction'   The direction of longitude ('east' or 'west')
+                               in latlon_mask.
     """
     start_time = time.time()
     
@@ -321,17 +344,58 @@ def bodies_create_model(obs, body_name, inventory,
         
     body_name = body_name.upper()
 
+    set_obs_ext_bp(obs, extend_fov)
+    
     metadata = {}
     metadata['body_name'] = body_name
+    metadata['inventory'] = inventory
+    metadata['cartographic_data_source'] = None
+    if cartographic_data and body_name in cartographic_data:
+        metadata['cartographic_data_source'] = (
+                             cartographic_data[body_name]['full_path'])
     metadata['size_ok'] = None
     metadata['curvature_ok'] = None
     metadata['limb_ok'] = None
     metadata['entirely_visible'] = None
+    metadata['occluded_by'] = None
+    metadata['in_saturn_shadow'] = None
     metadata['latlon_mask'] = None
+    metadata['mask_lat_resolution'] = None
+    metadata['mask_lon_resolution'] = None
+    metadata['mask_latlon_type'] = None
+    metadata['mask_lon_direction'] = None
+    metadata['has_bad_pixels'] = None
+    metadata['is_obscured'] = False # XXX Subsolar LAT/LON? Obscured by rings?
     metadata['start_time'] = start_time 
 
-    logger.info('Processing %s', body_name)
+    logger.info('*** Modeling %s ***', body_name)
 
+    metadata['sub_solar_lon'] = obs.ext_bp.sub_solar_longitude(body_name).vals
+    metadata['sub_solar_lat'] = obs.ext_bp.sub_solar_latitude(body_name).vals
+    metadata['sub_observer_lon'] = obs.ext_bp.sub_observer_longitude(body_name).vals
+    metadata['sub_observer_lat'] = obs.ext_bp.sub_observer_latitude(body_name).vals
+    metadata['phase_angle'] = obs.ext_bp.center_phase_angle(body_name).vals
+
+    logger.info('Sub-solar longitude %.2f', metadata['sub_solar_lon']*oops.DPR)
+    logger.info('Sub-solar latitude %.2f', metadata['sub_solar_lat']*oops.DPR)
+    logger.info('Sub-observer longitude %.2f', metadata['sub_observer_lon']*oops.DPR)
+    logger.info('Sub-observer latitude %.2f', metadata['sub_observer_lat']*oops.DPR)
+    logger.info('Phase angle %.2f', metadata['phase_angle']*oops.DPR)
+
+    # Create a Meshgrid that only covers the center pixel of the body
+    ctr_uv = inventory['center_uv']
+    ctr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                         origin=(ctr_uv[0]+.5, ctr_uv[1]+.5),
+                                         limit =(ctr_uv[0]+.5, ctr_uv[1]+.5),
+                                         swap  =True)
+    ctr_bp = oops.Backplane(obs, meshgrid=ctr_meshgrid)
+    saturn_shadow = ctr_bp.where_inside_shadow(body_name, 'saturn').vals
+    if np.any(saturn_shadow):
+        logger.info('Body is in Saturn\'s shadow')
+        metadata['in_saturn_shadow'] = True
+    else:
+        metadata['in_saturn_shadow'] = False
+        
     bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
     if bb_area >= bodies_config['min_bounding_box_area']:
         metadata['size_ok'] = True
@@ -413,9 +477,9 @@ def bodies_create_model(obs, body_name, inventory,
                  obs.data.shape[1], obs.data.shape[0],
                  u_min, u_max, v_min, v_max)
     if entirely_visible:
-        logger.info('Entirely visible')
+        logger.info('All of body is visible')
     else:
-        logger.info('Not entirely visible')
+        logger.info('Not all of body is visible')
 
     if metadata['curvature_ok']:
         logger.info('Curvature OK')
@@ -433,15 +497,22 @@ def bodies_create_model(obs, body_name, inventory,
         # Compute the lat/lon mask for bootstrapping
         
         latlon_mask = bodies_reproject(obs, body_name, 
-            latitude_resolution=bodies_config['mask_lat_resolution'], 
-            longitude_resolution=bodies_config['mask_lon_resolution'],
+            lat_resolution=bodies_config['mask_lat_resolution'], 
+            lon_resolution=bodies_config['mask_lon_resolution'],
             zoom_amt=1,
             latlon_type=bodies_config['mask_latlon_type'],
             lon_direction=bodies_config['mask_lon_direction'],
+            max_incidence=None,
+            max_emission=None,
+            max_resolution=None,
             mask_only=True, override_backplane=restr_bp,
             subimage_edges=(u_min,u_max,v_min,v_max))
     
         metadata['latlon_mask'] = latlon_mask
+        metadata['mask_lat_resolution'] = bodies_config['mask_lat_resolution']
+        metadata['mask_lon_resolution'] = bodies_config['mask_lon_resolution']
+        metadata['mask_latlon_type'] = bodies_config['mask_latlon_type']
+        metadata['mask_lon_direction'] = bodies_config['mask_lon_direction']
 
     if mask_only:
         metadata['end_time'] = time.time()
@@ -497,6 +568,9 @@ def bodies_create_model(obs, body_name, inventory,
     if (np.max(restr_body_mask) == 0 or 
         np.min(incidence[restr_body_mask].vals) >= oops.HALFPI):
         logger.debug('Looking only at back side - leaving model empty')
+        # Make a slight glow even on the back side
+        restr_model = np.zeros(restr_body_mask.shape)
+        restr_model[restr_body_mask] = 0.01
     else:
         logger.debug('Making actual model')
     
@@ -563,29 +637,29 @@ def bodies_interpolate_missing_stripes(data):
 
 def bodies_generate_latitudes(latitude_start=_BODIES_MIN_LATITUDE,
                               latitude_end=_BODIES_MAX_LATITUDE,
-                              latitude_resolution=
-                                    _BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION):
+                              lat_resolution=
+                                    _BODIES_DEFAULT_REPRO_LAT_RESOLUTION):
     """Generate a list of latitudes.
     
-    The list will be on latitude_resolution boundaries and is guaranteed to
+    The list will be on lat_resolution boundaries and is guaranteed to
     not contain a latitude less than latitude_start or greater than
     latitude_end."""
-    start_idx = int(np.ceil(latitude_start/latitude_resolution))
-    end_idx = int(np.floor(latitude_end/latitude_resolution))
-    return np.arange(start_idx, end_idx+1) * latitude_resolution
+    start_idx = int(np.ceil(latitude_start/lat_resolution))
+    end_idx = int(np.floor(latitude_end/lat_resolution))
+    return np.arange(start_idx, end_idx+1) * lat_resolution
 
 def bodies_generate_longitudes(longitude_start=0.,
                                longitude_end=_BODIES_MAX_LONGITUDE,
-                               longitude_resolution=
-                                   _BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION):
+                               lon_resolution=
+                                   _BODIES_DEFAULT_REPRO_LON_RESOLUTION):
     """Generate a list of longitudes.
     
-    The list will be on longitude_resolution boundaries and is guaranteed to
+    The list will be on lon_resolution boundaries and is guaranteed to
     not contain a longitude less than longitude_start or greater than
     longitude_end."""
-    start_idx = int(np.ceil(longitude_start/longitude_resolution)) 
-    end_idx = int(np.floor(longitude_end/longitude_resolution))
-    return np.arange(start_idx, end_idx+1) * longitude_resolution
+    start_idx = int(np.ceil(longitude_start/lon_resolution)) 
+    end_idx = int(np.floor(longitude_end/lon_resolution))
+    return np.arange(start_idx, end_idx+1) * lon_resolution
 
 def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
                                         latlon_type='centric',
@@ -627,11 +701,13 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
 
 def bodies_reproject(
             obs, body_name, data=None, offset=None,
-            latitude_resolution=_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
-            longitude_resolution=_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+            offset_path=None,
+            lat_resolution=_BODIES_DEFAULT_REPRO_LAT_RESOLUTION,
+            lon_resolution=_BODIES_DEFAULT_REPRO_LON_RESOLUTION,
             max_incidence=_BODIES_REPRO_MAX_INCIDENCE,
             max_emission=_BODIES_REPRO_MAX_EMISSION,
             max_resolution=_BODIES_REPRO_MAX_RESOLUTION,
+            edge_margin=_BODIES_REPRO_EDGE_MARGIN,
             zoom_amt=_BODIES_DEFAULT_REPRO_ZOOM, 
             zoom_order=_BODIES_DEFAULT_REPRO_ZOOM_ORDER,
             latlon_type='centric', lon_direction='east',
@@ -647,9 +723,11 @@ def bodies_reproject(
         offset                   The offsets in (U,V) to apply to the image
                                  when computing the latitude and longitude
                                  values.
-        latitude_resolution      The latitude resolution of the new image
+        offset_path              The full path of the OFFSET file used to
+                                 determine the offset.
+        lat_resolution      The latitude resolution of the new image
                                  (rad/pix).
-        longitude_resolution     The longitude resolution of the new image
+        lon_resolution     The longitude resolution of the new image
                                  (rad/pix).
         max_incidence            The maximum incidence angle (rad) to permit
                                  for a valid pixel. None for no check.
@@ -657,6 +735,9 @@ def bodies_reproject(
                                  for a valid pixel. None for no check.
         max_resolution           The maximum resolution (km/pix) to permit for
                                  a valid pixel. None for no check.
+        edge_margin              The number of pixels around the edge of the
+                                 image to throw away because ISS images tend
+                                 to have weird garbage there.
         zoom_amt                 The amount to magnify the original image for
                                  pixel value interpolation.
         zoom_order               The spline order to use for zooming.
@@ -687,6 +768,7 @@ def bodies_reproject(
 
         'body_name'        The name of the body.
         'path'             The full path from the Observation.
+        'offset_path'      The full path of the OFFSET file.
         'full_mask'        The mask of pixels that contain reprojected data.
                            True means the pixel is valid.
         'lat_idx_range'    The range (min,max) of latitudes in the returned
@@ -712,8 +794,8 @@ def bodies_reproject(
         'incidence'        The incidence angle [latitude,longitude].
 
         Note that the image data is taken from the zoomed, interpolated image,
-        while the incidence, emission, phase, and resolution are taken from
-        the original non-interpolated data and thus will be slightly more
+        while the incidence, emission, phase, and resolution are taken from 
+        the original non-interpolated data and thus will be slightly more 
         coarse-grained.
     """
     logger = logging.getLogger(_LOGGING_NAME+'.bodies_reproject')
@@ -738,27 +820,28 @@ def bodies_reproject(
         bp = oops.Backplane(obs)
     
     if max_incidence is not None or not mask_only:
-        lambert = bp.lambert_law(body_name).vals.astype('float')
-        bp_incidence = bp.incidence_angle(body_name).vals.astype('float') 
+        lambert = bp.lambert_law(body_name).vals.astype('float32')
+        bp_incidence = bp.incidence_angle(body_name).vals.astype('float32') 
 
-    bp_emission = bp.emission_angle(body_name).vals.astype('float')
-    
+    if max_emission is not None or not mask_only:
+        bp_emission = bp.emission_angle(body_name).vals.astype('float32')
+        
     if not mask_only:
-        bp_phase = bp.phase_angle(body_name).vals.astype('float')
+        bp_phase = bp.phase_angle(body_name).vals.astype('float32')
 
         # Resolution takes into account the emission angle - the "along sight"
         # projection
         center_resolution = (bp.center_resolution(body_name).
-                             vals.astype('float'))
+                             vals.astype('float32'))
         resolution = center_resolution / np.cos(bp_emission)
 
     bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = ma.getmaskarray(bp_latitude.mvals)
-    bp_latitude = bp_latitude.vals.astype('float')
+    bp_latitude = bp_latitude.vals.astype('float32')
 
     bp_longitude = bp.longitude(body_name, direction=lon_direction,
                                 lon_type=latlon_type)
-    bp_longitude = bp_longitude.vals.astype('float')
+    bp_longitude = bp_longitude.vals.astype('float32')
 
     if subimage_edges is not None:
         u_min, u_max, v_min, v_max = subimage_edges
@@ -773,7 +856,13 @@ def bodies_reproject(
         
     # A pixel is OK if it falls on the body, the Lambert model is
     # bright enough, the emission angle is large enough, the resolution
-    # is small enough, and the data isn't exactly ZERO.
+    # is small enough, it's not on the edge, and the data isn't exactly ZERO.
+    if edge_margin > 0:
+        body_mask_inv[:edge_margin,:] = True
+        body_mask_inv[-edge_margin:,:] = True
+        body_mask_inv[:,:edge_margin] = True
+        body_mask_inv[:,-edge_margin:] = True
+        
     ok_body_mask_inv = body_mask_inv
     if max_incidence is not None:
         ok_body_mask_inv = np.logical_or(ok_body_mask_inv,
@@ -795,14 +884,15 @@ def bodies_reproject(
         # the emission angle to account for projected illumination and viewing
         lambert[ok_body_mask_inv] = 1e38
         adj_data = data / lambert * np.cos(bp_emission)
+        adj_data = adj_data.astype('float32')
         adj_data[ok_body_mask_inv] = 0.
         lambert[ok_body_mask_inv] = 0.
         bp_emission[ok_body_mask_inv] = 1e38
         resolution[ok_body_mask_inv] = 1e38
 
     # The number of pixels in the final reprojection 
-    latitude_pixels = int(oops.PI / latitude_resolution)
-    longitude_pixels = int(oops.TWOPI / longitude_resolution)
+    latitude_pixels = int(oops.PI / lat_resolution)
+    longitude_pixels = int(oops.TWOPI / lon_resolution)
 
     if empty_mask:
         min_latitude_pixel = 0
@@ -812,21 +902,23 @@ def bodies_reproject(
     else:
         # Restrict the latitude and longitude ranges for some attempt at
         # efficiency
-        min_latitude_pixel = (np.floor(np.min(bp_latitude[ok_body_mask]+
-                                              oops.HALFPI) / 
-                                       latitude_resolution)).astype('int')
+        min_latitude = np.min(bp_latitude[ok_body_mask]+oops.HALFPI)
+        max_latitude = np.max(bp_latitude[ok_body_mask]+oops.HALFPI) 
+        min_latitude_pixel = (np.floor(min_latitude / 
+                                       lat_resolution)).astype('int')
         min_latitude_pixel = np.clip(min_latitude_pixel, 0, latitude_pixels-1)
-        max_latitude_pixel = (np.ceil(np.max(bp_latitude[ok_body_mask]+
-                                             oops.HALFPI) / 
-                                      latitude_resolution)).astype('int')
+        max_latitude_pixel = (np.ceil(max_latitude / 
+                                      lat_resolution)).astype('int')
         max_latitude_pixel = np.clip(max_latitude_pixel, 0, latitude_pixels-1)
     
-        min_longitude_pixel = (np.floor(np.min(bp_longitude[ok_body_mask]) / 
-                                        longitude_resolution)).astype('int')
+        min_longitude = np.min(bp_longitude[ok_body_mask])
+        max_longitude = np.max(bp_longitude[ok_body_mask])  
+        min_longitude_pixel = (np.floor(min_longitude / 
+                                        lon_resolution)).astype('int')
         min_longitude_pixel = np.clip(min_longitude_pixel, 0, 
                                       longitude_pixels-1)
-        max_longitude_pixel = (np.ceil(np.max(bp_longitude[ok_body_mask]) / 
-                                       longitude_resolution)).astype('int')
+        max_longitude_pixel = (np.ceil(max_longitude / 
+                                       lon_resolution)).astype('int')
         max_longitude_pixel = np.clip(max_longitude_pixel, 0, 
                                       longitude_pixels-1)
 
@@ -834,19 +926,25 @@ def bodies_reproject(
     num_longitude_pixel = max_longitude_pixel - min_longitude_pixel + 1
     
     # Latitude bin numbers
-    lat_bins = np.repeat(np.arange(min_latitude_pixel, max_latitude_pixel+1), 
+    lat_bins = np.repeat(np.arange(min_latitude_pixel, max_latitude_pixel+1, 
+                                   dtype=np.int), 
                          num_longitude_pixel)
     # Actual latitude (rad)
-    lat_bins_act = lat_bins * latitude_resolution - oops.HALFPI
+    lat_bins_act = lat_bins * lat_resolution - oops.HALFPI
 
     # Longitude bin numbers
-    lon_bins = np.tile(np.arange(min_longitude_pixel, max_longitude_pixel+1), 
+    lon_bins = np.tile(np.arange(min_longitude_pixel, max_longitude_pixel+1,
+                                 dtype=np.int), 
                        num_latitude_pixel)
     # Actual longitude (rad)
-    lon_bins_act = lon_bins * longitude_resolution
+    lon_bins_act = lon_bins * lon_resolution
 
-    logger.info('Offset U,V %d,%d  Lat/Lon Type %s / Lon Direction %s', 
-                 offset_u, offset_v, latlon_type, lon_direction)
+    logger.info('Offset U,V %d,%d / Lat Res %.3f / Lon Res %.3f / '+
+                'LatLon Type %s / Lon Direction %s', 
+                offset_u, offset_v, 
+                lat_resolution*oops.DPR,
+                lon_resolution*oops.DPR,
+                latlon_type, lon_direction)
     if empty_mask:
         logger.info('Empty body mask')
     else:
@@ -970,7 +1068,8 @@ def bodies_reproject(
                                  min_longitude_pixel:max_longitude_pixel+1], 0.)
         repro_incidence = ma.filled(
                   repro_incidence[min_latitude_pixel:max_latitude_pixel+1,
-                                  min_longitude_pixel:max_longitude_pixel+1], 0.)
+                                  min_longitude_pixel:max_longitude_pixel+1], 
+                  0.)
 
     if orig_fov is not None:   
         obs.fov = orig_fov
@@ -982,11 +1081,13 @@ def bodies_reproject(
     
     ret['body_name'] = body_name
     ret['path'] = obs.full_path
-    ret['full_mask'] = full_mask
+    ret['offset_path'] = offset_path
+    ret['full_mask'] = full_mask.reshape((num_latitude_pixel, 
+                                          num_longitude_pixel))
     ret['lat_idx_range'] = (min_latitude_pixel, max_latitude_pixel)
-    ret['lat_resolution'] = latitude_resolution
+    ret['lat_resolution'] = lat_resolution
     ret['lon_idx_range'] = (min_longitude_pixel, max_longitude_pixel)
-    ret['lon_resolution'] = longitude_resolution
+    ret['lon_resolution'] = lon_resolution
     ret['latlon_type'] = latlon_type
     ret['lon_direction'] = lon_direction
     ret['offset'] = offset
@@ -1000,15 +1101,15 @@ def bodies_reproject(
     return ret
 
 def bodies_mosaic_init(body_name,
-      latitude_resolution=_BODIES_DEFAULT_REPRO_LATITUDE_RESOLUTION,
-      longitude_resolution=_BODIES_DEFAULT_REPRO_LONGITUDE_RESOLUTION,
+      lat_resolution=_BODIES_DEFAULT_REPRO_LAT_RESOLUTION,
+      lon_resolution=_BODIES_DEFAULT_REPRO_LON_RESOLUTION,
       latlon_type='centric', lon_direction='east'):
     """Create the data structure for a moon mosaic.
 
     Inputs:
-        latitude_resolution      The latitude resolution of the new image
+        lat_resolution      The latitude resolution of the new image
                                  (rad/pix).
-        longitude_resolution     The longitude resolution of the new image
+        lon_resolution     The longitude resolution of the new image
                                  (rad/pix).
         latlon_type              The coordinate system to use for latitude and
                                  longitude. One of 'centric', 'graphic', or 
@@ -1038,11 +1139,12 @@ def bodies_mosaic_init(body_name,
         'incidence'        The per-pixel incidence angle.
         'image_number'     The per-pixel image number giving the image
                            used to fill the data for each pixel.
-        'path_list'        The paths indexed by image_number.
+        'path_list'        The image paths indexed by image_number.
+        'offset_path_list' The OFFSET paths indexed by image_number.
         'time'             The per-pixel time (TDB).
     """
-    latitude_pixels = int(oops.PI / latitude_resolution)
-    longitude_pixels = int(oops.TWOPI / longitude_resolution)
+    latitude_pixels = int(oops.PI / lat_resolution)
+    longitude_pixels = int(oops.TWOPI / lon_resolution)
     
     ret = {}
     ret['body_name'] = body_name
@@ -1051,9 +1153,9 @@ def bodies_mosaic_init(body_name,
     ret['full_mask'] = np.zeros((latitude_pixels, longitude_pixels), 
                                 dtype=np.bool)
     ret['lat_idx_range'] = (0, latitude_pixels-1)
-    ret['lat_resolution'] = latitude_resolution
+    ret['lat_resolution'] = lat_resolution
     ret['lon_idx_range'] = (0, longitude_pixels-1)
-    ret['lon_resolution'] = longitude_resolution
+    ret['lon_resolution'] = lon_resolution
     ret['latlon_type'] = latlon_type
     ret['lon_direction'] = lon_direction
     ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
@@ -1067,6 +1169,7 @@ def bodies_mosaic_init(body_name,
     ret['image_number'] = np.zeros((latitude_pixels, longitude_pixels), 
                                    dtype=np.int32)
     ret['path_list'] = []
+    ret['offset_path_list'] = []
     ret['time'] = np.zeros((latitude_pixels, longitude_pixels), 
                            dtype=np.float32)
     
@@ -1079,6 +1182,18 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     
     For each valid pixel in the reprojected image, it is copied to the
     mosaic if it has better resolution.
+    
+    Inputs:
+        mosaic_metadata        The mosaic metadata.
+        repro_metadata         The reprojected body metadata.
+        resolution_threshold   The factor that the repro image resolution
+                               must be greater than the mosaic resolution
+                               to copy a pixel. Should be >= 1.
+        copy_slop              The number of additional pixels around
+                               a copied pixel to also copy. This is to
+                               reduce the occurance of isolated pixels
+                               from one image being surrounded by pixels
+                               from another image.
     """
     mosaic_img = mosaic_metadata['img']
     mosaic_mask = mosaic_metadata['full_mask']
@@ -1160,6 +1275,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     mosaic_incidence[replace_mask] = repro_incidence[replace_mask]
     mosaic_image_number[replace_mask] = len(mosaic_metadata['path_list']) 
     mosaic_metadata['path_list'].append(repro_metadata['path'])
+    mosaic_metadata['offset_path_list'].append(repro_metadata['offset_path'])
     mosaic_time[replace_mask] = repro_metadata['time'] 
     mosaic_mask[replace_mask] = True
 
@@ -1326,7 +1442,7 @@ def _bodies_read_iss_map(body_name):
 
 def _bodies_read_schenk_jpg(body_name):
     body_data = {}
-    img_filename = os.path.join(SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
+    img_filename = os.path.join(CB_SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
     img = Image.open(img_filename)
     nx, ny = img.size
     body_data['line_first_pixel'] = 0

@@ -23,6 +23,7 @@ import oops
 
 from cb_bodies import *
 from cb_config import *
+from cb_util_file import *
 from cb_util_oops import *
 
 def _command_refresh_color(metadata):
@@ -108,7 +109,7 @@ def _callback_mousemove(x, y, metadata):
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
         path = metadata['path_list'][metadata['image_number'][y,x]]
-        _, filename = os.path.split(path)
+        filename = file_clean_name(path, keep_bootstrap=True)
         metadata['label_image'].config(text=filename[:13])
         metadata['label_image_num'].config(text=
                            ('%d'%metadata['image_number'][y,x]))
@@ -136,9 +137,9 @@ def _callback_b1press_mosaic(x, y, metadata):
 def display_body_mosaic(metadata, title=None):
     metadata = metadata.copy() # Don't mutate the one given to us
 
-    metadata['latitude'] = bodies_generate_latitudes(latitude_resolution=
+    metadata['latitude'] = bodies_generate_latitudes(lat_resolution=
                                     metadata['lat_resolution'])
-    metadata['longitude'] = bodies_generate_longitudes(longitude_resolution=
+    metadata['longitude'] = bodies_generate_longitudes(lon_resolution=
                                     metadata['lon_resolution'])
 
     if title is None:

@@ -165,8 +165,10 @@ def log_min_level(level1, level2):
     return LOGGING_SUPERCRITICAL
 
 
-def log_setup_main_logging(module_name, main_logfile_level, main_console_level, 
-                           main_logfile, image_logfile_level, 
+def log_setup_main_logging(module_name, 
+                           main_logfile_level, main_console_level, 
+                           main_logfile,
+                           image_logfile_level, 
                            image_console_level):
     # Set up main loop logging
     main_logfile_level = log_decode_level(main_logfile_level)
@@ -186,7 +188,7 @@ def log_setup_main_logging(module_name, main_logfile_level, main_console_level,
         if main_logfile is not None:
             main_log_path = main_logfile
         else:
-            main_log_path = os.path.join(RESULTS_ROOT, 'logs')
+            main_log_path = os.path.join(CB_RESULTS_ROOT, 'logs')
             if not os.path.exists(main_log_path):
                 os.mkdir(main_log_path)
             main_log_path = os.path.join(main_log_path, module_name)
@@ -207,19 +209,22 @@ def log_setup_main_logging(module_name, main_logfile_level, main_console_level,
     main_log_console_handler.setLevel(main_console_level)
     main_log_console_handler.setFormatter(main_formatter)
     main_logger.addHandler(main_log_console_handler)
-    
-    # Set up per-image logging
-    _LOGGING_NAME = 'cb.' + module_name
-    image_logger = logging.getLogger(_LOGGING_NAME)
-    
-    image_logfile_level = log_decode_level(image_logfile_level)
-    image_console_level = log_decode_level(image_console_level)
-    
-    log_set_default_level(log_min_level(image_logfile_level,
-                                        image_console_level))
-    log_set_util_flux_level(logging.CRITICAL)
-    
-    log_remove_console_handler()
-    log_add_console_handler(image_console_level)
+
+    image_logger = None
+    if (image_logfile_level is not None and
+        image_console_level is not None):
+        # Set up per-image logging
+        _LOGGING_NAME = 'cb.' + module_name
+        image_logger = logging.getLogger(_LOGGING_NAME)
+        
+        image_logfile_level = log_decode_level(image_logfile_level)
+        image_console_level = log_decode_level(image_console_level)
+        
+        log_set_default_level(log_min_level(image_logfile_level,
+                                            image_console_level))
+        log_set_util_flux_level(logging.CRITICAL)
+        
+        log_remove_console_handler()
+        log_add_console_handler(image_console_level)
 
     return main_logger, image_logger

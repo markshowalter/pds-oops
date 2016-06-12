@@ -304,7 +304,7 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
 def _find_baseline(filter, phase_angle):
     global _BASELINE_DB, _PHASE_BIN_GRANULARITY
     if _BASELINE_DB is None:
-        filename = os.path.join(SUPPORT_FILES_ROOT,
+        filename = os.path.join(CB_SUPPORT_FILES_ROOT,
                                 'titan-profiles.pickle')
         fp = open(filename, 'rb')
         _PHASE_BIN_GRANULARITY = pickle.load(fp)
@@ -346,6 +346,9 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
 
         'offset'           The final navigated offset.
         'confidence'       The confidence level (0-1) of the navigation.
+        'entirely_visible' True if Titan+atmosphere is entirely visible even if
+                           shifted by the maximum amonut.
+        'filter_phase_ok'  True if the filter/phase angle combination was found. 
         'symmetry_offset'  The offset used to create the axis of symmetry.
         'num_images'       The number of WAC images that went into making the
                            baseline profile used for navigation.
@@ -361,21 +364,16 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         
     metadata = {}
     metadata['start_time'] = start_time 
-    metadata['symmetry_offset'] = None
     metadata['offset'] = None
-    metadata['num_images'] = None
     metadata['confidence'] = 0.
+    metadata['entirely_visible'] = None
+    metadata['filter_phase_ok'] = None
+    metadata['symmetry_offset'] = None
+    metadata['num_images'] = None
     set_obs_bp(obs)
     data = obs.data
 
-    if obs.filter1 == 'CL1' and obs.filter2 == 'CL2':
-        filter = 'CLEAR'
-    else:
-        filter = obs.filter1
-        if filter == 'CL1':
-            filter = obs.filter2
-        elif obs.filter2 != 'CL2':
-            filter += '+' + obs.filter2
+    filter = simple_filter_name(obs)
 
     titan_orig_inv_list = obs.inventory(['TITAN'], return_type='full')
 
@@ -445,8 +443,11 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         confidence_size = 0.2
     else:
         logger.info('Titan body not entirely visible - aborting')
+        metadata['entirely_visible'] = False
         metadata['end_time'] = time.time()
         return metadata
+    
+    metadata['entirely_visible'] = True
         
     phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     ret = _find_baseline(filter, phase_angle)
@@ -454,8 +455,11 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     if ret is None:
         logger.info('No baseline profile for filter %s and '+
                     'phase angle %.2f', filter, phase_angle*oops.DPR)
+        metadata['filter_phase_ok'] = False
         metadata['end_time'] = time.time()
         return metadata
+    
+    metadata['filter_phase_ok'] = True
 
     baseline_x, baseline_profile, num_images = ret
     metadata['num_images'] = num_images

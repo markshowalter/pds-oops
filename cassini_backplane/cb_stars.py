@@ -1508,6 +1508,10 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                     (float(min_stars_hc_conf)-min_stars_conf)/
                     (float(min_stars_hc-min_stars)) +
                   min_stars_conf)
+    if len(star_list) > 0:
+        movement = np.sqrt(star_list[0].move_u**2 + star_list[0].move_v**2)
+        if movement > 1:
+            confidence /= (movement-1)/4+1
     confidence = np.clip(confidence, 0., 1.)
     metadata['confidence'] = confidence         
     metadata['full_star_list'] = star_list
