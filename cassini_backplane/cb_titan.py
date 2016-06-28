@@ -37,12 +37,12 @@ _BASELINE_DB = None
 _PHASE_BIN_GRANULARITY = None
 
 def titan_find_symmetry_offset(
-           obs, sun_angle,
+           obs, trial_offset, sun_angle,
            min_emission_angle, max_emission_angle, incr_emission_angle,
            min_incidence_angle, max_incidence_angle, incr_incidence_angle,
            cluster_gap_threshold, cluster_max_pixels, 
            offset_limit, titan_size_u=None, titan_size_v=None, mask=None,
-           display_total_intersect=False):
+           display_total_intersect=True):
     """Find the axis of symmetry along the solar angle.
     
     Inputs:
@@ -145,7 +145,7 @@ def titan_find_symmetry_offset(
             joint_intersect = np.logical_and(inc_int, em_int)
             pixels = np.where(joint_intersect) # in Y,X
             pixels = zip(*pixels) # List of (y,x) pairs
-            # There have to be at least two points of intewunrsection
+            # There have to be at least two points of intersection
             if len(pixels) < 2:
                 continue
             pixels.sort() # Sort by increasing y then increasing x
@@ -186,27 +186,38 @@ def titan_find_symmetry_offset(
                 len(cluster2_list) > cluster_max_pixels):
                 continue
             ie_list.append((cluster1_list, cluster2_list))
-#            print cluster1_list
-#            print cluster2_list
-#            print
-            
-    best_rms = 1e38
-    best_offset = None
-    best_along_path_dist = None
+            print cluster1_list
+            print cluster2_list
+            print
+            plt.plot([cluster1_list[0][1],cluster2_list[0][1]],
+                     [1024-cluster1_list[0][0],1024-cluster2_list[0][0]], '-')
+    
+    plt.show()
     
     # Across Sun angle is perpendicular to main sun angle    
     a_sun_angle = sun_angle + oops.HALFPI
 
-    for along_path_dist in xrange(-offset_limit,offset_limit+1):
+    # Find the point of maximum cluster difference, which is more or less
+    # centered on Titan and will reject black backgrounds. Then look closer
+    # for the offset of max symmetry.
+    rms_list = []
+    best_max_diff = 0.
+    best_max_diff_dist = None
+    for along_path_dist in xrange(-offset_limit-1,offset_limit+2):
         u_offset = int(np.round(along_path_dist * np.cos(a_sun_angle)))
         v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
-        if ((titan_size_u is not None and abs(u_offset) > titan_size_u) or
-            (titan_size_v is not None and abs(v_offset) > titan_size_v)):
+        # We don't want to get too close to the edge - we might fall into
+        # a black/black region which always looks symmetric.
+        if ((titan_size_u is not None and abs(u_offset) > titan_size_u*.75) or
+            (titan_size_v is not None and abs(v_offset) > titan_size_v*.75)):
             continue
-            
-#         print along_path_dist, u_offset, v_offset
-
+        u_offset += trial_offset[0]
+        v_offset += trial_offset[1]
+        
         diff_list = []
+        
+        max_cluster = -1e38
+        min_cluster = 1e38
         
         for cluster1_list, cluster2_list in ie_list:
             mean1_list = []
@@ -233,24 +244,62 @@ def titan_find_symmetry_offset(
                 continue
             mean1 = np.mean(mean1_list)
             mean2 = np.mean(mean2_list)
-            diff = np.abs(np.mean(mean2_list)-np.mean(mean1_list)) / np.mean(mean1_list)
+            max_cluster = max(max(max_cluster, mean1), mean2)
+            min_cluster = min(min(min_cluster, mean1), mean2)
+            diff = np.abs(mean2-mean1) / mean1
             diff_list.append(diff)
-
+        
         diff_list = np.array(diff_list)
         rms = np.sqrt(np.sum(diff_list**2))
+        rms_list.append((u_offset, v_offset, rms))
+        
+        print along_path_dist, u_offset, v_offset, max_cluster-min_cluster, rms
+
+        cluster_diff = max_cluster-min_cluster
+        if cluster_diff > best_max_diff:
+            best_max_diff = cluster_diff
+            best_max_diff_dist = along_path_dist
+            
+    if abs(best_max_diff_dist) == offset_limit+1:
+        return None, None
+     
+    best_rms = 1e38
+    best_offset = None
+
+    max_diff_limit = int(np.sqrt(titan_size_u**2+titan_size_v**2) / 2)
+    
+    print 'MAX DIFF', best_max_diff_dist, 'LIMIT', max_diff_limit
+     
+    min_limit = max(-offset_limit,
+                    best_max_diff_dist-max_diff_limit)
+    max_limit = min(offset_limit,
+                    best_max_diff_dist+max_diff_limit)
+    u_offset_min = (int(np.round(min_limit * np.cos(a_sun_angle)))+
+                    trial_offset[0])
+    v_offset_min = (int(np.round(min_limit * np.sin(a_sun_angle)))+
+                    trial_offset[1])
+    u_offset_max = (int(np.round(max_limit * np.cos(a_sun_angle)))+
+                    trial_offset[0])
+    v_offset_max = (int(np.round(max_limit * np.sin(a_sun_angle)))+
+                    trial_offset[1])
+    if u_offset_min > u_offset_max:
+        u_offset_min, u_offset_max = u_offset_max, u_offset_min
+    if v_offset_min > v_offset_max:
+        v_offset_min, v_offset_max = v_offset_max, v_offset_min
+    for u_offset, v_offset, rms in rms_list:
+        print u_offset, v_offset, rms
+        if (not u_offset_min <= u_offset <= u_offset_max or
+            not v_offset_min <= v_offset <= v_offset_max):
+            print 'BAD'
+            continue
         if rms < best_rms:
             best_rms = rms
             best_offset = (u_offset, v_offset)
-            best_along_path_dist = along_path_dist
-
-    if (best_along_path_dist is None or 
-        abs(best_along_path_dist) == offset_limit):
-        return None, None
 
     return best_offset, best_rms
     
 def titan_along_track_profile(obs, offset, sun_angle, titan_center,
-                              titan_radius_pix, titan_resolution):
+                              offset_limit, titan_resolution):
     """Create a profile along the axis of symmetry.
     
     Inputs:
@@ -266,9 +315,10 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
         titan_center       The center of Titan (U,V) before the offset is
                            applied.
                            
-        titan_radius_pix   The radius of Titan in pixels.
+        offset_limit       The amount to look on each side of titan_center
+                           to create the profile.
         
-        titan_resolution   The image resolution of titan in km/pix.
+        titan_resolution   The image resolution of Titan in km/pix.
         
     Returns:
         profile_x, profile_y
@@ -283,7 +333,7 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
     profile_x = []
     profile_y = []
     
-    for along_path_dist in xrange(-titan_radius_pix,titan_radius_pix+1):
+    for along_path_dist in xrange(-offset_limit,offset_limit+1):
         # We want to go along the Sun angle
         u = (int(np.round(along_path_dist * np.cos(sun_angle))) + 
              offset[0] + titan_center[0])
@@ -348,7 +398,9 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         'confidence'       The confidence level (0-1) of the navigation.
         'entirely_visible' True if Titan+atmosphere is entirely visible even if
                            shifted by the maximum amonut.
-        'filter_phase_ok'  True if the filter/phase angle combination was found. 
+        'filter_phase_ok'  True if the filter/phase angle combination was found.
+        'lambert_offset'   The offset found by correlation with a Lambert law
+                           model. Only used in cases where Titan is small.
         'symmetry_offset'  The offset used to create the axis of symmetry.
         'num_images'       The number of WAC images that went into making the
                            baseline profile used for navigation.
@@ -368,6 +420,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['confidence'] = 0.
     metadata['entirely_visible'] = None
     metadata['filter_phase_ok'] = None
+    metadata['lambert_offset'] = None
     metadata['symmetry_offset'] = None
     metadata['num_images'] = None
     set_obs_bp(obs)
@@ -499,18 +552,48 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     max_error_u, max_error_v = MAX_POINTING_ERROR[(obs.data.shape, 
                                                    obs.detector)]
     
+    # Offset limit in pixels - maximum diagonal error
     offset_limit = int(np.ceil(np.sqrt(max_error_u**2+max_error_v**2)))+1
     
     model_mask = None
     if other_model is not None:
         model_mask = other_model != 0
-        
+
+    sym_offset_limit = offset_limit
+    
+    # Symmetry finding is based on the assumption that we can search within
+    # the radius of Titan and actually be seeing Titan the whole time. This
+    # works well when the navigation is pretty close or when Titan is very
+    # big compared to the pointing error limits. But in other cases, we need
+    # to come up with a reasonable guess of where Titan is in the image first.
+    # We do this by correlating a Lambert law model of Titan with the image.
+    trial_offset = (0,0)
+    if offset_limit > titan_radius_pix/2:
+        bp_lambert = obs.bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
+        bp_lambert = bp_lambert+0.01
+        model_offset_list = find_correlation_and_offset(
+                                   obs.data,
+                                   bp_lambert, search_size_min=0,
+                                   search_size_max=(max_error_u, 
+                                                    max_error_v))
+        if model_offset_list is None or len(model_offset_list) == 0:
+            logger.info('Attempt to locate Titan with Lambert law model failed')
+            metadata['lambert_offset'] = False
+            metadata['end_time'] = time.time()
+            return metadata
+        trial_offset = model_offset_list[0][0]
+        logger.info('Lambert trial offset U,V %d,%d',
+                    trial_offset[0], trial_offset[1])
+        sym_offset_limit /= 4 # We know we're pretty close
+    # Find the location of maximum symmetry        
     offset, rms = titan_find_symmetry_offset(
-                     obs, sun_angle,
+                     obs, trial_offset, sun_angle,
                      em_min, em_max, em_incr, inc_min, inc_max, inc_incr,
                      cluster_gap_threshold, cluster_max_pixels,
-                     offset_limit, mask=model_mask,
+                     sym_offset_limit, mask=model_mask,
                      titan_size_u=titan_size_u, titan_size_v=titan_size_v)
+    
+#     offset = (-29,-1)
     
     if offset is None:
         logger.debug('No axis of symmetry found - aborting')
@@ -520,17 +603,35 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['symmetry_offset'] = offset
     logger.debug('Max symmetry offset U,V %d,%d', offset[0], offset[1])
 
+    # Create the profile along the axis of maximum symmetry.
+    # We do a distance on either side of Titan's supposed center equal to
+    # Titan's radius plus the maximum pointing error to make sure we get
+    # all of Titan no matter how bad the actual pointing error is.
     profile_x, profile_y = titan_along_track_profile(
                      obs, offset, sun_angle, titan_center,
-                     titan_radius_pix, titan_resolution)
+                     titan_radius_pix+offset_limit, titan_resolution)
 
+#     plt.plot(profile_x, profile_y)
+#     plt.show()
+
+    offset_limit_km = int((titan_radius_pix+offset_limit) * titan_resolution)
+
+    ext_baseline_x = np.arange(offset_limit_km*2) - offset_limit_km
+    ext_baseline_profile = np.zeros(ext_baseline_x.shape[0])
+    start_idx = int((ext_baseline_x.shape[0] - baseline_x.shape[0]) / 2)
+    ext_baseline_profile[start_idx:start_idx+baseline_x.shape[0]] = baseline_profile
+    
+    # Interpolate the profile into 1 km/sample
     interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 
                                   fill_value=0., kind='cubic')
-    profile = interp_func(baseline_x)
+    profile = interp_func(ext_baseline_x)
+
+#     plt.plot(ext_baseline_x, profile)
+#     plt.show()
     
-    along_track_distance = find_shift_1d(baseline_profile, 
+    along_track_distance = find_shift_1d(ext_baseline_profile, 
                                          profile, 
-                                         offset_limit)
+                                         offset_limit_km)
     along_track_pixel = int(np.round(along_track_distance / titan_resolution))
 
     logger.debug('Along symmetry distance %.f km, %d pixels',
@@ -546,19 +647,17 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['offset'] = new_offset
     metadata['confidence'] = confidence
 
-    new_titan_x = np.roll(baseline_x, -along_track_distance)
-    new_titan_x = new_titan_x[:-abs(along_track_distance)]
-    new_profile = profile[:-abs(along_track_distance)]
-    
-    if False:
+    if True:
         plt.figure()
         plt.plot(baseline_x, baseline_profile, '-', color='black')
-        plt.plot(baseline_x, profile, '-', color='red')
+        plt.plot(ext_baseline_x, profile, '-', color='red')
+        new_titan_x = ext_baseline_x + along_track_distance
+        new_profile = profile
         plt.plot(new_titan_x, new_profile, '-', color='green')
         plt.show()
 
-    # We can't leave this hanging around but it confuses things...especially
-    # inventory()
+    # We can't leave this hanging around because it confuses things...
+    # especially inventory()
     del oops.Body.BODY_REGISTRY['TITAN+ATMOSPHERE']
 
     metadata['end_time'] = time.time()

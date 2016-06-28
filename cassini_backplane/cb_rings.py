@@ -963,13 +963,41 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                  max_res_inner_outer) = _find_resolutions_by_a(
                                               obs, extend_fov, outer[0][1])
 
+            # If there is a full gap or ringlet, see if it's big enough to be
+            # readily seen.
+            force_keep_feature = False  
+            if inner is not None and outer is not None:
+                # See if the gap or ringlet is too small to be seen in
+                # the image
+                feature_width = ((outer[0][1]-inner[0][1]) / 
+                                 min_res_inner_outer)
+                if feature_width < min_feature_width:
+                    logger.debug(
+                         'Ignoring complete %s %s %.2f to %.2f - '+
+                         'feature too narrow (%.2f pixels)',
+                         pretty_name, entry_type, inner[0][1], outer[0][1],
+                         feature_width)
+                    # However, in the special case of the Huygen Gap,
+                    # we can go ahead and keep the inner edge because that's
+                    # the B ring outer edge and it's really visible.
+                    if pretty_name == 'Huygens' and entry_type == 'GAP':
+                        outer = None
+                        force_keep_feature = True
+                    # We do the same thing for the A Ring outer edge
+                    elif (pretty_name.startswith('Keeler-A Ring') and 
+                          entry_type == 'RINGLET'):
+                        inner = None
+                        force_keep_feature = True
+                    else:
+                        continue
+
             # For single-sided features, see if there is another feature that
             # is too close. If there is, then throw away the current feature
             # because it won't be readily distinguishable in the real image.
             
             #### XXXX ### THIS IS NOT WORKING W1466448054_1
             
-            if (inner is None) != (outer is None):
+            if (inner is None) != (outer is None) and not force_keep_feature:
                 feature = inner
                 if feature is None:
                     feature = outer
@@ -996,7 +1024,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                         if (feature_dist_pix < min_feature_width):
                             logger.debug(
                              'Ignoring partial %s %s %.2f - '+
-                             'feature too close to another (a=%.2f, %d pixels)',
+                             'feature too close to another '+
+                             '(a=%.2f, %.2f pixels)',
                              pretty_name, entry_type, feature[0][1],
                              inner_outer2[0][1], feature_dist_pix)
                             bad = True
@@ -1005,21 +1034,6 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if bad:
                     continue
                 
-            # If there is a full gap or ringlet, see if it's big enough to be
-            # readily seen.  
-            if inner is not None and outer is not None:
-                # See if the gap or ringlet is too small to be seen in
-                # the image
-                feature_width = ((outer[0][1]-inner[0][1]) / 
-                                 min_res_inner_outer)
-                if feature_width < min_feature_width:
-                    logger.debug(
-                         'Ignoring complete %s %s %.2f to %.2f - '+
-                         'feature too narrow (%d pixels)',
-                         pretty_name, entry_type, inner[0][1], outer[0][1],
-                         feature_width)
-                    continue
-
             # Everything is going well...we can at least use this to determine
             # the blur amount
             if ret_inner is not None and ret_inner != 1.:
@@ -1487,7 +1501,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                     label_avoid_mask[v:v+text_size[1],
                                      u:u+text_size[0]] = True
 
-    model_text = np.array(text_im.getdata()).reshape(model_text.shape)
+    model_text = (np.array(text_im.getdata()).astype('bool').
+                  reshape(model_text.shape))
 
     return model, model_text
 

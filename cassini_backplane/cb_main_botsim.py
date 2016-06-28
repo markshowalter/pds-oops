@@ -29,7 +29,7 @@ from cb_util_file import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--volume COISS_2052 --main-console-level debug --image-console-level debug --display-offset-results' # TEST 
+    command_line_str = ''
 
     command_list = command_line_str.split()
 
@@ -123,7 +123,7 @@ def run_and_maybe_wait(args, image_path):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 metadata = file_read_offset_metadata(old_image_path,
-                                                     bootstrap='no')
+                                                     bootstrap_pref='no')
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -143,7 +143,7 @@ def wait_for_all():
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 metadata = file_read_offset_metadata(old_image_path,
-                                                     bootstrap='no')
+                                                     bootstrap_pref='no')
                 filename = file_clean_name(old_image_path)
                 results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
@@ -160,7 +160,7 @@ def wait_for_all():
 def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
     offset_metadata_wac = file_read_offset_metadata(image_path_wac, 
                                                     overlay=False,
-                                                    bootstrap='prefer')
+                                                    bootstrap_pref='prefer')
     if offset_metadata_wac is None:
         main_logger.info('Skipping %s - no WAC offset file', image_path_wac)
         return False
@@ -180,14 +180,17 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
     
     offset_metadata_nac = file_read_offset_metadata(image_path_nac, 
                                                     overlay=False,
-                                                    bootstrap='prefer')
+                                                    bootstrap_pref='prefer')
     if offset_metadata_nac is None:
         main_logger.info('Skipping %s - no NAC offset file', image_path_nac)
         return False
 
-    nac_offset = offset_metadata_nac['offset'] 
+    nac_offset = None
+    if 'offset' in offset_metadata_nac:
+        nac_offset = offset_metadata_nac['offset'] 
     if nac_offset is not None:
-        if offset_metadata_nac['offset_winner'] == 'BOTSIM':
+        if ('offset_winner' in offset_metadata_nac and
+            offset_metadata_nac['offset_winner'] == 'BOTSIM'):
             if not redo_offset:
                 main_logger.info('Skipping %s - BOTSIM already done',
                                  image_path_nac)
@@ -301,7 +304,7 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
 
     metadata = file_read_offset_metadata(image_path_nac,
                                          overlay=False,
-                                         bootstrap='no')
+                                         bootstrap_pref='no')
     filename = file_clean_name(image_path_nac)
     results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)

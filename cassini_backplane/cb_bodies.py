@@ -155,10 +155,11 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                       model.shape[1]).reshape(model.shape)
     dist_from_center = axis1**2+5*axis2**2
     # Don't ever label bodies above or below their extent
-    if body_v-body_v_size > 0:
-        dist_from_center[:body_v-body_v_size+1,:] = 1e38
-    if body_v+body_v_size <= obs.ext_data.shape[0]:
-        dist_from_center[body_v+body_v_size:,:] = 1e38    
+    body_v_size_text = max(body_v_size, 5)
+    if body_v > body_v_size_text:
+        dist_from_center[:body_v-body_v_size_text+1,:] = 1e38
+    if body_v <= obs.ext_data.shape[0]-body_v_size_text:
+        dist_from_center[body_v+body_v_size_text:,:] = 1e38
 
     # Don't do anything too close to the edges (and text
     # has height)
@@ -252,7 +253,8 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     if u is not None:
         text_draw.text((u,v), text, fill=1)
 
-    model_text = np.array(text_im.getdata()).reshape(model_text.shape)
+    model_text = (np.array(text_im.getdata()).astype('bool').
+                  reshape(model_text.shape))
     
     return model_text
 
@@ -370,9 +372,13 @@ def bodies_create_model(obs, body_name, inventory,
 
     logger.info('*** Modeling %s ***', body_name)
 
-    metadata['sub_solar_lon'] = obs.ext_bp.sub_solar_longitude(body_name).vals
+    metadata['sub_solar_lon'] = obs.ext_bp.sub_solar_longitude(
+                           body_name,
+                           direction=bodies_config['mask_lon_direction']).vals
     metadata['sub_solar_lat'] = obs.ext_bp.sub_solar_latitude(body_name).vals
-    metadata['sub_observer_lon'] = obs.ext_bp.sub_observer_longitude(body_name).vals
+    metadata['sub_observer_lon'] = obs.ext_bp.sub_observer_longitude(
+                           body_name,
+                           direction=bodies_config['mask_lon_direction']).vals
     metadata['sub_observer_lat'] = obs.ext_bp.sub_observer_latitude(body_name).vals
     metadata['phase_angle'] = obs.ext_bp.center_phase_angle(body_name).vals
 
@@ -769,8 +775,6 @@ def bodies_reproject(
         'body_name'        The name of the body.
         'path'             The full path from the Observation.
         'offset_path'      The full path of the OFFSET file.
-        'full_mask'        The mask of pixels that contain reprojected data.
-                           True means the pixel is valid.
         'lat_idx_range'    The range (min,max) of latitudes in the returned
                            image.
         'lat_resolution'   The resolution (rad/pix) in the latitude direction.
@@ -788,6 +792,11 @@ def bodies_reproject(
             specified above. All angles are in radians.
             
         'img'              The reprojected image [latitude,longitude].
+        'full_mask'        The mask of pixels that contain reprojected data.
+                           True means the pixel is valid. If mask_only is True,
+                           this mask is the full lat/lon size. Otherwise it
+                           is restricted to the sub-set like everything
+                           else.
         'resolution'       The radial resolution [latitude,longitude].
         'phase'            The phase angle [latitude,longitude].
         'emission'         The emission angle [latitude,longitude].

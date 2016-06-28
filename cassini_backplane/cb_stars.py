@@ -588,7 +588,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             text_draw.text((good_u,good_v+text_size[1]), star_str2, 
                            fill=1)
     
-    text = np.array(text_im.getdata()).reshape(text.shape)
+    text = np.array(text_im.getdata()).astype('bool').reshape(text.shape)
     
     return overlay, text
 

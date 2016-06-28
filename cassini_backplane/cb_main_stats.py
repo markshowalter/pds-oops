@@ -122,6 +122,9 @@ class Histogram(object):
             his += line
         return his
 
+bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
+max_num_longest_time = 10
+
 total_files = 0
 total_offset = 0
 total_spice_error = 0
@@ -131,7 +134,8 @@ other_error_file_db = {}
 total_good_offset = 0
 total_good_offset_list = []
 total_good_star_offset = 0
-total_good_model_offset = 0
+total_good_model_nobs_offset = 0
+total_good_model_bs_offset = 0
 total_good_titan_offset = 0
 total_winner_star = 0
 total_winner_model = 0
@@ -142,6 +146,7 @@ total_rings_only = 0
 total_bootstrap_cand = 0
 bootstrap_cand_db = {}
 time_list = []
+longest_time_filenames = []
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
     status = ''
@@ -149,7 +154,8 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
     status += base + ': '
     total_files += 1
 
-    metadata = file_read_offset_metadata(image_path, overlay=False)
+    metadata = file_read_offset_metadata(image_path, overlay=False,
+                                         bootstrap_pref='prefer')    
     filename = file_clean_name(image_path)
     status = filename + ' - ' + offset_result_str(metadata)
     
@@ -169,8 +175,12 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     other_error_file_db[error] = filename
                 other_error_db[error] += 1
         else:
-            time_list.append(metadata['end_time']-metadata['start_time'])
-            
+            total_time = metadata['end_time']-metadata['start_time']
+            time_list.append(total_time)
+            longest_time_filenames.append((total_time, filename))
+            longest_time_filenames.sort(reverse=True)
+            longest_time_filenames = longest_time_filenames[:max_num_longest_time]
+                
             offset = metadata['offset']
             if offset is not None:
                 total_good_offset += 1
@@ -182,7 +192,10 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
         
             model_offset = metadata['model_offset']
             if model_offset is not None:
-                total_good_model_offset += 1
+                if metadata['bootstrapped']:
+                    total_good_model_bs_offset += 1
+                else:
+                    total_good_model_nobs_offset += 1
         
             titan_offset = metadata['titan_offset']
             if titan_offset is not None:
@@ -197,7 +210,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 total_winner_titan += 1
             elif winner == 'BOTSIM':
                 total_winner_botsim += 1
-            else:
+            elif winner is not None:
                 print image_path, 'Unknown offset winner', winner
             body_only = metadata['body_only']
             if body_only:
@@ -207,60 +220,160 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 
             if metadata['rings_only']:
                 total_rings_only += 1
-        
-            if metadata['bootstrap_candidate']:
+
+            bootstrap_cand = False        
+            if (metadata['bootstrap_candidate'] or
+                metadata['bootstrapped']):
+                bodies_metadata = metadata['bodies_metadata']
+                if bodies_metadata is not None:
+                    for body_name in metadata['large_bodies']:
+                        if (body_name not in bootstrap_config['body_list'] or
+                            body_name in FUZZY_BODY_LIST or
+                            body_name == 'TITAN'):
+                            continue
+                        if body_name not in bodies_metadata:
+                            continue
+                        body_metadata = bodies_metadata[body_name]
+                        if not body_metadata['size_ok']:
+                            continue
+                        if body_name not in bootstrap_cand_db:
+                            cand_count = 0
+                            bootstrap_status_db = {}
+                        else:
+                            (cand_count, 
+                             bootstrap_status_db) = bootstrap_cand_db[body_name]
+                        bootstrap_cand = True
+                        bootstrap_status = 'Not bootstrapped'
+                        if metadata['bootstrapped']:
+                            bootstrap_status = metadata['bootstrap_status']
+                        if bootstrap_status not in bootstrap_status_db:
+                            bootstrap_status_db[bootstrap_status] = 0
+                        bootstrap_status_db[bootstrap_status] += 1
+                        
+                        bootstrap_cand_db[body_name] = (cand_count+1, 
+                                                        bootstrap_status_db)
+                        status += '  %s: %s' % (body_name, bootstrap_status)
+                    
+                        break # Only allow one bootstrap body for now XXX
+
+            if bootstrap_cand:
                 total_bootstrap_cand += 1
-                body_name = metadata['bootstrap_body']
-                if body_name not in bootstrap_cand_db:
-                    bootstrap_cand_db[body_name] = 0
-                bootstrap_cand_db[body_name] += 1
-                
+                    
     if arguments.verbose:
         print status
 
-print 'Total image files:', total_files
-print 'Total with offset file:', total_offset
+sep = '-' * 55
+
+print sep
+print 'Total image files:                  %6d' % total_files
+print 'Total with offset file:             %6d' % total_offset
+print sep
 
 if total_offset:
-    print 'Spice error: %d (%.2f%%)' % (total_spice_error, float(total_spice_error)/total_offset*100)
-    print 'Other error: %d (%.2f%%)' % (total_other_error, float(total_other_error)/total_offset*100)
+    print 'Spice error:                        %6d (%6.2f%%)' % (
+                total_spice_error, 
+                float(total_spice_error)/total_offset*100)
+    print 'Other error:                        %6d (%6.2f%%)' % (
+                total_other_error, 
+                float(total_other_error)/total_offset*100)
     if total_other_error:
         for error in sorted(other_error_db.keys()):
-            print '  %d (%.2f%%): %s (%s)' % (other_error_db[error], float(total_other_error)/total_other_error*100,
-                                         error, other_error_file_db[error])
-    print
-    print 'Good final offset: %d (%.2f%%)' % (total_good_offset, float(total_good_offset)/total_offset*100)
-    print '  Good star offset: %d (%.2f%%, %.2f%% of total)' % (
+            print '  %6d (%6.2f%%): %s (%s)' % (
+                other_error_db[error],
+                float(total_other_error)/total_other_error*100,
+                error, 
+                other_error_file_db[error])
+    print sep
+
+    print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
+                total_good_offset, 
+                float(total_good_offset)/total_offset*100)
+    print '  Good star  offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_star_offset, 
                 float(total_good_star_offset)/total_good_offset*100,
                 float(total_good_star_offset)/total_offset*100)
-    print '  Good model offset: %d (%.2f%%, %.2f%% of total)' % (
+    total_good_model_offset = total_good_model_bs_offset+total_good_model_nobs_offset
+    print '  Good model offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_model_offset, 
                 float(total_good_model_offset)/total_good_offset*100,
                 float(total_good_model_offset)/total_offset*100)
-    print '  Good Titan offset: %d (%.2f%%, %.2f%% of total)' % (
+    print '    Bootstrapped:      %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_good_model_bs_offset, 
+                float(total_good_model_bs_offset)/total_good_offset*100,
+                float(total_good_model_bs_offset)/total_offset*100)
+    print '    Not bootstrapped:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_good_model_nobs_offset, 
+                float(total_good_model_nobs_offset)/total_good_offset*100,
+                float(total_good_model_nobs_offset)/total_offset*100)
+    print '  Good Titan offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_titan_offset, 
                 float(total_good_titan_offset)/total_good_offset*100,
                 float(total_good_titan_offset)/total_offset*100)
+    print '  Good BOTSIM offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_winner_botsim, 
+                float(total_winner_botsim)/total_good_offset*100,
+                float(total_winner_botsim)/total_offset*100)
+    print '  Winners:'
+    print '    Star:   %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_winner_star, 
+                float(total_winner_star)/total_good_offset*100,
+                float(total_winner_star)/total_offset*100)
+    print '    Model:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_winner_model, 
+                float(total_winner_model)/total_good_offset*100,
+                float(total_winner_model)/total_offset*100)
+    print '    Titan:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_winner_titan, 
+                float(total_winner_titan)/total_good_offset*100,
+                float(total_winner_titan)/total_offset*100)
+    print '    BOTSIM: %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_winner_botsim, 
+                float(total_winner_botsim)/total_good_offset*100,
+                float(total_winner_botsim)/total_offset*100)
+    total_bad_offset = total_offset-total_good_offset
+    print 'Bad final offset:                   %6d (%6.2f%%)' % (
+                total_bad_offset, 
+                float(total_bad_offset)/total_offset*100)
     failed = total_offset-total_good_offset-total_bootstrap_cand
-    print 'Failed and not bootstrap candidate: %d (%.2f%%)' % (failed, float(failed)/total_offset*100)
-    print 'Failed and bootstrap candidate: %d (%.2f%%)' % (total_bootstrap_cand, float(total_bootstrap_cand)/total_offset*100)
-    print '  Bootstrap candidates:'
+    print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bootstrap_cand, 
+                float(total_bootstrap_cand)/total_bad_offset*100,
+                float(total_bootstrap_cand)/total_offset*100)
+    print '  Not bootstrap cand:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                failed, 
+                float(failed)/total_bad_offset*100,
+                float(failed)/total_offset*100)
+    
+    print sep
+    print 'Valid bootstrap candidates:'
     for body_name in sorted(bootstrap_cand_db):
-        print '    %s: %d' % (body_name, bootstrap_cand_db[body_name]) 
-    print
-    print 'Total body-only:'
+        cand_count, bootstrap_status_db = bootstrap_cand_db[body_name]
+        print '  %-10s %6d' % (body_name+':', cand_count)
+        for bootstrap_status in sorted(bootstrap_status_db):
+            print '     %-28s %6d (%6.2f%%)' % (
+                               bootstrap_status+':',
+                               bootstrap_status_db[bootstrap_status],
+                               float(bootstrap_status_db[bootstrap_status])/
+                               cand_count*100) 
+    print sep
+    total_body_only = 0
     for body_name in sorted(body_only_db):
-        print '    %s: %d' % (body_name, body_only_db[body_name]) 
-    print
-    print 'Rings only: %d (%.2f%%)' % (total_rings_only, float(total_rings_only)/total_offset*100)
-
-    print
+        total_body_only += body_only_db[body_name] 
+    print 'Total filled by body:               %6d (%6.2f%%)' % (total_body_only, float(total_body_only)/total_offset*100)
+    for body_name in sorted(body_only_db):
+        print '    %-10s %6d' % (body_name+':', body_only_db[body_name]) 
+    print 'Total filled by rings:              %6d (%6.2f%%)' % (total_rings_only, float(total_rings_only)/total_offset*100)
+    print sep
     print 'Run time: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (np.min(time_list),
                                                               np.max(time_list),
                                                               np.mean(time_list),
                                                               np.std(time_list))
     print
+    print 'Longest run times:'
+    for total_time, filename in longest_time_filenames:
+        print '%-13s: %9.2f' % (filename, total_time)
+    print
+    print 'Histogram of run times:'
     time_list = np.array(time_list)
     h = Histogram(time_list, bins=50)
     print h.vertical(50)

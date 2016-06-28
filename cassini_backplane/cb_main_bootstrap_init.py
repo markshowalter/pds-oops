@@ -11,16 +11,18 @@ import logging
 import argparse
 import cProfile, pstats, StringIO
 import sys
+import time
 
 import msgpack
 import msgpack_numpy
 
+import cspice
 import oops.inst.cassini.iss as iss
 import oops
 
-from cb_bootstrap import *
 from cb_config import *
 from cb_util_file import *
+from cb_util_misc import *
 
 command_list = sys.argv[1:]
 
@@ -97,7 +99,7 @@ def check_add_one_image(image_path):
     image_filename = file_clean_name(image_path)
 
     metadata = file_read_offset_metadata(image_path, overlay=False,
-                                         bootstrap='no')
+                                         bootstrap_pref='no')
 
     if metadata is None:
         main_logger.debug('%s - No offset file', image_filename)
@@ -108,14 +110,15 @@ def check_add_one_image(image_path):
                           image_filename)
         return
     
-    if metadata['offset'] is None:
+    if metadata['offset'] is None or metadata['offset_winner'] == 'BOTSIM':
         check_add_one_image_candidate(image_path, image_filename, metadata)
     else:
         check_add_one_image_good(image_path, image_filename, metadata)
     
 def check_add_one_image_candidate(image_path, image_filename, metadata):
     if not metadata['bootstrap_candidate']:
-        main_logger.debug('%s - No offset and not bootstrap candidate')
+        main_logger.debug('%s - No offset and not bootstrap candidate',
+                          file_clean_name(image_path))
         return
 
     filter = simple_filter_name_metadata(metadata, consolidate_pol=True)
@@ -157,7 +160,7 @@ def check_add_one_image_candidate(image_path, image_filename, metadata):
             
         entry = (image_path, sub_solar_lon, sub_solar_lat, sub_obs_lon, sub_obs_lat, 
                  phase_angle, resolution, filter)
-        
+
         CAND_IMAGE_BY_BODY_DB[body_name].append(entry)
 
         
@@ -172,7 +175,7 @@ def check_add_one_image_good(image_path, image_filename, metadata):
     if offset_confidence < 0.75:
         main_logger.debug('%s - Skipping due to low confidence %.2f', 
                           image_filename, offset_confidence)
-
+        return
     already_bootstrapped = ('bootstrapped' in metadata and 
                             metadata['bootstrapped'])
     if already_bootstrapped:
@@ -180,8 +183,8 @@ def check_add_one_image_good(image_path, image_filename, metadata):
         return
 
     if metadata['bootstrap_candidate']:
-        main_logger.warning('%s - Has offset and also bootstrap candidate - '+
-                            'something is very wrong!')
+        main_logger.error('%s - Has offset and also bootstrap candidate - '+
+                          'something is very wrong!')
         return
     
     filter = simple_filter_name_metadata(metadata, consolidate_pol=True)
@@ -195,7 +198,7 @@ def check_add_one_image_good(image_path, image_filename, metadata):
         if body_name not in bodies_metadata:
             continue
         body_metadata = bodies_metadata[body_name]
-        if 'in_saturn_shadow' in body_metadata and body_metadata['in_saturn_shadow']: # XXX
+        if body_metadata['in_saturn_shadow']:
             main_logger.debug('%s - %s - In Saturn\'s shadow',
                               image_filename, body_name)
             continue
@@ -259,6 +262,8 @@ CAND_IMAGE_BY_BODY_DB = {}
 main_logger.info('*******************************************************')
 main_logger.info('*** BEGINNING BUILD INITIAL BOOTSTRAP DATABASE PASS ***')
 main_logger.info('*******************************************************')
+main_logger.info('')
+main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):

@@ -227,7 +227,8 @@ BODIES_DEFAULT_CONFIG = {
     'mask_lon_resolution': 1. * oops.RPD,
     'mask_lat_resolution': 1. * oops.RPD,
 
-    # The latlon coordinate type and direction for the metadata latlon mask.
+    # The latlon coordinate type and direction for the metadata latlon mask
+    # and sub-solar and sub-observer longitudes.
     'mask_latlon_type': 'centric',
     'mask_lon_direction': 'east',
     
