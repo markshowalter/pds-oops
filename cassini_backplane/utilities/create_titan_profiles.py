@@ -338,12 +338,12 @@ def make_shifted_profile(bin, filter, phase_angle):
     
     med_res = np.mean(zip(*profiles), axis=1)
     
-    if filter == 'BL1' and 139 <= phase_angle*oops.DPR < 141:
-        plt.figure()
-        for profile in profiles:
-            plt.plot(profile)
-        plt.plot(med_res, '-', color='black', lw=2)
-        plt.show()
+#     if filter == 'BL1' and 139 <= phase_angle*oops.DPR < 141:
+#         plt.figure()
+#         for profile in profiles:
+#             plt.plot(profile)
+#         plt.plot(med_res, '-', color='black', lw=2)
+#         plt.show()
     
     return med_res
     
@@ -549,7 +549,7 @@ PHASE_BIN_GRANULARITY = 10. * oops.RPD
 NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
 OFFSET_LIST = []
 
-if False:
+if True:
     for filename in image_list:#[:10]:
         add_profile_to_list(filename)
     bin_profiles(plot=False)

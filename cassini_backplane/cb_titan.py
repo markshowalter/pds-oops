@@ -4,7 +4,10 @@
 # Routines related to Titan navigation.
 #
 # Exported routines:
+#    titan_find_symmetry_offset
+#    titan_along_track_profile
 #    titan_navigate
+#    titan_metadata_to_status
 ###############################################################################
 
 import cb_logging
@@ -42,7 +45,7 @@ def titan_find_symmetry_offset(
            min_incidence_angle, max_incidence_angle, incr_incidence_angle,
            cluster_gap_threshold, cluster_max_pixels, 
            offset_limit, titan_size_u=None, titan_size_v=None, mask=None,
-           display_total_intersect=True):
+           display_total_intersect=False):
     """Find the axis of symmetry along the solar angle.
     
     Inputs:
@@ -186,13 +189,13 @@ def titan_find_symmetry_offset(
                 len(cluster2_list) > cluster_max_pixels):
                 continue
             ie_list.append((cluster1_list, cluster2_list))
-            print cluster1_list
-            print cluster2_list
-            print
-            plt.plot([cluster1_list[0][1],cluster2_list[0][1]],
-                     [1024-cluster1_list[0][0],1024-cluster2_list[0][0]], '-')
+#            print cluster1_list
+#            print cluster2_list
+#            print
+#            plt.plot([cluster1_list[0][1],cluster2_list[0][1]],
+#                     [1024-cluster1_list[0][0],1024-cluster2_list[0][0]], '-')
     
-    plt.show()
+#    plt.show()
     
     # Across Sun angle is perpendicular to main sun angle    
     a_sun_angle = sun_angle + oops.HALFPI
@@ -200,6 +203,9 @@ def titan_find_symmetry_offset(
     # Find the point of maximum cluster difference, which is more or less
     # centered on Titan and will reject black backgrounds. Then look closer
     # for the offset of max symmetry.
+    # We only do this first step is Titan is small enough that we're likely
+    # to look entirely at the black background for some offsets. But we run
+    # the procedure either way to build rms_list.
     rms_list = []
     best_max_diff = 0.
     best_max_diff_dist = None
@@ -208,8 +214,10 @@ def titan_find_symmetry_offset(
         v_offset = int(np.round(along_path_dist * np.sin(a_sun_angle)))
         # We don't want to get too close to the edge - we might fall into
         # a black/black region which always looks symmetric.
-        if ((titan_size_u is not None and abs(u_offset) > titan_size_u*.75) or
-            (titan_size_v is not None and abs(v_offset) > titan_size_v*.75)):
+        if ((titan_size_u is not None 
+             and abs(u_offset) > titan_size_u*.75) or
+            (titan_size_v is not None and 
+             abs(v_offset) > titan_size_v*.75)):
             continue
         u_offset += trial_offset[0]
         v_offset += trial_offset[1]
@@ -253,22 +261,25 @@ def titan_find_symmetry_offset(
         rms = np.sqrt(np.sum(diff_list**2))
         rms_list.append((u_offset, v_offset, rms))
         
-        print along_path_dist, u_offset, v_offset, max_cluster-min_cluster, rms
+#         print along_path_dist, u_offset, v_offset, max_cluster-min_cluster, rms
 
         cluster_diff = max_cluster-min_cluster
         if cluster_diff > best_max_diff:
             best_max_diff = cluster_diff
             best_max_diff_dist = along_path_dist
             
-    if abs(best_max_diff_dist) == offset_limit+1:
-        return None, None
-     
+    if titan_size_u >= offset_limit or titan_size_v >= offset_limit:    
+        best_max_diff_dist = 0
+    else:
+        if abs(best_max_diff_dist) == offset_limit+1:
+            return None, None
+
     best_rms = 1e38
     best_offset = None
 
     max_diff_limit = int(np.sqrt(titan_size_u**2+titan_size_v**2) / 2)
     
-    print 'MAX DIFF', best_max_diff_dist, 'LIMIT', max_diff_limit
+#     print 'MAX DIFF', best_max_diff_dist, 'LIMIT', max_diff_limit
      
     min_limit = max(-offset_limit,
                     best_max_diff_dist-max_diff_limit)
@@ -287,10 +298,10 @@ def titan_find_symmetry_offset(
     if v_offset_min > v_offset_max:
         v_offset_min, v_offset_max = v_offset_max, v_offset_min
     for u_offset, v_offset, rms in rms_list:
-        print u_offset, v_offset, rms
+#         print u_offset, v_offset, rms
         if (not u_offset_min <= u_offset <= u_offset_max or
             not v_offset_min <= v_offset <= v_offset_max):
-            print 'BAD'
+#             print 'BAD'
             continue
         if rms < best_rms:
             best_rms = rms
@@ -647,7 +658,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['offset'] = new_offset
     metadata['confidence'] = confidence
 
-    if True:
+    if False:
         plt.figure()
         plt.plot(baseline_x, baseline_profile, '-', color='black')
         plt.plot(ext_baseline_x, profile, '-', color='red')
@@ -663,3 +674,14 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['end_time'] = time.time()
 
     return metadata
+
+def titan_metadata_to_status(metadata):
+    if not metadata['entirely_visible']:
+        return 'Not entirely visible'
+    if not metadata['filter_phase_ok']:
+        return 'Insufficient profile data'
+    if metadata['lambert_offset'] is False:
+        return 'Lambert-based seed offset failed'
+    if metadata['symmetry_offset'] is None:
+        return 'Symmetry offset not found'
+    return 'Success'

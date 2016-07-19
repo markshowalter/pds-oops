@@ -368,19 +368,19 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     # Fill in the other dates, when the Keeler gap edge is OK but the A ring edge
     # isn't. The A ring fits are circular from Dick French
     # ringfit_v1.8.Sa025S-RF-V4800circ.out
-    ('RINGLET_1990-JAN-1_2005-MAY-1', 'Keeler-A Ring OE Circ', # Before 2005-MAY-1
+    ('RINGLET_1990-JAN-1_2005-MAY-1', 'Keeler-A Ring OE', # Before 2005-MAY-1
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
                                        
-    ('RINGLET_2005-AUG-1_2006-JAN-1', 'Keeler-A Ring OE Circ', # Between 2005-AUG-1 and 2006-JAN-1
+    ('RINGLET_2005-AUG-1_2006-JAN-1', 'Keeler-A Ring OE', # Between 2005-AUG-1 and 2006-JAN-1
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
-    ('RINGLET_2009-JULY-1_2010-JAN-1', 'Keeler-A Ring OE Circ', # Between 2009-JULY-1 and 2010-JAN-1
+    ('RINGLET_2009-JULY-1_2010-JAN-1', 'Keeler-A Ring OE', # Between 2009-JULY-1 and 2010-JAN-1
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
-    ('RINGLET_2013-AUG-1_2030-JAN-1', 'Keeler-A Ring OE Circ', # After 2013-AUG-1
+    ('RINGLET_2013-AUG-1_2030-JAN-1', 'Keeler-A Ring OE', # After 2013-AUG-1
                 ((  1, 136522.08727, 1.005577, 0.9887854, 322.4368800,   2.9890023),),
                 ((  1, 136770.41, 10.18, 0.00,   0.00,    0.00000),)),
 
@@ -1245,8 +1245,8 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
     
     return model + shade + shade_anti
 
-def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov, 
-                             rings_config):
+def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, 
+                             in_front_mask, extend_fov, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
     radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
@@ -1275,6 +1275,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
         label_avoid_mask = label_avoid_mask.copy()
     else:
         label_avoid_mask = np.zeros(model.shape, dtype=np.bool)
+
+    # This gives a margin around bodies and also solves a problem with
+    # border_atop while masked with bodies
+    in_front_mask = filt.maximum_filter(in_front_mask, 5)
 
     # Create an array of distances from the center pixel - always try to put
     # text labels as close to the center as possible to minimize the chance
@@ -1336,8 +1340,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                         outer_radii_bp = _make_ephemeris_radii(obs, outer)
             if inner_radii_bp is not None:
                 inner_radii = inner_radii_bp.vals.astype('float')
+                inner_radii[in_front_mask] = 0.
             if outer_radii_bp is not None:
                 outer_radii = outer_radii_bp.vals.astype('float')
+                outer_radii[in_front_mask] = 0.
             if (inner_radii is not None and outer_radii is not None
                 and entry_type == 'RINGLET'):
                 # We have both edges for a ringlet - just make it solid
@@ -1346,6 +1352,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                 inner_above = inner_radii >= inner_a
                 outer_below = outer_radii <= outer_a
                 intersect = np.logical_and(inner_above, outer_below)
+                intersect[in_front_mask] = False
                 model[intersect] += 1.
                 shade = _shade_antialias(inner_radii, inner_a, False,
                                          resolutions, max=0.5)
@@ -1357,13 +1364,17 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                     feature_name.upper().startswith('KEELER-A RING')):
                     # We need to fake this one out - it's really the Keeler
                     # OEG and the A Ring outer edge
-                    intersect_list.append(obs.ext_bp.border_atop(
+                    intersect = obs.ext_bp.border_atop(
                                           inner_radii_bp.key,
-                                          inner_a).vals.astype('bool'))
+                                          inner_a).vals.astype('bool')
+                    intersect[in_front_mask] = False
+                    intersect_list.append(intersect)
                     text_name_list.append('Keeler OEG')
-                    intersect_list.append(obs.ext_bp.border_atop(
+                    intersect = obs.ext_bp.border_atop(
                                           outer_radii_bp.key,
-                                          outer_a).vals.astype('bool'))
+                                          outer_a).vals.astype('bool')
+                    intersect[in_front_mask] = False
+                    intersect_list.append(intersect)
                     text_name_list.append('A Ring Outer Edge')                        
                 else:
                     intersect_list.append(intersect)
@@ -1381,13 +1392,17 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                         feature_name.upper().startswith('HUYGENS')):
                         # We need to fake this one out - it's really the B Ring
                         # OE and the Huygens Gap outer edge
-                        intersect_list.append(obs.ext_bp.border_atop(
+                        intersect = obs.ext_bp.border_atop(
                                               inner_radii_bp.key,
-                                              inner_a).vals.astype('bool'))
+                                              inner_a).vals.astype('bool')
+                        intersect[in_front_mask] = False
+                        intersect_list.append(intersect)
                         text_name_list.append('B Ring Outer Edge')
-                        intersect_list.append(obs.ext_bp.border_atop(
+                        intersect = obs.ext_bp.border_atop(
                                               outer_radii_bp.key,
-                                              outer_a).vals.astype('bool'))
+                                              outer_a).vals.astype('bool')
+                        intersect[in_front_mask] = False
+                        intersect_list.append(intersect)
                         text_name_list.append('Huygens OEG')                        
                         named_full_gap = True
                     else:
@@ -1395,8 +1410,9 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                         # going to shade the edges separately later
                         inner_above = inner_radii >= inner_a
                         outer_below = outer_radii <= outer_a
-                        intersect_list.append(np.logical_and(inner_above, 
-                                                             outer_below))
+                        intersect = np.logical_and(inner_above, outer_below)
+                        intersect[in_front_mask] = False
+                        intersect_list.append(intersect)
                         if feature_name:
                             text_name_list.append(feature_name + ' Gap')
                         else:
@@ -1413,17 +1429,23 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
                     if not named_full_gap:
-                        intersect_list.append(obs.ext_bp.border_atop(
+                        intersect = obs.ext_bp.border_atop(
                                               inner_radii_bp.key,
-                                              inner_a).vals.astype('bool'))
-                        feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
-                                                  else 'IEG')
-                        if feature_name:
-                            text_name_list.append(feature_name + ' ' +
-                                                  feature_name_sfx) 
+                                              inner_a).vals.astype('bool')
+                        intersect[in_front_mask] = False
+                        intersect_list.append(intersect)
+                        if (feature_name and 
+                            feature_name.upper().startswith('KEELER-A RING')):
+                            text_name_list.append('Keeler OEG')
                         else:
-                            text_name_list.append(('a=%.2f' % inner_a) + ' ' +
-                                                  feature_name_sfx)                     
+                            feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
+                                                      else 'IEG')
+                            if feature_name:
+                                text_name_list.append(feature_name + ' ' +
+                                                      feature_name_sfx) 
+                            else:
+                                text_name_list.append(('a=%.2f' % inner_a) + 
+                                                      ' ' + feature_name_sfx)                     
                 if outer_radii is not None:
                     # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
@@ -1433,17 +1455,23 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
                                          shade_above, radius_width_km, 
                                          resolutions, feature_list_by_a)
                     if not named_full_gap:
-                        intersect_list.append(obs.ext_bp.border_atop(
+                        intersect = obs.ext_bp.border_atop(
                                               outer_radii_bp.key,
-                                              outer_a).vals.astype('bool'))
-                        feature_name_sfx = ('OER' if entry_type == 'RINGLET' 
-                                                  else 'OEG')
-                        if feature_name:
-                            text_name_list.append(feature_name + ' ' +
-                                                  feature_name_sfx) 
+                                              outer_a).vals.astype('bool')
+                        intersect[in_front_mask] = False
+                        intersect_list.append(intersect)
+                        if (feature_name and 
+                            feature_name.upper().startswith('KEELER-A RING')):
+                            text_name_list.append('A Ring Outer Edge')
                         else:
-                            text_name_list.append(('a=%.2f' % outer_a) + ' '+
-                                                  feature_name_sfx)                     
+                            feature_name_sfx = ('OER' if entry_type == 'RINGLET' 
+                                                      else 'OEG')
+                            if feature_name:
+                                text_name_list.append(feature_name + ' ' +
+                                                      feature_name_sfx) 
+                            else:
+                                text_name_list.append(('a=%.2f' % outer_a) + 
+                                                      ' ' + feature_name_sfx)                     
 
             # Now find a good place for each label that doesn't overlap other
             # labels and doesn't overlap text from previous model steps
@@ -1514,6 +1542,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, extend_fov,
 
 def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                        label_avoid_mask=None,
+                       bodies_model_list=None,
                        rings_config=None):
     """Create a model for the rings.
 
@@ -1534,6 +1563,10 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         label_avoid_mask       A mask giving places where text labels should
                                not be placed (i.e. labels from another
                                model are already there). None if no mask.
+        bodies_model_list      A list of (body_model, body_metadata, body_text)
+                               that is used to remove parts of the ring model 
+                               that are behind a body. None if this is not
+                               desired.
         rings_config           Configuration parameters. None uses the default.
 
     Returns:
@@ -1657,8 +1690,19 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         model = radial_data[radial_index]
         model_text = np.zeros(model.shape, dtype=np.uint8)
     else:
+        in_front_mask = np.zeros(radii.shape, dtype=np.bool)
+        if bodies_model_list is not None:
+            # Erase from the model any location where the rings are further from
+            # the observer than a body
+            rings_dist = obs.ext_bp.distance('saturn:ring').vals.astype('float')
+            for body_model, body_metadata, body_text in bodies_model_list:
+                body_dist = body_metadata['inventory']['range']
+                in_front_mask[((rings_dist>body_dist) & 
+                               (body_model != 0))] = True
+    
         model, model_text = _compute_model_ephemeris(obs, fiducial_features,
                                                      label_avoid_mask,
+                                                     in_front_mask,
                                                      extend_fov, rings_config)
     
     if not np.any(model):

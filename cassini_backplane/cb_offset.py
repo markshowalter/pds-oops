@@ -625,6 +625,7 @@ def master_find_offset(obs,
                                          obs, extend_fov=extend_fov,
                                          always_create_model=True,
                                          label_avoid_mask=label_avoid_mask,
+                                         bodies_model_list=bodies_model_list,
                                          rings_config=rings_config)
         metadata['rings_metadata'] = rings_metadata
         if label_avoid_mask is not None:

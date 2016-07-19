@@ -20,12 +20,13 @@ import oops
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
+from cb_titan import *
 from cb_util_file import *
 
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--has-offset-file --verbose'
+    command_line_str = '--has-offset-file'
 
     command_list = command_line_str.split()
 
@@ -145,6 +146,8 @@ body_only_db = {}
 total_rings_only = 0
 total_bootstrap_cand = 0
 bootstrap_cand_db = {}
+titan_status_db = {}
+total_titan_attempt = 0
 time_list = []
 longest_time_filenames = []
 
@@ -221,6 +224,14 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if metadata['rings_only']:
                 total_rings_only += 1
 
+            titan_metadata = metadata['titan_metadata']
+            if titan_metadata is not None:
+                total_titan_attempt += 1
+                titan_status = titan_metadata_to_status(titan_metadata)
+                if titan_status not in titan_status_db:
+                    titan_status_db[titan_status] = 0
+                titan_status_db[titan_status] += 1
+                
             bootstrap_cand = False        
             if (metadata['bootstrap_candidate'] or
                 metadata['bootstrapped']):
@@ -343,6 +354,17 @@ if total_offset:
                 failed, 
                 float(failed)/total_bad_offset*100,
                 float(failed)/total_offset*100)
+    
+    print sep
+    print 'Total Titan navigation attempts:    %6d (%6.2f%%)' % (
+                total_titan_attempt, 
+                float(total_titan_attempt)/total_offset*100)
+    for titan_status in sorted(titan_status_db):
+        print '  %-26s %6d (%6.2f%%)' % (
+                           titan_status+':',
+                           titan_status_db[titan_status],
+                           float(titan_status_db[titan_status])/
+                           total_titan_attempt*100)
     
     print sep
     print 'Valid bootstrap candidates:'

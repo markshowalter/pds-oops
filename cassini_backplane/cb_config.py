@@ -150,6 +150,11 @@ STARS_DEFAULT_CONFIG = {
     # guarantee a good smear.
     'max_movement_steps': 50,
     
+    # The maximum amoung of smearing to tolerate before giving up on star
+    # navigation entirely. This is currently set low because the smear angles
+    # are wrong thanks to SPICE inaccuracies.
+    'max_smear': 5000, # XXX
+    
     # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',
     
@@ -290,7 +295,7 @@ RINGS_DEFAULT_CONFIG = {
     'emission_threshold': 5., 
     
     # Remove the shadow of Saturn from the model
-    'remove_saturn_shadow': False,
+    'remove_saturn_shadow': True,
     
     # Remove the shadow of other bodies from the model
     'remove_body_shadows': False
