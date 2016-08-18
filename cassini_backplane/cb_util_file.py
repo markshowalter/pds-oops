@@ -411,7 +411,7 @@ def _file_img_to_overlay_path(img_path, bootstrap=False, make_dirs=False):
 def _compress_bool(a):
     if a is None:
         return None
-    flat = a.flatten()
+    flat = a.astype('bool').flatten()
     assert (flat.shape[0] % 8) == 0
 
     res = zlib.compress(flat.data)
@@ -422,6 +422,7 @@ def _uncompress_bool(comp):
         return None
     shape, flat = comp
     res = np.frombuffer(zlib.decompress(flat), dtype='bool')
+    res = res.reshape(shape)
     return res
 
 def file_read_offset_metadata(img_path, bootstrap_pref='prefer', overlay=True):
@@ -488,7 +489,7 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
         # Uncompress all boolean text overlay arrays
         for field in ['stars_overlay_text', 'bodies_overlay_text',
                       'rings_overlay_text']:
-            if field in metadata:
+            if field in metadata_overlay:
                 metadata_overlay[field] = _uncompress_bool(
                                                    metadata_overlay[field])
         metadata.update(metadata_overlay)
@@ -499,7 +500,9 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
     """Write offset file for img_path."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
 
-    bootstrap = metadata['bootstrapped']
+    bootstrap = False
+    if 'bootstrapped' in metadata:
+        bootstrap = metadata['bootstrapped']
     offset_path = _file_img_to_offset_path(img_path, bootstrap=bootstrap, make_dirs=True)
     logger.debug('Writing offset file %s', offset_path)
     

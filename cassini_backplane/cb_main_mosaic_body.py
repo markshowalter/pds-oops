@@ -64,6 +64,9 @@ parser.add_argument(
     '--reset-mosaic', action='store_true', 
     help='Start with a fresh mosaic')
 parser.add_argument(
+    '--normalize-images', action='store_true', 
+    help='Normalize reprojects to a mean of 1 before adding to mosaic')
+parser.add_argument(
     '--mosaic-root', metavar='FILENAME', default='NONE',
     help='The filename root for the mosaic files')
 parser.add_argument(
@@ -112,6 +115,11 @@ def add_image_to_mosaic(mosaic_root, reset_mosaic, image_path):
     if image_path in mosaic_metadata['path_list']:
         return 
     
+    if arguments.normalize_images:
+        data = repro_metadata['img']
+        mask = repro_metadata['full_mask']
+        repro_metadata['img'] = data / np.mean(data[mask])
+        
     bodies_mosaic_add(mosaic_metadata, repro_metadata) 
 
     file_write_mosaic_metadata(body_name, mosaic_root, mosaic_metadata,

@@ -98,7 +98,7 @@ arguments = parser.parse_args(command_list)
 # 
 #===============================================================================
 
-def reproject_image(image_path, body_name, bootstrap):
+def reproject_image(image_path, body_name, bootstrap_pref):
     repro_path = file_img_to_reproj_body_path(image_path, body_name,
                                               arguments.lat_resolution*oops.RPD,
                                               arguments.lon_resolution*oops.RPD,
@@ -111,7 +111,8 @@ def reproject_image(image_path, body_name, bootstrap):
     main_logger.info('Reprojecting %s', image_path)
     
     obs = file_read_iss_file(image_path)
-    metadata = file_read_offset_metadata(image_path, bootstrap=bootstrap, 
+    metadata = file_read_offset_metadata(image_path, 
+                                         bootstrap_pref=bootstrap_pref, 
                                          overlay=False)
 
     if metadata is None:
@@ -203,9 +204,9 @@ if arguments.display_reprojection:
 body_name = arguments.body_name
 
 if arguments.use_bootstrap:
-    bootstrap = 'force'
+    bootstrap_pref = 'force'
 else:
-    bootstrap = 'no'
+    bootstrap_pref = 'no'
     
 if body_name is None:
     main_logger.error('No body name specified')
@@ -221,7 +222,7 @@ file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
-    reproject_image(image_path, body_name, bootstrap)
+    reproject_image(image_path, body_name, bootstrap_pref)
 
 end_time = time.time()
 main_logger.info('Total elapsed time %.2f sec', end_time-start_time)

@@ -12,14 +12,15 @@ import copy
 import cProfile, pstats, StringIO
 import subprocess
 import sys
+import time
 
 import msgpack
 import msgpack_numpy
+import scipy.ndimage.interpolation as ndinterp
 
 import oops.inst.cassini.iss as iss
 import oops
 
-from cb_bootstrap import *
 from cb_config import *
 from cb_util_file import *
 
@@ -48,6 +49,10 @@ parser.add_argument(
     '--reset-mosaics', action='store_true', default=False, 
     help='''Reprocess the mosaic from scratch instead of doing an incremental 
             addition''')
+parser.add_argument(
+    '--collapse-filters', action='store_true', default=False, 
+    help='''Collapse all filters into a single one by using photometric
+            averaging''')
 parser.add_argument(
     '--lat-resolution', metavar='N', type=float, default=0.5,
     help='The latitude resolution deg/pix')
@@ -165,7 +170,8 @@ def reproj_wait_for_all():
                 break
         time.sleep(1)
 
-def run_mosaic(image_path, body_name, mosaic_root, reset_num):
+def run_mosaic(image_path, body_name, mosaic_root, reset_num,
+               collapse_filters):
     args = []
     args += [PYTHON_EXE, CBMAIN_MOSAIC_BODY_PY]
     args += ['--main-logfile-level', arguments.image_logfile_level]
@@ -177,6 +183,8 @@ def run_mosaic(image_path, body_name, mosaic_root, reset_num):
     args += ['--mosaic-root', mosaic_root]
     if reset_num:
         args += ['--reset-mosaic']
+    if collapse_filters:
+        args += ['--normalize-images']
     args += ['--lat-resolution', '%.3f'%arguments.lat_resolution] 
     args += ['--lon-resolution', '%.3f'%arguments.lon_resolution] 
     args += ['--latlon-type', arguments.latlon_type] 
@@ -268,7 +276,7 @@ def process_body(body_name, good_image_list, cand_image_list):
                       cand_lon_shadow_dir, cand_lat_shadow_dir,
                       cand_filter)
         cand_image_list[i] = cand_entry
-    
+        
     lon_bin_size = bootstrap_config['mosaic_lon_bin_size']
     lat_bin_size = bootstrap_config['mosaic_lat_bin_size']
     
@@ -276,7 +284,7 @@ def process_body(body_name, good_image_list, cand_image_list):
                     lon_bin_size)
     lat_bin_list = (np.arange(int(np.ceil(oops.PI / lat_bin_size))) * 
                     lat_bin_size)-oops.HALFPI
-    
+
     # Build up the seed mosaics for each bin
     bin_list = []
     
@@ -337,7 +345,8 @@ def process_body(body_name, good_image_list, cand_image_list):
                                  cand_sub_obs_lon*oops.DPR, 
                                  cand_sub_obs_lat*oops.DPR,
                                  cand_resolution, cand_filter)
-                    if len(bin_good_image_list) > 0:
+                    if (len(bin_good_image_list) > 0 or 
+                        len(bin_cand_image_list) > 0):
                         bin_list.append((bin_good_image_list, bin_cand_image_list,
                                          lon_bin, lat_bin, 
                                          lon_shadow_dir, lat_shadow_dir))
@@ -347,19 +356,22 @@ def process_body(body_name, good_image_list, cand_image_list):
          lon_bin, lat_bin,
          lon_shadow_dir, lat_shadow_dir) = bin_info
         filters = {}
-        for good_entry in bin_good_image_list:
-            (good_image_path,
-             good_sub_solar_lon, good_sub_solar_lat, 
-             good_sub_obs_lon, good_sub_obs_lat, 
-             good_phase_angle, good_resolution,
-             good_lon_shadow_dir, good_lat_shadow_dir,
-             good_filter) = good_entry
-            filters[good_filter] = True
+        if arguments.collapse_filters:
+            filters['ALL'] = True
+        else:
+            for entry in bin_good_image_list+bin_cand_image_list:
+                (image_path,
+                 sub_solar_lon, sub_solar_lat, 
+                 sub_obs_lon, sub_obs_lat, 
+                 phase_angle, resolution,
+                 lon_shadow_dir, lat_shadow_dir,
+                 filter) = entry
+                filters[filter] = True
         for filter in sorted(filters.keys()):
             new_good_image_list = [x for x in bin_good_image_list if
-                                   x[9] == filter]
+                                   filter == 'ALL' or x[9] == filter]
             new_cand_image_list = [x for x in bin_cand_image_list if
-                                   x[9] == filter]
+                                   filter == 'ALL' or x[9] == filter]
             if len(new_cand_image_list) == 0:
                 main_logger.debug(
                       'Skipping bin %.2f_%.2f_%s_%s_%s because there are '+
@@ -456,7 +468,8 @@ def process_mosaic_bin(body_name, filter,
         
         main_logger.info('Adding to mosaic from %s', good_image_path)
         found_all = False
-        run_mosaic(good_image_path, body_name, mosaic_root, reset_num) 
+        run_mosaic(good_image_path, body_name, mosaic_root, reset_num,
+                   arguments.collapse_filters) 
         
         reset_num = False
 
@@ -478,7 +491,7 @@ def process_mosaic_bin(body_name, filter,
         boot_metadata = file_read_offset_metadata(cand_image_path, 
                                                   overlay=False,
                                                   bootstrap_pref='force')
-        if boot_metadata is not None:
+        if boot_metadata is not None and 'bootstrap_status' in boot_metadata:
             if boot_metadata['bootstrap_status'] == 'Success':
                 main_logger.debug('Skipping %s - Previous bootstrap successful',
                                   file_clean_name(cand_image_path))
@@ -502,10 +515,10 @@ def process_mosaic_bin(body_name, filter,
                         cand_image_path not in mosaic_metadata['path_list']):
                         main_logger.debug('   ...but is not in mosaic - adding')
                         run_mosaic(cand_image_path, body_name, 
-                                   mosaic_root, False) 
+                                   mosaic_root, False, arguments.collapse_filters) 
                 continue
-            elif (boot_metadata['bootstrap_status'] == 'Insufficient overlap' or
-                  boot_metadata['bootstrap_status'] == 'Offset finding failed'):
+            elif (boot_metadata['bootstrap_status'] == 
+                  'Final offset finding failed'):
                 main_logger.debug('Skipping %s - Previously exhausted all '+
                                   'possibilities', 
                                   file_clean_name(cand_image_path))
@@ -515,7 +528,7 @@ def process_mosaic_bin(body_name, filter,
                                                   overlay=False,
                                                   bootstrap_pref='no')
         if cand_metadata is None:
-            main_logger.error('%s - Bootstrap offset exists but not normal offset!',
+            main_logger.error('%s - Normal offset file does not exist!',
                               file_clean_name(cand_image_path))
             continue
         
@@ -527,10 +540,13 @@ def process_mosaic_bin(body_name, filter,
             continue
 
         cand_body_metadata = bodies_metadata[body_name]
-        total_low_res = np.sum(cand_body_metadata['latlon_mask'])
-        if total_low_res == 0:
+        if not np.any(cand_body_metadata['latlon_mask']):
             main_logger.debug('Skipping %s - Empty latlon mask', 
                               file_clean_name(cand_image_path))
+            bootstrap_metadata = copy.deepcopy(cand_metadata)
+            bootstrap_metadata['bootstrapped'] = True
+            bootstrap_metadata['bootstrap_status'] = 'Body not present in image'
+            file_write_offset_metadata(cand_image_path, bootstrap_metadata)
             continue
 
         main_logger.debug('Keeping %s', file_clean_name(cand_image_path))
@@ -543,6 +559,8 @@ def process_mosaic_bin(body_name, filter,
 
     while len(new_cand_image_list) > 0:
         mosaic_metadata = file_read_mosaic_metadata(body_name, mosaic_root)
+        if mosaic_metadata is None:
+            break # The mosaic is empty!
         mosaic_full_mask = mosaic_metadata['full_mask']
         mosaic_res = mosaic_metadata['resolution']
         best_entry_idx = None
@@ -555,6 +573,7 @@ def process_mosaic_bin(body_name, filter,
              cand_last_overlap_frac,
              cand_last_tried_overlap_frac,
              cand_last_mosaic_overlap_res) = cand_entry
+            cand_mask = cand_body_metadata['latlon_mask']
             overlap_arr, mosaic_overlap_res = _bootstrap_mask_overlap(
                                                           mosaic_full_mask, 
                                                           cand_mask, mosaic_res)
@@ -590,15 +609,20 @@ def process_mosaic_bin(body_name, filter,
                 cand_resolution*bootstrap_config['max_res_factor']):
                 main_logger.debug(descr+' - Resolution difference too great')
                 continue
+
+            if frac_used < bootstrap_config['min_coverage_frac']:
+                main_logger.debug(descr+' - Too little coverage')
+                continue
                 
             if frac_used == cand_last_tried_overlap_frac:
                 main_logger.debug(descr+' - Already tried this overlap') 
                 continue
+
             main_logger.debug(descr)
-            if frac_used >= bootstrap_config['min_coverage_frac']:
-                if highest_res is None or highest_res < cand_resolution:
-                    best_entry_idx = entry_idx
-                    highest_res = cand_resolution 
+            
+            if highest_res is None or highest_res < cand_resolution:
+                best_entry_idx = entry_idx
+                highest_res = cand_resolution 
         
         if best_entry_idx is None:
             main_logger.debug('No more valid candidates')
@@ -620,6 +644,9 @@ def process_mosaic_bin(body_name, filter,
                                   cand_image_path, cand_body_metadata):
             del new_cand_image_list[best_entry_idx]
 
+    if mosaic_metadata is None:
+        main_logger.debug('Mosaic is empty! Marking all candidates as bad')
+        
     for entry_idx, cand_entry in enumerate(new_cand_image_list):
         (cand_image_path,
          cand_resolution,
@@ -632,8 +659,13 @@ def process_mosaic_bin(body_name, filter,
                                                   bootstrap_pref='no')
         bootstrap_metadata = copy.deepcopy(cand_metadata)
         bootstrap_metadata['bootstrapped'] = True
-        if cand_last_tried_overlap_frac < bootstrap_config['min_coverage_frac']:
-            bootstrap_metadata['bootstrap_status'] = 'Insufficient overlap'
+        if (mosaic_metadata is None or
+            cand_last_tried_overlap_frac < 
+            bootstrap_config['min_coverage_frac']):
+            bootstrap_metadata['bootstrap_status'] = 'Insufficient coverage'
+        elif (cand_last_mosaic_overlap_res > 
+              cand_resolution*bootstrap_config['max_res_factor']):
+            bootstrap_metadata['bootstrap_status'] = 'Insufficient resolution'
         else:
             bootstrap_metadata['bootstrap_status'] = 'Final offset finding failed'
         main_logger.debug('Marking %s as failed', file_clean_name(cand_image_path))
@@ -707,7 +739,7 @@ def find_offset_and_update(body_name, mosaic_root, mosaic_metadata,
 
     run_offset(cand_path, body_name, mosaic_root)
     new_metadata = file_read_offset_metadata(cand_path, bootstrap_pref='force',
-                                             overlay=False)
+                                             overlay=True)
     if new_metadata is None:
         main_logger.warning('Bootstrapping failed - program execution failure')
         bootstrap_metadata = copy.deepcopy(cand_body_metadata)
@@ -754,7 +786,8 @@ def find_offset_and_update(body_name, mosaic_root, mosaic_metadata,
 
     main_logger.debug('Adding to mosaic')
     
-    run_mosaic(cand_path, body_name, mosaic_root, False) 
+    run_mosaic(cand_path, body_name, mosaic_root, False,
+               arguments.collapse_filters) 
 
     return True
 
@@ -789,6 +822,8 @@ IMAGE_BY_MOON_DB = {}
 main_logger.info('*******************************************')
 main_logger.info('*** BEGINNING BOOTSTRAP NAVIGATION PASS ***')
 main_logger.info('*******************************************')
+main_logger.info('')
+main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
 
 for body_name in bootstrap_config['body_list']:

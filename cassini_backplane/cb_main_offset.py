@@ -138,7 +138,6 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset --first-image-num 1669795989 --last-image-num 1669856551 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1671569397 --last-image-num 1671602206 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1694646860 --last-image-num 1694652019 --image-logfile-level debug --max-subprocesses 2'
-#    command_line_str = '--force-offset --first-image-num 1694646860 --last-image-num 1694652019 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1697700931 --last-image-num 1697717648 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1702359393 --last-image-num 1702361420 --image-logfile-level debug --max-subprocesses 2'
 
@@ -430,7 +429,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
         metadata = {}
-        err = 'Offset finding failed:\n' + traceback.format_exc() 
+        err = 'Offset finding failed:\n' + traceback.format_exc()
+        metadata['bootstrapped'] = bootstrapped 
         metadata['error'] = str(sys.exc_value)
         metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
@@ -453,6 +453,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_logger.exception('Offset file writing failed - %s', image_path)
         metadata = {}
         err = 'Offset file writing failed:\n' + traceback.format_exc() 
+        metadata['bootstrapped'] = bootstrapped 
         metadata['error'] = str(sys.exc_value)
         metadata['error_traceback'] = err
         try:
@@ -482,7 +483,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         bootstrap_pref = 'force'
     else:
         bootstrap_pref = 'no'
-    metadata = file_read_offset_metadata(image_path, bootstrap_pref=bootstrap_pref)
+    metadata = file_read_offset_metadata(image_path, 
+                                         bootstrap_pref=bootstrap_pref)
     filename = file_clean_name(image_path)
     results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)

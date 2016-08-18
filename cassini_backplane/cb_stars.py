@@ -585,7 +585,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             text_draw.text((good_u,good_v+text_size[1]), star_str2, 
                            fill=1)
     
-    text = np.array(text_im.getdata()).reshape(text.shape)
+    text = np.array(text_im.getdata()).astype('bool').reshape(text.shape)
     
     return overlay, text
 
@@ -1256,6 +1256,14 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
+
+    if len(star_list) > 0:
+        first_star = star_list[0]
+        smear_amt = np.sqrt(first_star.move_u**2+first_star.move_v**2)
+        if smear_amt > stars_config['max_smear']:
+            logger.debug(
+             'FAILED to find a valid offset - star smear is too great')
+            return metadata
 
     # A list of offsets that we have already tried so we don't waste time
     # trying them a second time.

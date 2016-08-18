@@ -257,6 +257,9 @@ def master_find_offset(obs,
     logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
                  'allow_rings %d',
                  allow_stars, allow_saturn, allow_moons, allow_rings)
+    if botsim_offset is not None:
+        logger.info('BOTSIM offset U,V %d,%d', botsim_offset[0],
+                    botsim_offset[1])
     if bodies_cartographic_data is None:
         logger.info('No cartographic data provided')
     else:
@@ -399,7 +402,7 @@ def master_find_offset(obs,
                 found_front_body = True
         if found_front_body:
             logger.debug('Image is entirely rings but %s is in front',
-                         body_name)
+                         inv['name'])
         else:
             logger.info('Image is entirely rings')
             entirely_rings = True
@@ -622,6 +625,7 @@ def master_find_offset(obs,
                                          obs, extend_fov=extend_fov,
                                          always_create_model=True,
                                          label_avoid_mask=label_avoid_mask,
+                                         bodies_model_list=bodies_model_list,
                                          rings_config=rings_config)
         metadata['rings_metadata'] = rings_metadata
         if label_avoid_mask is not None:
@@ -723,8 +727,8 @@ def master_find_offset(obs,
                                                       False))
     else:
         # Try overriding just body curvature
-        if can_override_body_limb:
-            model_phase_info_list.append((0.35, False,  True, False, False, False))
+        if can_override_body_curvature:
+            model_phase_info_list.append((0.35,  True, False, False, False, False))
 
         # Try overriding just body limbs
         if can_override_body_limb:
@@ -830,11 +834,15 @@ def master_find_offset(obs,
         # We have at least one viable component of the model,
         # so combine everything together and try to find the offset
         body_model_list.reverse()
-        final_model = _combine_models(body_model_list, solid=True, 
-                                      masked=masked_model)
-        if use_rings_model:
-            final_model = _combine_models([final_model, rings_model],
+        if len(body_model_list) == 0:
+            assert use_rings_model
+            final_model = _normalize(rings_model)
+        else:
+            final_model = _combine_models(body_model_list, solid=True,
                                           masked=masked_model)
+            if use_rings_model:
+                final_model = _combine_models([final_model, rings_model],
+                                              masked=masked_model)
 
         gaussian_blur = offset_config['default_gaussian_blur']
         if model_blur_amount is not None:

@@ -190,10 +190,16 @@ def log_setup_main_logging(module_name,
         else:
             main_log_path = os.path.join(CB_RESULTS_ROOT, 'logs')
             if not os.path.exists(main_log_path):
-                os.mkdir(main_log_path)
+                try:
+                    os.mkdir(main_log_path)
+                except OSError: # Necessary for race conditions
+                    pass
             main_log_path = os.path.join(main_log_path, module_name)
             if not os.path.exists(main_log_path):
-                os.mkdir(main_log_path)
+                try:
+                    os.mkdir(main_log_path)
+                except OSError: # Necessary for race conditions
+                    pass
             main_log_datetime = datetime.datetime.now().isoformat()[:-7]
             main_log_datetime = main_log_datetime.replace(':','-')
             main_log_path = os.path.join(main_log_path, 

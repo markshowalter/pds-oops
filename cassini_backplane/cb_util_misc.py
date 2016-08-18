@@ -36,29 +36,36 @@ def shift_1d(a, offset):
 def find_shift_1d(a, b, n):
     best_amt = None
     best_rms = 1e38
+    if a.shape[0] < b.shape[0]:
+        pad_a = np.zeros(b.shape[0])
+        pad_a[:a.shape[0]] = a
+    else:
+        pad_a = a
     pad_b = np.zeros(b.shape[0]+2*n)
     pad_b[n:b.shape[0]+n] = b
     for amt in xrange(-n, n+1):
         b2 = pad_b[amt+n:amt+n+b.shape[0]]
-        rms = np.sum((a-b2)**2)
+        rms = np.sum((pad_a-b2)**2)
         if rms < best_rms:
             best_rms = rms
             best_amt = amt
     return -best_amt
 
 def _simple_filter_name_helper(filter1, filter2, consolidate_pol):
-    if filter1 == 'CL1' and filter2 == 'CL2':
-        filter = 'CLEAR'
-    else:
-        filter = filter1
-        if (filter == 'CL1' or
-            (consolidate_pol and 
-             (filter == 'P0' or filter == 'P60' or filter == 'P120'))):
-            filter = 'P'
-        if filter2 != 'CL2':
-            filter += '+' + filter2
+    if consolidate_pol:
+        if filter1 == 'P0' or filter1 == 'P60' or filter1 == 'P120':
+            filter1 = 'P'
 
-    return filter
+    if filter1 == 'CL1' and filter2 == 'CL2':
+        return 'CLEAR'
+
+    if filter1 == 'CL1':
+        return filter2
+    
+    if filter2 == 'CL2':
+        return filter1
+        
+    return filter1 + '+' + filter2
 
 def simple_filter_name(obs, consolidate_pol=False):
     return _simple_filter_name_helper(obs.filter1, obs.filter2,
