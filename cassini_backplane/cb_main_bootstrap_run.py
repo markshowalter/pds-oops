@@ -555,7 +555,6 @@ def process_mosaic_bin(body_name, filter,
              cand_last_overlap_frac,
              cand_last_tried_overlap_frac,
              cand_last_mosaic_overlap_res) = cand_entry
-            cand_mask = cand_body_metadata['latlon_mask'].reshape((180,360)) # XXX
             overlap_arr, mosaic_overlap_res = _bootstrap_mask_overlap(
                                                           mosaic_full_mask, 
                                                           cand_mask, mosaic_res)

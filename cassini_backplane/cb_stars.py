@@ -184,9 +184,6 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
         star.move_u = u2-u1
         star.move_v = v2-v1
 
-#        star.move_u = 0 # XXX
-#        star.move_v = 0
-
         new_star_list.append(star)
 
     logger.debug(

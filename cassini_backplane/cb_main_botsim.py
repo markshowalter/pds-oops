@@ -217,7 +217,7 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
                                                   bootstrap=False)
         
         if os.path.exists(image_log_path):
-            os.remove(image_log_path) # XXX Need option to not do this
+            os.remove(image_log_path)
             
         image_log_filehandler = cb_logging.log_add_file_handler(
                                         image_log_path, image_logfile_level)

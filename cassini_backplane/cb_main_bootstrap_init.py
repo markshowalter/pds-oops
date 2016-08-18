@@ -93,7 +93,6 @@ bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
 ###############################################################################
 
 def check_add_one_image(image_path):
-    """XXX DOCUMENT THIS"""
     image_filename = file_clean_name(image_path)
 
     metadata = file_read_offset_metadata(image_path, overlay=False,
@@ -195,7 +194,7 @@ def check_add_one_image_good(image_path, image_filename, metadata):
         if body_name not in bodies_metadata:
             continue
         body_metadata = bodies_metadata[body_name]
-        if 'in_saturn_shadow' in body_metadata and body_metadata['in_saturn_shadow']: # XXX
+        if body_metadata['in_saturn_shadow']:
             main_logger.debug('%s - %s - In Saturn\'s shadow',
                               image_filename, body_name)
             continue
@@ -216,11 +215,11 @@ def check_add_one_image_good(image_path, image_filename, metadata):
                               image_filename, body_name)
             continue            
 
-        if (body_metadata['occluded_by'] is not None and
-            len(body_metadata['occluded_by']) > 0):
-            main_logger.debug('%s - %s - Occluded by %s', 
+        if (body_metadata['occulted_by'] is not None and
+            len(body_metadata['occulted_by']) > 0):
+            main_logger.debug('%s - %s - Occulted by %s', 
                               image_filename, body_name, 
-                              str(body_metadata['occluded_by']))
+                              str(body_metadata['occulted_by']))
             continue
             
         if phase_angle > bootstrap_config['max_phase_angle']:

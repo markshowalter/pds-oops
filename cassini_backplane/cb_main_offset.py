@@ -119,7 +119,7 @@ if len(command_list) == 0:
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
 
-    command_line_str = 'N1602268640_2 --force-offset --image-console-level debug --display-offset-results' # 
+    command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # 
 
 
 # MOSAIC TEST
