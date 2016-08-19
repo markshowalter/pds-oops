@@ -18,10 +18,13 @@ import traceback
 import oops.inst.cassini.iss as iss
 import oops
 
+# iss.initialize(ck='predicted')
+
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
 from cb_util_file import *
+
 
 command_list = sys.argv[1:]
 
@@ -119,7 +122,7 @@ if len(command_list) == 0:
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
 
-    command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # 
+    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # 
 
 
 # MOSAIC TEST
@@ -251,6 +254,12 @@ parser.add_argument(
     '--body-cartographic-data', dest='body_cartographic_data', action='append',
     metavar='BODY=MOSAIC',
     help='The mosaic providing cartographic data for the given BODY')
+
+# Arguments about overlay and PNG file generation
+parser.add_argument(
+    '--overlay-show-star-streaks', action='store_true', default=False,
+    help='Show star streaks in the overlay and PNG files')
+
 
 file_add_selection_arguments(parser)
 
@@ -424,7 +433,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                               allow_saturn=allow_saturn,
                               botsim_offset=botsim_offset,
                               bodies_cartographic_data=cartographic_data,
-                              bootstrapped=bootstrapped)
+                              bootstrapped=bootstrapped,
+                              stars_show_streaks=
+                                 arguments.overlay_show_star_streaks)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
