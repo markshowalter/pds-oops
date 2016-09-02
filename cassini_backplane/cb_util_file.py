@@ -17,6 +17,8 @@
 #    file_write_offset_metadata
 #    file_img_to_png_file
 #    file_write_png_from_image
+#    file_read_predicted_metadata
+#    file_write_predicted_metadata
 #    file_mosaic_path
 #    file_read_mosaic_metadata
 #    file_write_mosaic_metadata
@@ -329,7 +331,8 @@ def file_read_iss_file(path):
 ###############################################################################
 
 
-def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False):
+def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
+                  include_image_filename=True):
     """Results path is of the form:
     
     <ROOT>/<file_type>/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
@@ -362,7 +365,11 @@ def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False):
             os.mkdir(part_dir1)
         except OSError:
             pass
-    return file_clean_join(part_dir1, filename)
+    if include_image_filename:
+        ret = file_clean_join(part_dir1, filename)
+    else:
+        ret = part_dir1
+    return ret
 
 
 ### LOG FILES
@@ -575,6 +582,50 @@ def file_write_png_from_image(img_path, image, bootstrap=False):
     im = Image.fromarray(image)
     im.save(fn)
 
+
+### PREDICTED KERNEL METADATA
+
+def file_img_to_predicted_path(img_path, make_dirs=False):
+    fn = _results_path(img_path, 'pred', make_dirs=make_dirs, 
+                       include_image_filename=False)
+    fn = file_clean_join(fn, 'PREDICTED-METADATA.dat')
+    return fn
+
+def file_read_predicted_metadata(img_path):
+    pred_path = file_img_to_predicted_path(img_path)
+    if not os.path.exists(pred_path):
+        return None
+
+    pred_fp = open(pred_path, 'rb')
+    metadata = msgpack.unpackb(pred_fp.read(), 
+                               object_hook=msgpack_numpy.decode)
+    pred_fp.close()
+
+    filename = file_clean_name(img_path)
+    
+    if filename not in metadata:
+        return None
+    
+    return metadata[filename]
+
+def file_write_predicted_metadata(img_path, metadata):
+    pred_path = file_img_to_predicted_path(img_path, make_dirs=True)
+    pred_metadata = {}
+    if os.path.exists(pred_path):
+        pred_fp = open(pred_path, 'rb')
+        pred_metadata = msgpack.unpackb(pred_fp.read(), 
+                                        object_hook=msgpack_numpy.decode)
+        pred_fp.close()
+    
+    filename = file_clean_name(img_path)
+    
+    pred_metadata[filename] = metadata
+    
+    pred_fp = open(pred_path, 'wb')
+    pred_fp.write(msgpack.packb(pred_metadata, 
+                                default=msgpack_numpy.encode))    
+    pred_fp.close()
+    
 
 ### BOOTSTRAP DATA FILES
 

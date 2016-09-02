@@ -29,6 +29,7 @@ from cb_correlate import *
 from cb_rings import *
 from cb_stars import *
 from cb_titan import *
+from cb_util_file import *
 from cb_util_image import *
 
 _LOGGING_NAME = 'cb.' + __name__
@@ -152,22 +153,31 @@ def master_find_offset(obs,
 
           Data about the image:
 
+            'full_path'        The full path of the source image.
             'camera'           The name of the camera: 'NAC' or 'WAC'.
             'filter1'          The names of the filters used.
             'filter2'
             'image_shape'      A tuple indicating the shape (in pixels) of the
                                image.
             'midtime'          The midtime of the observation.
+            'texp'             The exposure duration of the observation.
             'ra_dec_corner_orig'
                                A tuple (ra_min, ra_max, dec_min, dec_max)
                                giving the corners of the FOV-extended image
-                               (apparent) with the original SPICE navigation.
+                               (apparent) with the original SPICE navigation at
+                               the image midtime.
+            'ra_dec_center_pred'
+                               A tuple (ra,dec,dra/dt,ddec/dt) for the center 
+                               of the image (apparent) with the original SPICE 
+                               predicted kernels at the image midtime.
             'ra_dec_center_orig'
                                A tuple (ra,dec) for the center of the image
-                               (apparent) with the original SPICE navigation.
+                               (apparent) with the original SPICE navigation
+                               at the image midtime.
             'ra_dec_center_offset'
                                A tuple (ra,dec) for the center of the image
-                               (apparent) with the new navigation.
+                               (apparent) with the new navigation at the
+                               image midtime.
 
           Data about the offset process:
           
@@ -303,17 +313,29 @@ def master_find_offset(obs,
     # Initialize the metadata to at least have something for each key
     metadata = {}
     # Image
+    metadata['full_path'] = obs.full_path
     metadata['camera'] = obs.detector
     metadata['filter1'] = obs.filter1
     metadata['filter2'] = obs.filter2
     metadata['image_shape'] = obs.data.shape
     metadata['midtime'] = obs.midtime
+    metadata['texp'] = obs.texp
     metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
                                            obs, extend_fov=extend_fov)
     set_obs_center_bp(obs)
     ra = obs.center_bp.right_ascension()
     dec = obs.center_bp.declination()
     metadata['ra_dec_center_orig'] = (ra.vals,dec.vals)
+    pred_metadata = file_read_predicted_metadata(obs.full_path)
+    if pred_metadata is None:
+        metadata['ra_dec_center_pred'] = None
+        logger.warn('No predicted kernel information available')
+    else:
+        metadata['ra_dec_center_pred'] = (
+                  pred_metadata['ra_center_midtime'],
+                  pred_metadata['dec_center_midtime'],
+                  pred_metadata['dra_dt'],
+                  pred_metadata['ddec_dt'])
     metadata['ra_dec_center_offset'] = None
     # Offset process
     metadata['start_time'] = start_time
@@ -474,7 +496,7 @@ def master_find_offset(obs,
     if (not entirely_body and
         allow_stars and (not botsim_offset or create_overlay) and
         not force_bootstrap_candidate):
-        stars_metadata = stars_find_offset(obs,
+        stars_metadata = stars_find_offset(obs, metadata['ra_dec_center_pred'],
                                            extend_fov=extend_fov,
                                            stars_config=stars_config)
         metadata['stars_metadata'] = stars_metadata
@@ -797,7 +819,7 @@ def master_find_offset(obs,
             body_model_list.append(body_model)
             used_model_str_list.append(body_name)
 
-        if override_rings_curvature_ok and len(model_list) == 0:
+        if override_rings_curvature_ok and len(body_model_list) == 0:
             # We only allow flat rings when there is also a body to use;
             # otherwise we're pretty much guaranteed the navigation will be
             # bad.
@@ -1167,6 +1189,7 @@ def master_find_offset(obs,
                               obs,
                               stars_metadata['full_star_list'], offset,
                               label_avoid_mask=label_avoid_mask,
+                              show_streaks=stars_show_streaks,
                               stars_config=stars_config)
             if offset is not None:
                 # We need to shift the original extended overlay, but not the

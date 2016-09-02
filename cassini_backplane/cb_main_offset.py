@@ -18,8 +18,6 @@ import traceback
 import oops.inst.cassini.iss as iss
 import oops
 
-# iss.initialize(ck='predicted')
-
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
@@ -122,7 +120,12 @@ if len(command_list) == 0:
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
 
-    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # 
+#    command_line_str = 'N1656930617_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks through the D ring, photometry OK without ring subtraction 
+#    command_line_str = 'N1659250659_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, fails photometry 
+#    command_line_str = 'N1575647907_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, requires pred kernel 
+#    command_line_str = 'W1553000979_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, BL1, photometry OK
+#    command_line_str = 'W1620385882_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
+    command_line_str = 'N1498395457_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
 
 
 # MOSAIC TEST
@@ -161,7 +164,9 @@ parser = argparse.ArgumentParser(
 ###XXXX####
 # --image-logfile is incompatible with --max-subprocesses > 0
 
-# Arguments about logging
+###############################
+### Arguments about logging ###
+###############################
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
@@ -192,7 +197,9 @@ parser.add_argument(
     '--profile', action='store_true', 
     help='Do performance profiling')
 
-# Arguments about subprocesses
+####################################
+### Arguments about subprocesses ###
+####################################
 parser.add_argument(
     '--is-subprocess', action='store_true',
     help='Internal flag used to indicate this process was spawned by a parent')
@@ -200,7 +207,9 @@ parser.add_argument(
     '--max-subprocesses', type=int, default=0, metavar='NUM',
     help='The maximum number jobs to perform in parallel')
 
-# Arguments about the offset process
+##########################################
+### Arguments about the offset process ###
+##########################################
 parser.add_argument(
     '--force-offset', action='store_true', default=False,
     help='Force offset computation even if the offset file exists')
@@ -254,12 +263,25 @@ parser.add_argument(
     '--body-cartographic-data', dest='body_cartographic_data', action='append',
     metavar='BODY=MOSAIC',
     help='The mosaic providing cartographic data for the given BODY')
+parser.add_argument(
+    '--use-predicted-kernels', action='store_true', default=False,
+    help='Use predicted CK kernels')
 
-# Arguments about overlay and PNG file generation
+#######################################################
+### Arguments about overlay and PNG file generation ###
+#######################################################
 parser.add_argument(
     '--overlay-show-star-streaks', action='store_true', default=False,
     help='Show star streaks in the overlay and PNG files')
-
+parser.add_argument(
+    '--png-blackpoint', type=float, default=None,
+    help='Set the blackpoint for the PNG file')
+parser.add_argument(
+    '--png-whitepoint', type=float, default=None,
+    help='Set the whitepoint for the PNG file')
+parser.add_argument(
+    '--png-gamma', type=float, default=None,
+    help='Set the gamma for the PNG file')
 
 file_add_selection_arguments(parser)
 
@@ -290,6 +312,10 @@ def collect_cmd_line(image_path):
         ret += ['--no-allow-moons']
     if not arguments.allow_saturn:
         ret += ['--no-allow-saturn']
+    if arguments.use_predicted_kernels:
+        ret += ['--use-predicted-kernels']
+    if arguments.overlay_show_star_streaks:
+        ret += ['--overlay-show-star-streaks']
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -470,7 +496,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         try:
             file_write_offset_metadata(image_path, metadata)
         except:
-            main_logger.exception('Error offset file writing failed - %s', image_path)
+            main_logger.exception(
+                  'Error offset file writing failed - %s', image_path)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
@@ -483,7 +510,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         return True
 
-    png_image = offset_create_overlay_image(obs, metadata)
+    png_image = offset_create_overlay_image(
+                        obs, metadata,
+                        blackpoint=arguments.png_blackpoint,
+                        whitepoint=arguments.png_whitepoint,
+                        gamma=arguments.png_gamma)
     file_write_png_from_image(image_path, png_image,
                               bootstrap=metadata['bootstrapped'])
     
@@ -526,6 +557,9 @@ if arguments.profile and arguments.max_subprocesses == 0:
 if arguments.display_offset_results:
     root = tk.Tk()
     root.withdraw()
+
+if arguments.use_predicted_kernels:
+    iss.initialize(ck='predicted')
 
 main_logger, image_logger = log_setup_main_logging(
                'cb_main_offset', arguments.main_logfile_level, 
@@ -577,6 +611,7 @@ main_logger.info('Allow rings:   %s', str(arguments.allow_rings))
 main_logger.info('Allow moons:   %s', str(arguments.allow_moons))
 main_logger.info('Allow Saturn:  %s', str(arguments.allow_saturn))
 main_logger.info('BOTSIM offset: %s', str(botsim_offset))
+main_logger.info('Pred kernels:  %s', str(arguments.use_predicted_kernels))
 
 cartographic_data = {}
 

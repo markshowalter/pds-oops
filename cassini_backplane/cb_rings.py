@@ -1768,8 +1768,8 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     bp_radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     bp_radii = bp_radii[extend_fov[1]:extend_fov[1]+data.shape[0],
                         extend_fov[0]:extend_fov[0]+data.shape[1]]
-    min_radius = max(np.min(bp_radii), RINGS_MIN_RADIUS)
-    max_radius = min(np.max(bp_radii), RINGS_MAX_RADIUS)
+    min_radius = np.clip(np.min(bp_radii), RINGS_MIN_RADIUS, RINGS_MAX_RADIUS)
+    max_radius = np.clip(np.max(bp_radii), RINGS_MIN_RADIUS, RINGS_MAX_RADIUS)
 
     diag = np.sqrt(data.shape[0]*data.shape[1])
     
@@ -1789,6 +1789,9 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
                 min_longitude*oops.DPR, max_longitude*oops.DPR,
                 longitude_resolution*oops.DPR)
 
+    if min_radius == max_radius:
+        return None
+    
     reproj = rings_reproject(
             obs, data=data,
             radius_range=(min_radius,max_radius),
@@ -1806,7 +1809,9 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     radii = rings_generate_radii(min_radius, max_radius, 
                                  radius_resolution=radius_resolution)
     
+    min_radius = np.min(radii)
     max_radius = np.max(radii)
+    bp_radii[bp_radii < min_radius] = min_radius
     bp_radii[bp_radii > max_radius] = max_radius
 
     interp = sciinterp.interp1d(radii, radial_scan)
