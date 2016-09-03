@@ -63,7 +63,7 @@ _RINGS_MAX_LONGITUDE  = oops.TWOPI-_RINGS_LONGITUDE_SLOP*2
 
 # These are bodies that might cast shadows on the ring plane near equinox
 _RINGS_SHADOW_BODY_LIST = ['ATLAS', 'PROMETHEUS', 'PANDORA', 'EPIMETHEUS', 
-                           'JANUS', 'MIMAS', 'ENCELADUS', 'TETHYS'] # XXX
+                           'JANUS', 'MIMAS', 'ENCELADUS', 'TETHYS']
 
 #===============================================================================
 #
@@ -156,9 +156,9 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
                  (  2,                   0.43, 157.21,  572.48458))),
 
         
-    #############################################
-    ### CASSINI DIVISION - French et al (XXX) ###
-    #############################################
+    #################################################################
+    ### CASSINI DIVISION - French et al Icarus 274 (2016) 131-162 ###
+    #################################################################
 
     #######################################################################                               
     ### B RING OUTER EDGE - Nicholson, et al. Icarus 227 (2014) 152-175 ###
@@ -389,8 +389,6 @@ _RINGS_FIDUCIAL_FEATURES_FRENCH2016 = [
     ### ringfit_v1.8.Sa025S-RF-V5351.out ###
     ########################################
 
-    # XXX These need to be updated with new ringfit data when available from Dick
-    
     ### C RING ###
             
     # #135 - IEG unpaired
@@ -1004,8 +1002,6 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             # For single-sided features, see if there is another feature that
             # is too close. If there is, then throw away the current feature
             # because it won't be readily distinguishable in the real image.
-            
-            #### XXXX ### THIS IS NOT WORKING W1466448054_1
             
             if (inner is None) != (outer is None) and not force_keep_feature:
                 feature = inner
@@ -1737,6 +1733,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
+        assert False # Not currently tested
         radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
         radii = radii.copy()
         
@@ -1811,8 +1808,8 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     bp_radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
     bp_radii = bp_radii[extend_fov[1]:extend_fov[1]+data.shape[0],
                         extend_fov[0]:extend_fov[0]+data.shape[1]]
-    min_radius = max(np.min(bp_radii), RINGS_MIN_RADIUS)
-    max_radius = min(np.max(bp_radii), RINGS_MAX_RADIUS)
+    min_radius = np.clip(np.min(bp_radii), RINGS_MIN_RADIUS, RINGS_MAX_RADIUS)
+    max_radius = np.clip(np.max(bp_radii), RINGS_MIN_RADIUS, RINGS_MAX_RADIUS)
 
     diag = np.sqrt(data.shape[0]*data.shape[1])
     
@@ -1832,6 +1829,9 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
                 min_longitude*oops.DPR, max_longitude*oops.DPR,
                 longitude_resolution*oops.DPR)
 
+    if min_radius == max_radius:
+        return None
+    
     reproj = rings_reproject(
             obs, data=data,
             radius_range=(min_radius,max_radius),
@@ -1849,7 +1849,9 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     radii = rings_generate_radii(min_radius, max_radius, 
                                  radius_resolution=radius_resolution)
     
+    min_radius = np.min(radii)
     max_radius = np.max(radii)
+    bp_radii[bp_radii < min_radius] = min_radius
     bp_radii[bp_radii > max_radius] = max_radius
 
     interp = sciinterp.interp1d(radii, radial_scan)

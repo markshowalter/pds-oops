@@ -38,7 +38,7 @@ file_add_selection_arguments(parser)
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
-            to $(CB_RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
+            to $(CB_RESULTS_ROOT)/logs/cb_main_mosaic_body/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 

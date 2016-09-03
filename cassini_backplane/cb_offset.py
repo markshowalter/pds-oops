@@ -29,6 +29,7 @@ from cb_correlate import *
 from cb_rings import *
 from cb_stars import *
 from cb_titan import *
+from cb_util_file import *
 from cb_util_image import *
 
 _LOGGING_NAME = 'cb.' + __name__
@@ -152,22 +153,31 @@ def master_find_offset(obs,
 
           Data about the image:
 
+            'full_path'        The full path of the source image.
             'camera'           The name of the camera: 'NAC' or 'WAC'.
             'filter1'          The names of the filters used.
             'filter2'
             'image_shape'      A tuple indicating the shape (in pixels) of the
                                image.
             'midtime'          The midtime of the observation.
+            'texp'             The exposure duration of the observation.
             'ra_dec_corner_orig'
                                A tuple (ra_min, ra_max, dec_min, dec_max)
                                giving the corners of the FOV-extended image
-                               with the original SPICE navigation.
+                               (apparent) with the original SPICE navigation at
+                               the image midtime.
+            'ra_dec_center_pred'
+                               A tuple (ra,dec,dra/dt,ddec/dt) for the center 
+                               of the image (apparent) with the original SPICE 
+                               predicted kernels at the image midtime.
             'ra_dec_center_orig'
                                A tuple (ra,dec) for the center of the image
-                               with the original SPICE navigation.
+                               (apparent) with the original SPICE navigation
+                               at the image midtime.
             'ra_dec_center_offset'
                                A tuple (ra,dec) for the center of the image
-                               with the new navigation.
+                               (apparent) with the new navigation at the
+                               image midtime.
 
           Data about the offset process:
           
@@ -303,17 +313,29 @@ def master_find_offset(obs,
     # Initialize the metadata to at least have something for each key
     metadata = {}
     # Image
+    metadata['full_path'] = obs.full_path
     metadata['camera'] = obs.detector
     metadata['filter1'] = obs.filter1
     metadata['filter2'] = obs.filter2
     metadata['image_shape'] = obs.data.shape
     metadata['midtime'] = obs.midtime
+    metadata['texp'] = obs.texp
     metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
                                            obs, extend_fov=extend_fov)
     set_obs_center_bp(obs)
     ra = obs.center_bp.right_ascension()
     dec = obs.center_bp.declination()
     metadata['ra_dec_center_orig'] = (ra.vals,dec.vals)
+    pred_metadata = file_read_predicted_metadata(obs.full_path)
+    if pred_metadata is None:
+        metadata['ra_dec_center_pred'] = None
+        logger.warn('No predicted kernel information available')
+    else:
+        metadata['ra_dec_center_pred'] = (
+                  pred_metadata['ra_center_midtime'],
+                  pred_metadata['dec_center_midtime'],
+                  pred_metadata['dra_dt'],
+                  pred_metadata['ddec_dt'])
     metadata['ra_dec_center_offset'] = None
     # Offset process
     metadata['start_time'] = start_time
@@ -447,7 +469,7 @@ def master_find_offset(obs,
             else:
                 entirely_body = front_body_name
                 metadata['body_only'] = front_body_name
-                logger.info('Image is covered by %s, which is not occluded '+
+                logger.info('Image is covered by %s, which is not occulted '+
                             'by anything', front_body_name)
 
     if entirely_body and len(large_bodies_by_range) != 1:
@@ -474,7 +496,7 @@ def master_find_offset(obs,
     if (not entirely_body and
         allow_stars and (not botsim_offset or create_overlay) and
         not force_bootstrap_candidate):
-        stars_metadata = stars_find_offset(obs,
+        stars_metadata = stars_find_offset(obs, metadata['ra_dec_center_pred'],
                                            extend_fov=extend_fov,
                                            stars_config=stars_config)
         metadata['stars_metadata'] = stars_metadata
@@ -540,44 +562,44 @@ def master_find_offset(obs,
                                                  body_overlay_text)
 
     # We have all the body models and all the rings information. Go through
-    # the bodies and see if they are partially occluded by anything else
+    # the bodies and see if they are partially occulted by anything else
     # and mark appropriately.
-    # Note that this includes being occluded by a moon or rings that will
+    # Note that this includes being occulted by a moon or rings that will
     # actually be outside the image once the final offset is found. It's
     # a pain to get around this behavior, and it's unlikely to ever matter.
     for body_idx in xrange(len(bodies_model_list)-1, -1, -1):
         # Start with the backmost body and work forward
         (body_model, body_metadata, 
          body_overlay_text) = bodies_model_list[body_idx]
-        body_metadata['occluded_by'] = None
+        body_metadata['occulted_by'] = None
         if body_idx > 0: # Not the frontmost body
-            # See if any bodies in front occlude this body
+            # See if any bodies in front occult this body
             for body_idx2 in xrange(body_idx):
                 (body_model2, body_metadata2, 
                  body_overlay_text2) = bodies_model_list[body_idx2]
                 if np.any(np.logical_and(body_model != 0, body_model2 != 0)):
-                    if body_metadata['occluded_by'] is None:
-                        body_metadata['occluded_by'] = []
-                    body_metadata['occluded_by'].append(body_metadata2['body_name'])
-            # See if the rings occlude this body
+                    if body_metadata['occulted_by'] is None:
+                        body_metadata['occulted_by'] = []
+                    body_metadata['occulted_by'].append(body_metadata2['body_name'])
+            # See if the rings occult this body
             body_rings_dist = rings_dist[body_model != 0]
             inv = body_metadata['inventory']
             if np.any(body_rings_dist < inv['range']):
-                if body_metadata['occluded_by'] is None:
-                    body_metadata['occluded_by'] = []
-                body_metadata['occluded_by'].append('RINGS')
-        if body_metadata['occluded_by'] is not None:
-            logger.info('%s is occluded by %s', body_metadata['body_name'],
-                        str(body_metadata['occluded_by']))                
+                if body_metadata['occulted_by'] is None:
+                    body_metadata['occulted_by'] = []
+                body_metadata['occulted_by'].append('RINGS')
+        if body_metadata['occulted_by'] is not None:
+            logger.info('%s is occulted by %s', body_metadata['body_name'],
+                        str(body_metadata['occulted_by']))                
     
     if (entirely_body and 
-        bodies_metadata[entirely_body]['occluded_by'] is not None):
+        bodies_metadata[entirely_body]['occulted_by'] is not None):
         logger.warn('Something is very wrong - Image marked as entirely body '+
-                    'but body is occluded by something!')
+                    'but body is occulted by something!')
 
     if (entirely_body and 
-        bodies_metadata[entirely_body]['occluded_by'] is not None):
-        logger.debug('Marking as not entirely body %s due to occluding body',
+        bodies_metadata[entirely_body]['occulted_by'] is not None):
+        logger.debug('Marking as not entirely body %s due to occulting body',
                      entirely_body)
         entirely_body = None
  
@@ -784,8 +806,6 @@ def master_find_offset(obs,
 
         model_blur_amount = None
         
-        # XXX Need to deal with moons on the far side of the rings
-
         # Deal with bodies first
                 
         for body_model, body_metadata, body_text in navigable_bodies_model_list:
@@ -801,7 +821,7 @@ def master_find_offset(obs,
             body_model_list.append(body_model)
             used_model_str_list.append(body_name)
 
-        if override_rings_curvature_ok and len(model_list) == 0:
+        if override_rings_curvature_ok and len(body_model_list) == 0:
             # We only allow flat rings when there is also a body to use;
             # otherwise we're pretty much guaranteed the navigation will be
             # bad.
@@ -975,7 +995,7 @@ def master_find_offset(obs,
                 offset_config['bodies_cov_threshold']):
             logger.info('Too few moons, no rings, model has too little '+
                         'coverage - reducing confidence')
-            model_confidence *= 0.25 # XXX CLEAN THIS UP
+            model_confidence *= 0.25
 
     metadata['model_offset'] = model_offset
     metadata['model_confidence'] = model_confidence
@@ -1181,6 +1201,7 @@ def master_find_offset(obs,
                               obs,
                               stars_metadata['full_star_list'], offset,
                               label_avoid_mask=label_avoid_mask,
+                              show_streaks=stars_show_streaks,
                               stars_config=stars_config)
             if offset is not None:
                 # We need to shift the original extended overlay, but not the

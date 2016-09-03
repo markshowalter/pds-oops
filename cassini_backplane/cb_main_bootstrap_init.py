@@ -43,7 +43,7 @@ file_add_selection_arguments(parser)
 parser.add_argument(
     '--main-logfile', metavar='FILENAME',
     help='''The full path of the logfile to write for the main loop; defaults 
-            to $(CB_RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
+            to $(CB_RESULTS_ROOT)/logs/cb_main_bootstrap_init/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
     '--main-logfile-level', metavar='LEVEL', default='info', 
@@ -95,7 +95,6 @@ bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
 ###############################################################################
 
 def check_add_one_image(image_path):
-    """XXX DOCUMENT THIS"""
     image_filename = file_clean_name(image_path)
 
     metadata = file_read_offset_metadata(image_path, overlay=False,
@@ -219,11 +218,11 @@ def check_add_one_image_good(image_path, image_filename, metadata):
                               image_filename, body_name)
             continue            
 
-        if (body_metadata['occluded_by'] is not None and
-            len(body_metadata['occluded_by']) > 0):
-            main_logger.debug('%s - %s - Occluded by %s', 
+        if (body_metadata['occulted_by'] is not None and
+            len(body_metadata['occulted_by']) > 0):
+            main_logger.debug('%s - %s - Occulted by %s', 
                               image_filename, body_name, 
-                              str(body_metadata['occluded_by']))
+                              str(body_metadata['occulted_by']))
             continue
             
         if phase_angle > bootstrap_config['max_phase_angle']:

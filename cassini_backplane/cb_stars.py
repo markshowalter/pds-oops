@@ -87,7 +87,8 @@ def _compute_dimmest_visible_star_vmag(obs, stars_config):
     return mag
 
 def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
-                        mag_min, mag_max, extend_fov, stars_config, **kwargs):
+                        mag_min, mag_max, radec_movement,
+                        extend_fov, stars_config, **kwargs):
     """Return a list of stars with the given constraints.
     
     See stars_list_for_obs for full details."""
@@ -148,20 +149,32 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     # margin beyond the edge
     
     ra_dec_list = [x.ra_dec_with_pm(obs.midtime) for x in star_list]
-    ra_list = [x[0] for x in ra_dec_list]
-    dec_list = [x[1] for x in ra_dec_list]
+    ra_list = Scalar([x[0] for x in ra_dec_list])
+    dec_list = Scalar([x[1] for x in ra_dec_list])
     
     uv = obs.uv_from_ra_and_dec(ra_list, dec_list, apparent=True)
     u_list, v_list = uv.to_scalars()
     u_list = u_list.vals
     v_list = v_list.vals
 
-    uv1 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=0., apparent=True)
+    if radec_movement is not None:
+        uv1 = obs.uv_from_ra_and_dec(ra_list-radec_movement[0],
+                                     dec_list-radec_movement[1], 
+                                     apparent=True)
+    else:
+        uv1 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=0., 
+                                     apparent=True)
     u1_list, v1_list = uv1.to_scalars()
     u1_list = u1_list.vals
     v1_list = v1_list.vals
 
-    uv2 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=1., apparent=True)
+    if radec_movement is not None:
+        uv2 = obs.uv_from_ra_and_dec(ra_list+radec_movement[0],
+                                     dec_list+radec_movement[1], 
+                                     apparent=True)
+    else:
+        uv2 = obs.uv_from_ra_and_dec(ra_list, dec_list, time_frac=1., 
+                                     apparent=True)
     u2_list, v2_list = uv2.to_scalars()
     u2_list = u2_list.vals
     v2_list = v2_list.vals
@@ -184,9 +197,6 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
         star.move_u = u2-u1
         star.move_v = v2-v1
 
-#        star.move_u = 0 # XXX
-#        star.move_v = 0
-
         new_star_list.append(star)
 
     logger.debug(
@@ -195,12 +205,16 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
 
     return new_star_list
 
-def stars_list_for_obs(obs, extend_fov=(0,0), stars_config=None,
+def stars_list_for_obs(obs, radec_movement,
+                       extend_fov=(0,0), stars_config=None,
                       **kwargs):
     """Return a list of stars in the FOV of the obs.
 
     Inputs:
         obs                The observation.
+        radec_movement     A tuple (dra,ddec) that gives the movement of the
+                           camera in each half of the exposure. None if
+                           no movement is available.
         extend_fov         The amount beyond the image in the (U,V) dimension
                            to return stars (a star's U/V value will be negative
                            or greater than the FOV shape).
@@ -246,6 +260,7 @@ def stars_list_for_obs(obs, extend_fov=(0,0), stars_config=None,
         star_list = _stars_list_for_obs(obs,
                                         ra_min, ra_max, dec_min, dec_max,
                                         mag_min, mag_max,
+                                        radec_movement,
                                         extend_fov, stars_config, **kwargs)
         full_star_list += star_list
         
@@ -438,6 +453,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
                                      offset=(v_frac,u_frac),
                                      scale=1.)
             psf = psf / np.max(psf) * 255
+            psf = psf.astype('uint8')
             
             overlay[v_int-psf_size_half_v:v_int+psf_size_half_v+1, 
                     u_int-psf_size_half_u:u_int+psf_size_half_u+1] += psf
@@ -747,12 +763,6 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
     if stars_config is None:
         stars_config = STARS_DEFAULT_CONFIG
         
-    if not stars_config['perform_photometry']:
-        for star in star_list:
-            star.integrated_dn = 0.
-            star.photometry_confidence = 1.
-        return len(star_list)
-    
     offset_u = 0
     offset_v = 0
     if offset is not None:
@@ -812,7 +822,7 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
 #
 #===============================================================================
 
-def _stars_mark_conflicts(obs, star, offset, stars_config):
+def _stars_mark_conflicts(obs, star, offset, rings_can_conflict, stars_config):
     """Check if a star conflicts with known bodies or rings.
     
     Sets star.conflicts to a string describing why the Star conflicted.
@@ -861,22 +871,24 @@ def _stars_mark_conflicts(obs, star, offset, stars_config):
                 return True
 
     # Check for rings
-    ring_radius = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
-    ring_longitude = (obs.ext_bp.ring_longitude('saturn:ring').vals.
-                      astype('float'))
-    rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
-    long = ring_longitude[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
-
-    # XXX We might want to improve this to support the known position of the
-    # F ring core.
-    # C to A rings and F ring
-    if ((oops.SATURN_C_RING[0] <= rad <= oops.SATURN_A_RING[1]) or
-        (139890 <= rad <= 140550)): # F ring
-        logger.debug('Star %9d U %8.3f V %8.3f conflicts with rings radius '
-                     '%.1f',
-                     star.unique_number, star.u, star.v, rad)
-        star.conflicts = 'RINGS'
-        return True
+    if rings_can_conflict:
+        ring_radius = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+        ring_longitude = (obs.ext_bp.ring_longitude('saturn:ring').vals.
+                          astype('float'))
+        rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
+        long = ring_longitude[star.v+obs.extend_fov[1], 
+                              star.u+obs.extend_fov[0]]
+    
+        # XXX We might want to improve this to support the known position of the
+        # F ring core.
+        # C to A rings and F ring
+        if ((oops.SATURN_C_RING[0] <= rad <= oops.SATURN_A_RING[1]) or
+            (139890 <= rad <= 140550)): # F ring
+            logger.debug('Star %9d U %8.3f V %8.3f conflicts with rings radius '
+                         '%.1f',
+                         star.unique_number, star.u, star.v, rad)
+            star.conflicts = 'RINGS'
+            return True
     
     return False
 
@@ -956,7 +968,9 @@ def _stars_optimize_offset_list(offset_list, tolerance=1):
 
 def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                        search_multiplier, max_offsets, already_tried,
-                       debug_level, stars_config):
+                       debug_level, perform_photometry,
+                       rings_can_conflict, 
+                       radec_movement, stars_config):
     """Internal helper for stars_find_offset so the loops don't get too deep.
     
     Returns:
@@ -993,7 +1007,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
     peak_margin = 3 # Amount on each side of a correlation peak to black out
     # Make sure we have peaks that can cover 2 complete "lines" in the
     # correlation
-    if stars_config['perform_photometry']:
+    if perform_photometry:
         trial_max_offsets = (max(2*search_size_max_u+1, 
                                  2*search_size_max_v+1) //
                              (peak_margin*2+1)) + 4
@@ -1068,16 +1082,30 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
         
         something_conflicted = False
         for star in star_list:
-            res = _stars_mark_conflicts(obs, star, offset, stars_config)
+            res = _stars_mark_conflicts(obs, star, offset, rings_can_conflict,
+                                        stars_config)
             something_conflicted = something_conflicted or res
 
-        good_stars = stars_perform_photometry(obs,
-                                              obs.calib_dn_ext_data,
-                                              star_list,
-                                              offset=offset,
-                                              extend_fov=obs.extend_fov,
-                                              stars_config=stars_config)
-        logger.debug('Photometry found %d good stars', good_stars)
+        if not perform_photometry:
+            good_stars = 0
+            for star in star_list:
+                star.integrated_dn = 0.
+                if star.conflicts:
+                    star.photometry_confidence = 0.
+                else:
+                    star.photometry_confidence = 1.
+                    good_stars += 1
+            logger.debug('Photometry NOT performed')
+            photometry_str = 'WITHOUT'
+        else:
+            good_stars = stars_perform_photometry(obs,
+                                                  obs.calib_dn_ext_data,
+                                                  star_list,
+                                                  offset=offset,
+                                                  extend_fov=obs.extend_fov,
+                                                  stars_config=stars_config)
+            logger.debug('Photometry found %d good stars', good_stars)
+            photometry_str = 'with'
     
         # We have to see at least 2/3 of the really bright stars to
         # fully believe the result. If we don't see this many, it
@@ -1093,14 +1121,18 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                     seen_bright_stars += 1
         if good_stars >= min_stars:
             if bright_stars > 0 and seen_bright_stars < bright_stars*2//3:
-                logger.info('***** Enough good stars, but only saw %d '+
+                logger.info('***** Enough good stars (%s photometry), '+
+                            'but only saw %d '+
                             'out of %d bright stars - possibly bad '+
                             'offset U,V %d,%d',
+                            photometry_str, 
                             seen_bright_stars, bright_stars,
                             offset[0], offset[1])
                 # Return True so the top-level loop keeps searching
                 return offset, good_stars, peak, True, False
-            logger.info('***** Enough good stars - final offset U,V %d,%d',
+            logger.info('***** Enough good stars (%s photometry) - '+
+                        'final offset U,V %d,%d',
+                        photometry_str,
                         offset[0], offset[1])
             # Return False so the top-level loop gives up
             return offset, good_stars, peak, False, False
@@ -1128,7 +1160,9 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
         ret = _stars_find_offset(obs, filtered_data, non_conf_star_list, 
                                  min_stars, search_multiplier, 
                                  max_offsets, already_tried, 
-                                 debug_level+1, stars_config)
+                                 debug_level+1, perform_photometry,
+                                 rings_can_conflict, radec_movement,
+                                 stars_config)
         if ret[0] is not None:
             return ret
         # We know that everything in non_conf_star_list is not 
@@ -1203,11 +1237,16 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
     return (int(np.round(offset[0]+du_mean)),
             int(np.round(offset[1]+dv_mean)))
 
-def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
+def stars_find_offset(obs, ra_dec_predicted,
+                      extend_fov=(0,0), stars_config=None):
     """Find the image offset based on stars.
 
     Inputs:
         obs                The observation.
+        ra_dec_predicted   A tuple (ra, dec, dra/dt, ddec/dt) giving the 
+                           navigation information from the more-precise
+                           predicted kernels. This is used to make accurate
+                           star streaks.
         extend_fov         The amount beyond the image in the (U,V) dimension
                            to model stars to find an offset.
         stars_config        Configuration parameters. None uses the default.
@@ -1220,6 +1259,8 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
             'full_star_list'    The list of Stars in the FOV.
             'num_stars',        The number of Stars in the FOV.
             'num_good_stars'    The number of Stars that photometrically match.
+            'rings_subtracted'  True if the rings were subtracted from the
+                                image.
             'start_time'        The time (s) when stars_find_offset was called.
             'end_time'          The time (s) when stars_find_offset returned.
     """
@@ -1231,7 +1272,14 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     min_dn = stars_config[('min_detectable_dn', obs_detector(obs))]
     min_stars, min_stars_conf = stars_config['min_stars_low_confidence']
     min_stars_hc, min_stars_hc_conf = stars_config['min_stars_high_confidence']
+    perform_photometry = stars_config['perform_photometry']
+
+    radec_movement = None
     
+    if ra_dec_predicted is not None:
+        radec_movement = (ra_dec_predicted[2] * obs.texp/2,
+                          ra_dec_predicted[3] * obs.texp/2)
+            
     metadata = {}
 
     set_obs_ext_bp(obs, extend_fov)
@@ -1246,9 +1294,9 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
             
 
     # Get the Star list and initialize our new fields
-    star_list = stars_list_for_obs(obs,
-                                  extend_fov=obs.extend_fov,
-                                  stars_config=stars_config)
+    star_list = stars_list_for_obs(obs, radec_movement,
+                                   extend_fov=obs.extend_fov,
+                                   stars_config=stars_config)
     for star in star_list:
         star.photometry_confidence = 0.
         star.is_bright_enough = False
@@ -1259,6 +1307,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
+    metadata['rings_subtracted'] = False
 
     if len(star_list) > 0:
         first_star = star_list[0]
@@ -1274,7 +1323,9 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
     
     # A list of offset results so we can choose the best one at the very end.
     saved_offsets = []
-        
+    
+    rings_can_conflict = True
+    
     while True:
         #
         #            *** LEVEL 1 ***
@@ -1331,6 +1382,7 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                                               extend_fov)
                     obs.data[:,:] = calib_data-rings_radial_model
                     obs.ext_data[:,:] = filtered_data
+                    rings_can_conflict = False
                     
             # Filter that calibrated data.
             # 1) Subtract the local background (median)
@@ -1408,7 +1460,11 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
                 # The remaining search levels are inside the subroutine
                 ret = _stars_find_offset(obs, filtered_data, new_star_list,
                                          min_stars, search_multipler,
-                                         5, already_tried, 4, stars_config) 
+                                         5, already_tried, 4, 
+                                         perform_photometry,
+                                         rings_can_conflict,
+                                         radec_movement,
+                                         stars_config) 
         
                 # Save the offset and maybe continue iterating
                 (offset, good_stars, corr,
@@ -1477,10 +1533,25 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
             break
     
         # End of LEVEL 1 - eliminate bright stars
-        
+
+    used_photometry = perform_photometry
+            
     if len(saved_offsets) == 0:
+        offset = None
         good_stars = 0
         logger.info('FAILED to find a valid offset')
+        if perform_photometry:
+            logger.info('Trying again with photometry disabled')
+            ret = _stars_find_offset(obs, filtered_data, star_list,
+                                     min_stars, 1.,
+                                     1, [], 4, 
+                                     False, rings_can_conflict,
+                                     radec_movement, stars_config) 
+            (offset, good_stars, corr,
+             keep_searching, no_peaks) = ret
+            if no_peaks:
+                offset = None
+            used_photometry = False
     else:
         best_offset = None
         best_star_list = None
@@ -1507,24 +1578,35 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
 
         offset = _stars_refine_offset(obs, obs.data, star_list,
                                       offset, stars_config)
-        
-        logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d / Corr %f',
-                    offset[0], offset[1], good_stars, corr)
 
+    if offset is None:
+        confidence = 0.
+    else:
+        confidence = ((good_stars-min_stars) * 
+                        (float(min_stars_hc_conf)-min_stars_conf)/
+                        (float(min_stars_hc-min_stars)) +
+                      min_stars_conf)
+        if len(star_list) > 0:
+            movement = np.sqrt(star_list[0].move_u**2 + star_list[0].move_v**2)
+            if movement > 1:
+                confidence /= (movement-1)/4+1
+        if not used_photometry:
+            confidence *= 0.1
+        confidence = np.clip(confidence, 0., 1.)
+        
     metadata['offset'] = offset
-    confidence = ((good_stars-min_stars) * 
-                    (float(min_stars_hc_conf)-min_stars_conf)/
-                    (float(min_stars_hc-min_stars)) +
-                  min_stars_conf)
-    if len(star_list) > 0:
-        movement = np.sqrt(star_list[0].move_u**2 + star_list[0].move_v**2)
-        if movement > 1:
-            confidence /= (movement-1)/4+1
-    confidence = np.clip(confidence, 0., 1.)
     metadata['confidence'] = confidence         
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = good_stars
+    metadata['rings_subtracted'] = not rings_can_conflict
+
+    if offset is not None:
+        logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d / '+
+                    'Corr %f / Conf %f / Rings sub %s',
+                    offset[0], offset[1], good_stars, corr, confidence,
+                    str(not rings_can_conflict))
+
 
     offset_x = 0
     offset_y = 0
@@ -1533,7 +1615,8 @@ def stars_find_offset(obs, extend_fov=(0,0), stars_config=None):
         offset_y = offset[1]
 
     for star in star_list:
-        _stars_mark_conflicts(obs, star, (offset_x, offset_y), stars_config)
+        _stars_mark_conflicts(obs, star, (offset_x, offset_y), rings_can_conflict,
+                              stars_config)
         
     logger.info('Final star list after offset:')
     for star in star_list:

@@ -336,11 +336,11 @@ def bodies_create_model(obs, body_name, inventory,
         'entirely_visible'     True if the body is entirely visible even if 
                                shifted to the maximum extent specified by
                                extend_fov. This is based purely on geometry, 
-                               not looking at whether other objects occlude it.
-        'occluded_by'          A list of body names or 'RINGS' that occlude some
+                               not looking at whether other objects occult it.
+        'occulted_by'          A list of body names or 'RINGS' that occult some
                                or all of this body. This is set in the main
                                offset loop, not in this procedure. None if
-                               Nothing occludes it or it hasn't been processed
+                               Nothing occults it or it hasn't been processed
                                by the main loop yet.
         'in_saturn_shadow'     True if the body is in Saturn's shadow and only
                                illuminated by Saturn-shine.
@@ -388,7 +388,7 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['curvature_ok'] = None
     metadata['limb_ok'] = None
     metadata['entirely_visible'] = None
-    metadata['occluded_by'] = None
+    metadata['occulted_by'] = None
     metadata['in_saturn_shadow'] = None
     metadata['latlon_mask'] = None
     metadata['mask_lat_resolution'] = None
@@ -396,7 +396,6 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['mask_latlon_type'] = None
     metadata['mask_lon_direction'] = None
     metadata['has_bad_pixels'] = None
-    metadata['is_obscured'] = False # XXX Subsolar LAT/LON? Obscured by rings?
     metadata['start_time'] = start_time 
 
     logger.info('*** Modeling %s ***', body_name)
@@ -1327,99 +1326,83 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
 
 
 #===============================================================================
-# 
-#===============================================================================
-#===============================================================================
-# 
-#===============================================================================
-#===============================================================================
-# 
-#===============================================================================
-#===============================================================================
-# 
-#===============================================================================
-#===============================================================================
-# 
-#===============================================================================
-
-CARTOGRAPHIC_BODIES = {
-    'DIONE': 'COISS_3003',
-    'ENCELADUS': 'COISS_3002',
-    'IPAETUS': 'COISS_3005',
-    'MIMAS': 'COISS_3006',
-    'PHOEBE': 'COISS_3001',
-    'RHEA': 'COISS_3007',
-    'TETHYS': 'COISS_3004',
-}
-
-CARTOGRAPHIC_FILE_CACHE = {}
-
-#===============================================================================
 # XXX ALL THIS IS TEMPORARY STUFF
 #===============================================================================
 
-def _spice_body_spherical(spice_id, radius):
-    """Returns a Spheroid or Ellipsoid defining the path, orientation and shape
-    of a body defined in the SPICE toolkit.
-
-    Input:
-        spice_id        the name or ID of the body as defined in the SPICE
-                        toolkit.
-        centric         True to use planetocentric latitudes, False to use
-                        planetographic latitudes.
-    """
-
-    spice_body_id = oops.spice.body_id_and_name(spice_id)[0]
-    origin_id = oops.spice.PATH_TRANSLATION[spice_body_id]
-
-    spice_frame_name = oops.spice.frame_id_and_name(spice_id)[1]
-    frame_id = oops.spice.FRAME_TRANSLATION[spice_frame_name]
-
-    radii = cspice.bodvcd(spice_body_id, "RADII")
-
-    return oops.surface.Spheroid(origin_id, frame_id, (radius, radius))
-
-def _define_body_spherical(spice_id, parent, barycenter, radius):
-    """Define the path, frame, surface for bodies by name or SPICE ID.
-
-    All must share a common parent and barycenter."""
-
-    # Define the body's path
-    path = oops.SpicePath(spice_id, "SSB")
-
-    # The name of the path is the name of the body
-    name = path.path_id
-
-    name_spherical = name + '_SPHERICAL'
-    
-    # If the body already exists, skip it
-    if name_spherical in oops.Body.BODY_REGISTRY: return
-
-    # Sometimes a frame is undefined for a new body; in this case any frame
-    # will do.
-    frame = oops.SpiceFrame(spice_id)
-
-    # Define the planet's body
-    # Note that this will overwrite any registered body of the same name
-    body = oops.Body(name_spherical, name, frame.frame_id, parent, barycenter,
-                     spice_name=name)
-
-    # Add the gravity object if it exists
-    try:
-        body.apply_gravity(gravity.LOOKUP[name])
-    except KeyError: pass
-
-    # Add the surface object if shape information is available
-    shape = _spice_body_spherical(spice_id, radius)
-    body.apply_surface(shape, shape.req, shape.rpol)
-
-    # Add a planet name to any satellite or barycenter
-    if "SATELLITE" in body.keywords and parent is not None:
-        body.add_keywords(parent)
-
-    if "BARYCENTER" in body.keywords and parent is not None:
-        body.add_keywords(parent)
-
+#CARTOGRAPHIC_BODIES = {
+#    'DIONE': 'COISS_3003',
+#    'ENCELADUS': 'COISS_3002',
+#    'IPAETUS': 'COISS_3005',
+#    'MIMAS': 'COISS_3006',
+#    'PHOEBE': 'COISS_3001',
+#    'RHEA': 'COISS_3007',
+#    'TETHYS': 'COISS_3004',
+#}
+#
+#CARTOGRAPHIC_FILE_CACHE = {}
+#
+#def _spice_body_spherical(spice_id, radius):
+#    """Returns a Spheroid or Ellipsoid defining the path, orientation and shape
+#    of a body defined in the SPICE toolkit.
+#
+#    Input:
+#        spice_id        the name or ID of the body as defined in the SPICE
+#                        toolkit.
+#        centric         True to use planetocentric latitudes, False to use
+#                        planetographic latitudes.
+#    """
+#
+#    spice_body_id = oops.spice.body_id_and_name(spice_id)[0]
+#    origin_id = oops.spice.PATH_TRANSLATION[spice_body_id]
+#
+#    spice_frame_name = oops.spice.frame_id_and_name(spice_id)[1]
+#    frame_id = oops.spice.FRAME_TRANSLATION[spice_frame_name]
+#
+#    radii = cspice.bodvcd(spice_body_id, "RADII")
+#
+#    return oops.surface.Spheroid(origin_id, frame_id, (radius, radius))
+#
+#def _define_body_spherical(spice_id, parent, barycenter, radius):
+#    """Define the path, frame, surface for bodies by name or SPICE ID.
+#
+#    All must share a common parent and barycenter."""
+#
+#    # Define the body's path
+#    path = oops.SpicePath(spice_id, "SSB")
+#
+#    # The name of the path is the name of the body
+#    name = path.path_id
+#
+#    name_spherical = name + '_SPHERICAL'
+#    
+#    # If the body already exists, skip it
+#    if name_spherical in oops.Body.BODY_REGISTRY: return
+#
+#    # Sometimes a frame is undefined for a new body; in this case any frame
+#    # will do.
+#    frame = oops.SpiceFrame(spice_id)
+#
+#    # Define the planet's body
+#    # Note that this will overwrite any registered body of the same name
+#    body = oops.Body(name_spherical, name, frame.frame_id, parent, barycenter,
+#                     spice_name=name)
+#
+#    # Add the gravity object if it exists
+#    try:
+#        body.apply_gravity(gravity.LOOKUP[name])
+#    except KeyError: pass
+#
+#    # Add the surface object if shape information is available
+#    shape = _spice_body_spherical(spice_id, radius)
+#    body.apply_surface(shape, shape.req, shape.rpol)
+#
+#    # Add a planet name to any satellite or barycenter
+#    if "SATELLITE" in body.keywords and parent is not None:
+#        body.add_keywords(parent)
+#
+#    if "BARYCENTER" in body.keywords and parent is not None:
+#        body.add_keywords(parent)
+#
 # _define_body_spherical('MIMAS', 'SATURN', 'SATURN', 198.2)
 # _define_body_spherical('ENCELADUS', 'SATURN', 'SATURN', 252.1)
 # _define_body_spherical('TETHYS', 'SATURN', 'SATURN', 531.1)
@@ -1427,90 +1410,85 @@ def _define_body_spherical(spice_id, parent, barycenter, radius):
 # _define_body_spherical('RHEA', 'SATURN', 'SATURN', 763.8)
 # _define_body_spherical('IAPETUS', 'SATURN', 'SATURN BARYCENTER', 734.5)
 # _define_body_spherical('PHOEBE', 'SATURN', 'SATURN BARYCENTER', 106.5)
-
-
-#===============================================================================
-# 
-#===============================================================================
-
-def _bodies_read_iss_map(body_name):
+#
+#def _bodies_read_iss_map(body_name):
 #        minimum_latitude = good_row['MINIMUM_LATITUDE']
 #        maximum_latitude = good_row['MAXIMUM_LATITUDE']
 #        westernmost_longitude = good_row['WESTERNMOST_LONGITUDE']
 #        easternmost_longitude = good_row['EASTERNMOST_LONGITUDE']
 #        map_projection_rotation = good_row['MAP_PROJECTION_ROTATION']
 #        map_scale = good_row['MAP_SCALE']
-    body_data = {}
-    iss_dir = CARTOGRAPHIC_BODIES[body_name]
-    img_index_filename = os.path.join(COISS_3XXX_ROOT, iss_dir, 'index',
-                                      'img_index.lbl')
-    img_index_table = PdsTable(img_index_filename)
-    img_index_rows = img_index_table.dicts_by_row()
-    good_row = None
-    for img_index_row in img_index_rows:
-        if img_index_row['MAP_PROJECTION_TYPE'] == 'SIMPLE CYLINDRICAL':
-            assert good_row is None
-            good_row = img_index_row
-    assert good_row is not None
-    assert good_row['TARGET_NAME'] == body_name
-    assert good_row['COORDINATE_SYSTEM_NAME'] == 'PLANETOGRAPHIC'
-    assert good_row['COORDINATE_SYSTEM_TYPE'] == 'BODY-FIXED ROTATING'
-    
-    body_data['center_longitude'] = good_row['CENTER_LONGITUDE']
-    body_data['center_latitude'] = good_row['CENTER_LATITUDE']
-    pos_long_direction = good_row['POSITIVE_LONGITUDE_DIRECTION'].lower()
-    # XXX POSITIVE_LONGITUDE_DIRECTION should be a string, but it's marked
-    # XXX as a float. This is bogus and has been reported.
-    body_data['pos_long_direction'] = pos_long_direction[-4:]
-    body_data['line_first_pixel'] = good_row['LINE_FIRST_PIXEL']-1
-    assert body_data['line_first_pixel'] == 0 # Comp below would be wrong
-    body_data['line_last_pixel'] = good_row['LINE_LAST_PIXEL']-1
-    body_data['line_proj_offset'] = good_row['LINE_PROJECTION_OFFSET']
-    body_data['sample_first_pixel'] = good_row['SAMPLE_FIRST_PIXEL']-1
-    assert body_data['sample_first_pixel'] == 0 # Comp below would be wrong
-    body_data['sample_last_pixel'] = good_row['SAMPLE_LAST_PIXEL']-1
-    body_data['sample_proj_offset'] = good_row['SAMPLE_PROJECTION_OFFSET']
-    body_data['map_resolution'] = good_row['MAP_RESOLUTION']
-    map_filename = os.path.join(COISS_3XXX_ROOT, iss_dir,
-                                good_row['FILE_SPECIFICATION_NAME'])
-    map_data = np.fromfile(map_filename, dtype='uint8')
-    body_data['nline'] = (body_data['line_last_pixel'] -
-                          body_data['line_first_pixel'] + 1)
-    body_data['nsamp'] = (body_data['sample_last_pixel'] -
-                          body_data['sample_first_pixel'] + 1)
-    nline = body_data['nline']
-    nsamp = body_data['nsamp']
-    read_nline = len(map_data) // nsamp
-    map_data = map_data.reshape((read_nline, nsamp))
-    body_data['map_data'] = map_data[read_nline-nline:,:]
-    
-    return body_data
-
-def _bodies_read_schenk_jpg(body_name):
-    body_data = {}
-    img_filename = os.path.join(CB_SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
-    img = Image.open(img_filename)
-    nx, ny = img.size
-    body_data['line_first_pixel'] = 0
-    body_data['line_last_pixel'] = ny-1
-    body_data['sample_first_pixel'] = 0
-    body_data['sample_last_pixel'] = nx-1
-    body_data['center_latitude'] = 0.
-    body_data['center_longitude'] = 177.
-    body_data['pos_long_direction'] = 'west'
-    body_data['line_proj_offset'] = ny / 2.
-    body_data['sample_proj_offset'] = nx / 2.
-    body_data['map_resolution'] = nx / 360.
-    body_data['nline'] = (body_data['line_last_pixel'] -
-                          body_data['line_first_pixel'] + 1)
-    body_data['nsamp'] = (body_data['sample_last_pixel'] -
-                          body_data['sample_first_pixel'] + 1)
-    data = np.asarray(img)
-    data = data[:,:,1] # Green channel
-    body_data['map_data'] = data
-
-    return body_data
-    
+#    body_data = {}
+#    iss_dir = CARTOGRAPHIC_BODIES[body_name]
+#    img_index_filename = os.path.join(COISS_3XXX_ROOT, iss_dir, 'index',
+#                                      'img_index.lbl')
+#    img_index_table = PdsTable(img_index_filename)
+#    img_index_rows = img_index_table.dicts_by_row()
+#    good_row = None
+#    for img_index_row in img_index_rows:
+#        if img_index_row['MAP_PROJECTION_TYPE'] == 'SIMPLE CYLINDRICAL':
+#            assert good_row is None
+#            good_row = img_index_row
+#    assert good_row is not None
+#    assert good_row['TARGET_NAME'] == body_name
+#    assert good_row['COORDINATE_SYSTEM_NAME'] == 'PLANETOGRAPHIC'
+#    assert good_row['COORDINATE_SYSTEM_TYPE'] == 'BODY-FIXED ROTATING'
+#    
+#    body_data['center_longitude'] = good_row['CENTER_LONGITUDE']
+#    body_data['center_latitude'] = good_row['CENTER_LATITUDE']
+#    pos_long_direction = good_row['POSITIVE_LONGITUDE_DIRECTION'].lower()
+#    # XXX POSITIVE_LONGITUDE_DIRECTION should be a string, but it's marked
+#    # XXX as a float. This is bogus and has been reported.
+#    body_data['pos_long_direction'] = pos_long_direction[-4:]
+#    body_data['line_first_pixel'] = good_row['LINE_FIRST_PIXEL']-1
+#    assert body_data['line_first_pixel'] == 0 # Comp below would be wrong
+#    body_data['line_last_pixel'] = good_row['LINE_LAST_PIXEL']-1
+#    body_data['line_proj_offset'] = good_row['LINE_PROJECTION_OFFSET']
+#    body_data['sample_first_pixel'] = good_row['SAMPLE_FIRST_PIXEL']-1
+#    assert body_data['sample_first_pixel'] == 0 # Comp below would be wrong
+#    body_data['sample_last_pixel'] = good_row['SAMPLE_LAST_PIXEL']-1
+#    body_data['sample_proj_offset'] = good_row['SAMPLE_PROJECTION_OFFSET']
+#    body_data['map_resolution'] = good_row['MAP_RESOLUTION']
+#    map_filename = os.path.join(COISS_3XXX_ROOT, iss_dir,
+#                                good_row['FILE_SPECIFICATION_NAME'])
+#    map_data = np.fromfile(map_filename, dtype='uint8')
+#    body_data['nline'] = (body_data['line_last_pixel'] -
+#                          body_data['line_first_pixel'] + 1)
+#    body_data['nsamp'] = (body_data['sample_last_pixel'] -
+#                          body_data['sample_first_pixel'] + 1)
+#    nline = body_data['nline']
+#    nsamp = body_data['nsamp']
+#    read_nline = len(map_data) // nsamp
+#    map_data = map_data.reshape((read_nline, nsamp))
+#    body_data['map_data'] = map_data[read_nline-nline:,:]
+#    
+#    return body_data
+#
+#def _bodies_read_schenk_jpg(body_name):
+#    body_data = {}
+#    img_filename = os.path.join(CB_SUPPORT_FILES_ROOT, body_name+'_MAP.jpg')
+#    img = Image.open(img_filename)
+#    nx, ny = img.size
+#    body_data['line_first_pixel'] = 0
+#    body_data['line_last_pixel'] = ny-1
+#    body_data['sample_first_pixel'] = 0
+#    body_data['sample_last_pixel'] = nx-1
+#    body_data['center_latitude'] = 0.
+#    body_data['center_longitude'] = 177.
+#    body_data['pos_long_direction'] = 'west'
+#    body_data['line_proj_offset'] = ny / 2.
+#    body_data['sample_proj_offset'] = nx / 2.
+#    body_data['map_resolution'] = nx / 360.
+#    body_data['nline'] = (body_data['line_last_pixel'] -
+#                          body_data['line_first_pixel'] + 1)
+#    body_data['nsamp'] = (body_data['sample_last_pixel'] -
+#                          body_data['sample_first_pixel'] + 1)
+#    data = np.asarray(img)
+#    data = data[:,:,1] # Green channel
+#    body_data['map_data'] = data
+#
+#    return body_data
+#    
 #def _bodies_create_cartographic(bp, body_name, force_spherical=True,
 #                               source='schenk_jpg'):
 #    if force_spherical:
