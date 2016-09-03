@@ -280,7 +280,7 @@ RINGS_DEFAULT_CONFIG = {
     
     # A full gap or ringlet must be at least this many pixels wide at some
     # place in the image to use it
-    'fiducial_min_feature_width': 3,
+    'fiducial_min_feature_width': 2,
     
     # When manufacturing a model from an ephemeris list, each one-sided feature 
     # is shaded approximately this many pixels wide.

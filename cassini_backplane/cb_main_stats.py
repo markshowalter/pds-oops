@@ -132,6 +132,7 @@ total_spice_error = 0
 total_other_error = 0
 other_error_db = {}
 other_error_file_db = {}
+total_botsim_candidate = 0
 total_good_offset = 0
 total_good_offset_list = []
 total_good_star_offset = 0
@@ -144,6 +145,7 @@ total_winner_titan = 0
 total_winner_botsim = 0
 body_only_db = {}
 total_rings_only = 0
+total_rings_only_no_offset = 0
 total_bootstrap_cand = 0
 bootstrap_cand_db = {}
 titan_status_db = {}
@@ -151,9 +153,14 @@ total_titan_attempt = 0
 time_list = []
 longest_time_filenames = []
 
+last_nac_filename = None
+last_nac_image_path = None
+last_nac_offset = None
+
 for image_path in file_yield_image_filenames_from_arguments(arguments):
     status = ''
     _, base = os.path.split(image_path)
+
     status += base + ': '
     total_files += 1
 
@@ -161,7 +168,12 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                                          bootstrap_pref='prefer')    
     filename = file_clean_name(image_path)
     status = filename + ' - ' + offset_result_str(metadata)
-    
+
+    if filename[0] == 'N':
+        last_nac_filename = filename
+        last_nac_image_path = image_path
+        last_nac_offset = None
+        
     if metadata is not None:
         total_offset += 1
         
@@ -188,6 +200,16 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if offset is not None:
                 total_good_offset += 1
                 total_good_offset_list.append(tuple(offset))
+            else:
+                if metadata['rings_only']:
+                    total_rings_only_no_offset += 1
+                if filename[0] == 'N':
+                    last_nac_offset = offset
+                elif (last_nac_filename is not None and
+                      last_nac_offset is None and 
+                      filename[0] == 'W' and
+                      filename[1:] == last_nac_filename[1:]):
+                    total_botsim_candidate += 1
                 
             stars_offset = metadata['stars_offset']
             if stars_offset is not None:
@@ -345,15 +367,23 @@ if total_offset:
     print 'Bad final offset:                   %6d (%6.2f%%)' % (
                 total_bad_offset, 
                 float(total_bad_offset)/total_offset*100)
-    failed = total_offset-total_good_offset-total_bootstrap_cand
+    print '  Filled by rings:     %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_rings_only_no_offset, 
+                float(total_rings_only_no_offset)/total_bad_offset*100,
+                float(total_rings_only_no_offset)/total_offset*100)
     print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_bootstrap_cand, 
                 float(total_bootstrap_cand)/total_bad_offset*100,
                 float(total_bootstrap_cand)/total_offset*100)
-    print '  Not bootstrap cand:  %6d (%6.2f%%, %6.2f%% of total)' % (
-                failed, 
-                float(failed)/total_bad_offset*100,
-                float(failed)/total_offset*100)
+#     failed = total_offset-total_good_offset-total_bootstrap_cand
+#     print '   Not bootstrap cand: %6d (%6.2f%%, %6.2f%% of total)' % (
+#                 failed, 
+#                 float(failed)/total_bad_offset*100,
+#                 float(failed)/total_offset*100)
+    print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_botsim_candidate, 
+                float(total_botsim_candidate)/total_bad_offset*100,
+                float(total_botsim_candidate)/total_offset*100)
     
     print sep
     print 'Total Titan navigation attempts:    %6d (%6.2f%%)' % (

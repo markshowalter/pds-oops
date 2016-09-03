@@ -50,8 +50,8 @@ parser.add_argument(
     help='''Reprocess the mosaic from scratch instead of doing an incremental 
             addition''')
 parser.add_argument(
-    '--collapse-filters', action='store_true', default=False, 
-    help='''Collapse all filters into a single one by using photometric
+    '--no-collapse-filters', action='store_true', default=False, 
+    help='''Don't collapse all filters into a single one by using photometric
             averaging''')
 parser.add_argument(
     '--lat-resolution', metavar='N', type=float, default=0.5,
@@ -356,7 +356,7 @@ def process_body(body_name, good_image_list, cand_image_list):
          lon_bin, lat_bin,
          lon_shadow_dir, lat_shadow_dir) = bin_info
         filters = {}
-        if arguments.collapse_filters:
+        if not arguments.no_collapse_filters:
             filters['ALL'] = True
         else:
             for entry in bin_good_image_list+bin_cand_image_list:
@@ -469,7 +469,7 @@ def process_mosaic_bin(body_name, filter,
         main_logger.info('Adding to mosaic from %s', good_image_path)
         found_all = False
         run_mosaic(good_image_path, body_name, mosaic_root, reset_num,
-                   arguments.collapse_filters) 
+                   not arguments.no_collapse_filters) 
         
         reset_num = False
 
@@ -515,7 +515,7 @@ def process_mosaic_bin(body_name, filter,
                         cand_image_path not in mosaic_metadata['path_list']):
                         main_logger.debug('   ...but is not in mosaic - adding')
                         run_mosaic(cand_image_path, body_name, 
-                                   mosaic_root, False, arguments.collapse_filters) 
+                                   mosaic_root, False, not arguments.no_collapse_filters) 
                 continue
             elif (boot_metadata['bootstrap_status'] == 
                   'Final offset finding failed'):
@@ -787,7 +787,7 @@ def find_offset_and_update(body_name, mosaic_root, mosaic_metadata,
     main_logger.debug('Adding to mosaic')
     
     run_mosaic(cand_path, body_name, mosaic_root, False,
-               arguments.collapse_filters) 
+               not arguments.no_collapse_filters) 
 
     return True
 

@@ -72,12 +72,13 @@ def _bodies_create_cartographic(bp, body_data):
     lat_res = body_data['lat_resolution']
     lon_res = body_data['lon_resolution']
     data = body_data['img']
+    data_res = body_data['resolution']
     min_lat_pixel = body_data['lat_idx_range'][0]
     min_lon_pixel = body_data['lon_idx_range'][0]
     body_name = body_data['body_name']
     latlon_type = body_data['latlon_type']
     lon_direction = body_data['lon_direction']
-    
+
     bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = ma.getmaskarray(bp_latitude.mvals)
     ok_body_mask = np.logical_not(body_mask_inv)
@@ -118,7 +119,33 @@ def _bodies_create_cartographic(bp, body_data):
     model = data[latitude_pixels, longitude_pixels]
     model[inv_ok_pixel_mask] = 0
 
-    return model
+    # Now figure out the resolution mis-match
+    bp_emission = bp.emission_angle(body_name).vals.astype('float32')
+    center_resolution = (bp.center_resolution(body_name).
+                         vals.astype('float32'))
+    image_resolution = center_resolution / np.cos(bp_emission)
+
+    mosaic_res = data_res[latitude_pixels, longitude_pixels]
+
+    image_resolution = image_resolution[ok_pixel_mask]
+    mosaic_res = mosaic_res[ok_pixel_mask]
+    image_resolution = image_resolution[mosaic_res != 0]
+    mosaic_res = mosaic_res[mosaic_res != 0]
+    
+    logger.debug('Image resolution %.5f to %.5f',
+                 np.min(image_resolution), np.max(image_resolution))
+    logger.debug('Cartographic resolution %.5f to %.5f',
+                 np.min(mosaic_res), np.max(mosaic_res))
+    
+    res_ratio = mosaic_res / image_resolution
+    best_ratio = np.min(res_ratio)
+    worst_ratio = np.max(res_ratio)
+    
+    logger.debug('Best resolution ratio %.5f, worst %.5f, mean %.5f, '+
+                 'median %.5f', best_ratio, worst_ratio,
+                 np.mean(res_ratio), np.median(res_ratio))
+    
+    return model, best_ratio
 
 def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                        bodies_config):
@@ -277,9 +304,8 @@ def bodies_create_model(obs, body_name, inventory,
         extend_fov             The amount beyond the image in the (U,V) 
                                dimension to generate the model.
         cartographic_data      A dictionary of body names containing 
-                               cartographic
-                               data in lat/lon format. Each entry contains 
-                               metadata in the format returned by 
+                               cartographic data in lat/lon format. Each entry
+                               contains metadata in the format returned by 
                                bodies_mosaic_init.
         always_create_model    True to always return a model even if the 
                                body is too small or the curvature or limb is 
@@ -300,7 +326,8 @@ def bodies_create_model(obs, body_name, inventory,
         'body_name'            The name of the body.
         'size_ok'              True if the body is large enough to bother with.
         'inventory'            The inventory entry for this body.
-        'cartographic_data_source' The path of the mosaic used to provide the 
+        'cartographic_data_source'
+                               The path of the mosaic used to provide the 
                                cartographic data. None if no data provided.
         'curvature_ok'         True if sufficient curvature is visible to permit
                                correlation.
@@ -322,6 +349,8 @@ def bodies_create_model(obs, body_name, inventory,
         'sub_observer_lon'     The sub-observer longitude (IAU, West).
         'sub_observer_lat'     The sub-observer latitude.
         'phase_angle'          The phase angle at the body's center.
+        'body_blur'            The amount of blur required to properly 
+                               correlate low-resolution cartographic data.
 
         'start_time'           The time (s) when bodies_create_model was called.
         'end_time'             The time (s) when bodies_create_model returned.
@@ -557,9 +586,11 @@ def bodies_create_model(obs, body_name, inventory,
     # to be OK. If we have cartographic data, then we don't need a limb
     # at all.
     if ((entirely_visible and limb_incidence_min < limb_threshold) or
-        (not entirely_visible and limb_incidence_max < limb_threshold) or
-        (cartographic_data and body_name in cartographic_data)):
+        (not entirely_visible and limb_incidence_max < limb_threshold)):
         logger.info('Limb meets criteria')
+        metadata['limb_ok'] = True
+    elif cartographic_data and body_name in cartographic_data:
+        logger.info('Limb ignored because cartographic data available')
         metadata['limb_ok'] = True
     else:
         metadata['limb_ok'] = False
@@ -588,16 +619,22 @@ def bodies_create_model(obs, body_name, inventory,
         else:
             restr_model = restr_body_mask.astype('float')
     
+        blur_amt = None
         if cartographic_data:
             for cart_body in sorted(cartographic_data.keys()):
                 if cart_body == body_name:
+                    logger.info('Cartographic data provided for %s - USING',
+                                cart_body)
                     cart_body_data = cartographic_data[body_name]
-                    cart_model = _bodies_create_cartographic(restr_bp, cart_body_data)
+                    cart_model, blur_amt = _bodies_create_cartographic(
+                                                   restr_bp, cart_body_data)
                     restr_model *= cart_model
-                    logger.info('Cartographic data provided for %s - USING', cart_body)
                 else:
-                    logger.info('Cartographic data provided for %s', cart_body)
+                    logger.info('Cartographic data provided for %s',
+                                cart_body)
 
+        metadata['body_blur'] = blur_amt
+        
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,

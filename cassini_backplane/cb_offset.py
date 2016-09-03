@@ -781,6 +781,8 @@ def master_find_offset(obs,
         
         body_model_list = []
         used_model_str_list = []
+
+        model_blur_amount = None
         
         # XXX Need to deal with moons on the far side of the rings
 
@@ -807,7 +809,6 @@ def master_find_offset(obs,
                     
         ### Now deal with rings
         
-        model_blur_amount = None
         use_rings_model = False
         
         if (rings_model is not None and 
@@ -816,10 +817,17 @@ def master_find_offset(obs,
             (rings_allow_blur or rings_features_blurred is None)):
             use_rings_model = True 
             used_model_str_list.append('RINGS')
-            model_blur_amount = rings_features_blurred
             if rings_features_blurred is not None:
-                logger.info('Blurring model by %f', rings_features_blurred)
+                logger.info('Blurring model by at least %f because of rings',
+                            rings_features_blurred)
+            if model_blur_amount is None:
+                model_blur_amount = rings_features_blurred
+            else:
+                model_blur_amount = max(model_blur_amount,
+                                        rings_features_blurred)
     
+        model_blur_amount = 1.
+        
         metadata['model_contents'] = used_model_str_list
         logger.info('Model contains %s', str(used_model_str_list))
         final_model = None
@@ -849,6 +857,10 @@ def master_find_offset(obs,
         gaussian_blur = offset_config['default_gaussian_blur']
         if model_blur_amount is not None:
             gaussian_blur = model_blur_amount
+            logger.info('Blurring model by %f', model_blur_amount)
+        else:
+            logger.info('Blurring model by default amount %f',
+                        gaussian_blur)
         model_filter_func = (lambda image, masked=False:
                  _model_filter(image, 
                                gaussian_blur, 

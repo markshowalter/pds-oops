@@ -20,20 +20,18 @@ command_list = sys.argv[1:]
 parser = argparse.ArgumentParser(
     description='Cassini Backplane Offset Metadata GUI')
 
-parser.add_argument(
-    'image_path', nargs='?',
-    help="Specific image path to display")
+file_add_selection_arguments(parser)
 
 arguments = parser.parse_args(command_list)
 
 root = tk.Tk()
 root.withdraw()
 
-if arguments.image_path is not None:
-    img_path = arguments.image_path
-    metadata = file_read_offset_metadata(img_path)
-    obs = file_read_iss_file(img_path)
-    display_offset_data(obs, metadata)
+if len(command_list) > 0:
+    for image_path in file_yield_image_filenames_from_arguments(arguments):
+        metadata = file_read_offset_metadata(image_path)
+        obs = file_read_iss_file(image_path)
+        display_offset_data(obs, metadata)
 else:
     file_initialdir = results_dir
     

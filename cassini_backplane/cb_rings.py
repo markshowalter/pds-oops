@@ -898,6 +898,21 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     logger.debug('Resolution %.2f to %.2f', min_res, max_res)
     
     rms_gain = rings_config['fiducial_rms_gain']
+
+    # Make a restricted feature list based on the observation date
+    restricted_feature_list = []
+    for fiducial_feature in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+        entry_type_str, feature_name, inner, outer = fiducial_feature
+        entry_type_list = entry_type_str.split('_')
+        entry_type = entry_type_list[0]
+        # Eliminate any features that don't match the observation date
+        if len(entry_type_list) > 1:
+            assert len(entry_type_list) == 3
+            start_date = cspice.utc2et(entry_type_list[1])
+            end_date = cspice.utc2et(entry_type_list[2])
+            if not (start_date < obs.midtime < end_date):
+                continue
+        restricted_feature_list.append(fiducial_feature)
     
     blur = None
     blur_list = []
@@ -905,24 +920,17 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     # We do two phases - the first one is to determine the amount of blur, if
     # any. If there is no blur needed, we exit the loop early. Otherwise, 
     # during the second phase we apply the blur.
-    for phase in [0,1]:
-        logger.debug('Trying blur %s', str(blur))
+    for allow_blur in [False,True]:
+        logger.debug('Allow blur %s', str(allow_blur))
         
         feature_list = []
         best_blur = None
         num_features = 0
         num_features_in_frame = 0
-        for fiducial_feature in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+        for fiducial_feature in restricted_feature_list:
             entry_type_str, feature_name, inner, outer = fiducial_feature
             entry_type_list = entry_type_str.split('_')
             entry_type = entry_type_list[0]
-            # Eliminate any features that don't match the observation date
-            if len(entry_type_list) > 1:
-                assert len(entry_type_list) == 3
-                start_date = cspice.utc2et(entry_type_list[1])
-                end_date = cspice.utc2et(entry_type_list[2])
-                if not (start_date < obs.midtime < end_date):
-                    continue
             pretty_name = feature_name
             if pretty_name is None:
                 pretty_name = 'UNNAMED'
@@ -937,17 +945,19 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                                             rms_gain, blur, 
                                             min_sub_radius, max_sub_radius,
                                             extend_fov)
-                if ret_inner is None or ret_inner != 1.:
+                if ret_inner is None or abs(ret_inner-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase.
                     inner = None
             if outer is not None:
+                if pretty_name == 'Keeler-A Ring OE':
+                    pass
                 ret_outer, outer_out_of_frame = _fiducial_is_ok(
                                             obs, outer, min_radius, max_radius, 
                                             rms_gain, blur, 
                                             min_sub_radius, max_sub_radius,
                                             extend_fov)
-                if ret_outer is None or ret_outer != 1.:
+                if ret_outer is None or abs(ret_outer-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase
                     outer = None
@@ -1003,7 +1013,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                     feature = outer
                     
                 bad = False
-                for fiducial_feature2 in _RINGS_FIDUCIAL_FEATURES_FRENCH2016:
+                for fiducial_feature2 in restricted_feature_list:
                     (entry_type_str2, feature_pretty_name, inner2, 
                      outer2) = fiducial_feature2
                     if fiducial_feature == fiducial_feature2:
@@ -1022,17 +1032,26 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                         feature_dist_pix = abs(inner_outer2[0][1]-
                             feature[0][1]) / min_res_inner_outer
                         if (feature_dist_pix < min_feature_width):
+                            in_out_str = 'inner'
+                            if inner_outer2 == outer2:
+                                in_out_str = 'outer'
                             logger.debug(
-                             'Ignoring partial %s %s %.2f - '+
+                             'Ignoring partial %s %s %s %.2f - '+
                              'feature too close to another '+
                              '(a=%.2f, %.2f pixels)',
-                             pretty_name, entry_type, feature[0][1],
+                             in_out_str, pretty_name, entry_type,
+                             feature[0][1],
                              inner_outer2[0][1], feature_dist_pix)
                             bad = True
                     if bad:
                         break
                 if bad:
-                    continue
+                    if inner is not None:
+                        inner = None
+                        ret_inner = None
+                    else:
+                        outer = None
+                        ret_outer = None
                 
             # Everything is going well...we can at least use this to determine
             # the blur amount
@@ -1068,18 +1087,20 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                          num_features_in_frame, min_features)
             break
 
-        if phase == 1:
+        logger.debug('%d features, %d in frame', num_features,
+                     num_features_in_frame)
+
+        if allow_blur or len(blur_list) == 0:
             break
 
         blur_list.sort()
         
-        if len(blur_list) < min_features-num_features_in_frame:
-            logger.debug('Not enough (%d vs. %d) features in frame to try '+
-                         'blurring', len(blur_list), 
-                         min_features-num_features_in_frame)
-            break
+        # We allow this process to continue even if there are too few
+        # features because the main offset loop will attempt to use
+        # an insufficient number of features at a lower confidence.
         
-        blur = blur_list[min_features-num_features_in_frame-1]
+        blur = blur_list[min(min_features-num_features_in_frame-1,
+                             len(blur_list)-1)]
 
     if blur is not None:
         blur = blur/rms_gain
@@ -1276,6 +1297,15 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
     else:
         label_avoid_mask = np.zeros(model.shape, dtype=np.bool)
 
+    # Mask out all the areas around the edge that might be off the image
+    # once the offset is applied
+#     if extend_fov[0] != 0:
+#         label_avoid_mask[:,:extend_fov[0]*2] = True
+#         label_avoid_mask[:,-extend_fov[0]*2:] = True
+#     if extend_fov[1] != 0:
+#         label_avoid_mask[:extend_fov[1]*2,:] = True
+#         label_avoid_mask[-extend_fov[1]*2:,:] = True
+        
     # This gives a margin around bodies and also solves a problem with
     # border_atop while masked with bodies
     in_front_mask = filt.maximum_filter(in_front_mask, 5)
@@ -1546,9 +1576,6 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                        rings_config=None):
     """Create a model for the rings.
 
-    The rings model is created by interpolating from the Voyager I/F
-    profile. Portions in Saturn's shadow are removed.
-
     If there are no rings in the image or they are entirely in shadow,
     return None. Also return None if the curvature is insufficient or there
     aren't enough fiducial features in view and always_create_model is False.
@@ -1573,6 +1600,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         metadata           A dictionary containing information about the
                            offset result:
             'shadow_bodies'         The list of Bodies that shadow the rings.
+                                    Only populated if rings_config allows
+                                    shadow removal. 
             'curvature_ok'          True if the curvature is sufficient for 
                                     correlation.
             'emission_ok'           True if the emission angle is sufficient 
@@ -1669,6 +1698,42 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             return None, metadata, None
     else:
         logger.info('Enough fiducial features (%d)', num_features)
+
+    shadow_body_list = []
+
+    # Compute the shadows before the model so we can use them as
+    # areas to avoid for labels
+    shadows = None    
+    if rings_config['remove_saturn_shadow']:
+        saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
+                                                       'saturn').vals
+        if np.any(saturn_shadow):
+            shadow_body_list.append('SATURN')
+            shadows = saturn_shadow
+            if np.all(shadows):
+                logger.info('Rings completely shadowed by SATURN - aborting')
+                metadata['end_time'] = time.time()
+                return None, metadata, None
+            logger.info('Rings at least partially shadowed by SATURN')
+
+    if rings_config['remove_body_shadows']:
+        for body_name in _RINGS_SHADOW_BODY_LIST:
+            body_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
+                                                         body_name).vals
+            if np.any(body_shadow):
+                shadow_body_list.append(body_name)
+                if shadows is None:
+                    shadows = body_shadow
+                else:
+                    shadows = np.logical_or(shadows, body_shadow)
+                if np.all(body_shadow):
+                    logger.info('Rings completely shadowed by %s - aborting', 
+                                body_name)
+                    metadata['end_time'] = time.time()
+                    return None, metadata, None
+                logger.info('Rings at least partially shadowed by %s', body_name)
+    
+    metadata['shadow_bodies'] = shadow_body_list
     
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
@@ -1700,6 +1765,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                 in_front_mask[((rings_dist>body_dist) & 
                                (body_model != 0))] = True
     
+        if shadows is not None:
+            label_avoid_mask = np.logical_or(label_avoid_mask, shadows)
         model, model_text = _compute_model_ephemeris(obs, fiducial_features,
                                                      label_avoid_mask,
                                                      in_front_mask,
@@ -1709,41 +1776,14 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         logger.info('Model is empty - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
-    
-    shadow_body_list = []
-    
-    if rings_config['remove_saturn_shadow']:
-        saturn_shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
-                                                       'saturn').vals
-        if np.any(saturn_shadow):
-            shadow_body_list.append('SATURN')
-            model[saturn_shadow] = 0
-            if not np.any(model):
-                logger.info('Rings completely shadowed by SATURN - aborting')
-                metadata['end_time'] = time.time()
-                return None, metadata, None
-            logger.info('Rings partially shadowed by SATURN')
 
-    if rings_config['remove_body_shadows']:
-        for body_name in _RINGS_SHADOW_BODY_LIST:
-            shadow = obs.ext_bp.where_inside_shadow('saturn:ring',
-                                                    body_name).vals
-            if np.any(shadow):
-                shadow_body_list.append(body_name)
-                model[shadow] = 0
-                if not np.any(model):
-                    logger.info('Rings completely shadowed by %s - aborting', 
-                                body_name)
-                    metadata['end_time'] = time.time()
-                    return None, metadata, None
-                logger.info('Rings partially shadowed by %s', body_name)
-    
-    metadata['shadow_bodies'] = shadow_body_list
-    
-    if not np.any(model):
-        logger.info('Rings are entirely shadowed - returning null model')
-        metadata['end_time'] = time.time()
-        return None, metadata, None
+    if shadows is not None:
+        model[shadows] = 0
+            
+        if not np.any(model):
+            logger.info('Rings are entirely shadowed - returning null model')
+            metadata['end_time'] = time.time()
+            return None, metadata, None
     
     metadata['end_time'] = time.time()
     return model, metadata, model_text
