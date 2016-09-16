@@ -184,8 +184,21 @@ def master_find_offset(obs,
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
             'confidence'       The confidence 0-1 of the final offset.
+            'model_confidence' The confidence 0-1 of the model offset.
             'model_blur_amount' The amount the model was blurred before 
                                correlating.
+            'model_override_bodies_curvature'
+            'model_override_bodies_limb'
+            'model_override_rings_curvature'
+            'model_override_fiducial_features'
+            'model_rings_blur'
+                               The assumptions that were broken in order to
+                               create the model offset, if any.
+            'model_rings_radial_gradient'
+                               The direction of the rings radial gradient
+                               if the model offset was projected onto
+                               the radial direction vector due to insufficient
+                               ring curvature. None otherwise.
             'stars_offset'     The offset from star matching. None is star
                                matching failed.
             'model_offset'     The offset from model (rings and bodies) 
@@ -342,6 +355,12 @@ def master_find_offset(obs,
     metadata['end_time'] = None
     metadata['offset'] = None
     metadata['confidence'] = 0.
+    metadata['model_override_bodies_curvature'] = None
+    metadata['model_override_bodies_limb'] = None
+    metadata['model_override_rings_curvature'] = None
+    metadata['model_override_fiducial_features'] = None
+    metadata['model_rings_blur'] = None
+    metadata['model_rings_radial_gradient'] = None
     metadata['stars_offset'] = None
     metadata['stars_confidence'] = 0.
     metadata['model_offset'] = None
@@ -756,22 +775,33 @@ def master_find_offset(obs,
         if can_override_body_limb:
             model_phase_info_list.append((0.25, False,  True, False, False, False))
 
-
-    if rings_curvature_ok:
-        # Almost done...try ring blurring
-        if rings_features_blurred is not None:
-            model_phase_info_list.append((0.20, False, False, False, False,  True))
-        
-        # Try too few features
-        if can_override_ring_features_ok:
-            model_phase_info_list.append((0.10, False, False, False,  True, False))
+        if rings_curvature_ok:
+            # Try ring blurring
+            if rings_features_blurred is not None:
+                model_phase_info_list.append((0.40, False, False, False, False,  True))
             
-        # Try ring blurring but with too few features - this is likely to be an
-        # awful result
-        if rings_features_blurred is not None and can_override_ring_features_ok:
-            model_phase_info_list.append((0.05, False, False, False,  True,  True))
+            # Try too few features
+            if can_override_ring_features_ok:
+                model_phase_info_list.append((0.10, False, False, False,  True, False))
+                
+            # Try ring blurring but with too few features - this is likely to be an
+            # awful result
+            if rings_features_blurred is not None and can_override_ring_features_ok:
+                model_phase_info_list.append((0.05, False, False, False,  True,  True))
+        else:
+            # Try overriding just ring curvature
+            if can_override_ring_curvature:
+                ### If these confidence levels are changed, look at the if statement
+                ### below in the model loop
+                model_phase_info_list.append((0.30, False, False, True, False, False))
+                if rings_features_blurred is not None:
+                    # ... and blurring
+                    model_phase_info_list.append((0.20, False, False, True, False, True))
 
     model_phase_info_list.sort(reverse=True)
+    
+    model_rings_radial_only = False
+    model_rings_radial_gradient = None
     
     for model_phase_info in model_phase_info_list:
         (model_confidence, 
@@ -821,11 +851,17 @@ def master_find_offset(obs,
             body_model_list.append(body_model)
             used_model_str_list.append(body_name)
 
-        if override_rings_curvature_ok and len(body_model_list) == 0:
+        if (override_rings_curvature_ok and len(body_model_list) == 0 and
+            model_confidence > 0.3):
             # We only allow flat rings when there is also a body to use;
             # otherwise we're pretty much guaranteed the navigation will be
             # bad.
+            # But if the confidence is low enough, then we KNOW it will be
+            # bad and we'll do the radial projection in the end anyway.
             continue
+
+        model_rings_radial_only = (len(body_model_list) == 0 and
+                                   override_rings_curvature_ok)
                     
         ### Now deal with rings
         
@@ -846,8 +882,6 @@ def master_find_offset(obs,
                 model_blur_amount = max(model_blur_amount,
                                         rings_features_blurred)
     
-        model_blur_amount = 1.
-        
         metadata['model_contents'] = used_model_str_list
         logger.info('Model contains %s', str(used_model_str_list))
         final_model = None
@@ -901,17 +935,28 @@ def master_find_offset(obs,
             (model_offset, peak) = model_offset_list[0]
         
         if model_offset is not None and not masked_model:
+            if model_rings_radial_only:
+                logger.info('Primary raw correlation before ring '+
+                            'radial reprojection U,V %d,%d',
+                            model_offset[0], model_offset[1])
+                (model_offset, 
+                 model_rings_radial_gradient) = rings_offset_radial_projection(
+                                                  obs, model_offset,
+                                                  extend_fov=extend_fov,
+                                                  rings_config=rings_config)
+            model_offset_int = (int(np.round(model_offset[0])),
+                                int(np.round(model_offset[1])))
             # Run it again to make sure it works with a fully sliced
             # model.
             # No point in doing this if we allow_masked, since we've
             # already used each model slice independently.
             logger.info('Running secondary correlation on offset U,V %d,%d',
-                        model_offset[0], model_offset[1])
-            offset_model = final_model[extend_fov[1]-model_offset[1]:
-                                       extend_fov[1]-model_offset[1]+
+                        model_offset_int[0], model_offset_int[1])
+            offset_model = final_model[extend_fov[1]-model_offset_int[1]:
+                                       extend_fov[1]-model_offset_int[1]+
                                            obs.data.shape[0],
-                                       extend_fov[0]-model_offset[0]:
-                                       extend_fov[0]-model_offset[0]+
+                                       extend_fov[0]-model_offset_int[0]:
+                                       extend_fov[0]-model_offset_int[0]+
                                            obs.data.shape[1]]
             sec_search_size = offset_config['secondary_corr_search_size']
             model_offset_list = find_correlation_and_offset(
@@ -931,6 +976,14 @@ def master_find_offset(obs,
                 model_offset = None
                 peak = None
             else:
+                if model_rings_radial_only:
+                    logger.info('Secondary raw correlation before ring '+
+                                'radial reprojection dU,dV %d,%d',
+                                new_model_offset[0], new_model_offset[1])
+                    (new_model_offset, _) = rings_offset_radial_projection(
+                                                      obs, new_model_offset,
+                                                      extend_fov=extend_fov,
+                                                      rings_config=rings_config)
                 logger.info('Secondary model correlation dU,dV %d,%d '+
                              'CORR %f', new_model_offset[0],
                              new_model_offset[1], new_peak)
@@ -946,17 +999,19 @@ def master_find_offset(obs,
                 else:
                     model_offset = (model_offset[0]+new_model_offset[0],
                                     model_offset[1]+new_model_offset[1])
+                    model_offset_int = (int(np.round(model_offset[0])),
+                                        int(np.round(model_offset[1])))
                     peak = new_peak
                     metadata['secondary_corr_ok'] = True
                 
         if model_offset is None:
             logger.info('Resulting model offset N/A')
         else:
-            logger.info('Resulting model offset U,V %d,%d', 
+            logger.info('Resulting model offset U,V %.2f,%.2f', 
                          model_offset[0], model_offset[1])
     
-            shifted_model = shift_image(final_model, model_offset[0], 
-                                        model_offset[1])
+            shifted_model = shift_image(final_model, model_offset_int[0], 
+                                        model_offset_int[1])
             shifted_model = unpad_image(shifted_model, extend_fov)
 
             # Only trust a model if it has at least a reasonable number of 
@@ -988,6 +1043,14 @@ def master_find_offset(obs,
 #            logger.info('Candidate for ring radial scan') # XXX
 
     if model_offset is not None:
+        metadata['model_override_bodies_curvature'] = override_bodies_curvature_ok 
+        metadata['model_override_bodies_limb'] = override_bodies_limb_ok
+        metadata['model_override_rings_curvature'] = override_rings_curvature_ok
+        metadata['model_override_fiducial_features'] = override_rings_features_ok
+        metadata['model_rings_blur'] = rings_allow_blur
+        metadata['model_confidence'] = model_confidence
+        metadata['model_blur_amount'] = model_blur_amount
+        metadata['model_rings_radial_gradient'] = model_rings_radial_gradient
         if ('RINGS' not in used_model_str_list and
             len(used_model_str_list) < 
                 offset_config['num_bodies_threshold'] and
@@ -998,13 +1061,11 @@ def master_find_offset(obs,
             model_confidence *= 0.25
 
     metadata['model_offset'] = model_offset
-    metadata['model_confidence'] = model_confidence
-    metadata['model_blur_amount'] = model_blur_amount
     
     if model_offset is None:
         logger.info('Final model offset N/A')
     else:   
-        logger.info('Final model offset U,V %d,%d (%.2f)',
+        logger.info('Final model offset U,V %.2f,%.2f (%.2f)',
                     model_offset[0], model_offset[1], model_confidence)
 
 
@@ -1095,7 +1156,7 @@ def master_find_offset(obs,
     if model_offset is None:
         logger.info('  Final model offset    N/A')
     else:
-        logger.info('  Final model offset    U,V %d,%d (%.2f)', 
+        logger.info('  Final model offset    U,V %.2f,%.2f (%.2f)', 
                     model_offset[0], model_offset[1], model_confidence)
 
     if titan_offset is None:
@@ -1346,9 +1407,10 @@ def offset_create_overlay_image(obs, metadata,
     text_draw = ImageDraw.Draw(text_im)
 
     data_lines = []
-    data_lines.append('%s %s' % (obs.filename[:13], 
-                                 cspice.et2utc(obs.midtime, 'C', 0)))
-    data_lines.append('%.2f %s %s' % (obs.texp, obs.filter1, obs.filter2))
+    data_lines.append('%s %s %.2f %s %s' % (
+                    obs.filename[:13], 
+                    cspice.et2utc(obs.midtime, 'C', 0).replace(' ','-'),
+                    obs.texp, obs.filter1, obs.filter2))
     offset_winner = metadata['offset_winner']
     if offset_winner == 'BOTSIM':
         data_line = 'BOTSIM %d,%d' % offset
@@ -1358,6 +1420,9 @@ def offset_create_overlay_image(obs, metadata,
         model_offset = metadata['model_offset']
         titan_offset = metadata['titan_offset']
         
+        offsets = []
+        
+        star_confidence = 0.
         if stars_metadata is None:
             data_line = 'Stars N/A'
         elif stars_offset is None:
@@ -1368,25 +1433,47 @@ def offset_create_overlay_image(obs, metadata,
             else:
                 data_line = 'Stars'
             data_line += ' %.2f,%.2f' % stars_offset
+            if ('stars_metadata' in metadata and
+                'confidence' in metadata['stars_metadata']):
+                star_confidence = metadata['stars_metadata']['confidence']
+                data_line += '/%.2f' % star_confidence 
+        offsets.append((star_confidence, data_line))
+        
+        model_confidence = 0.
         if model_offset is None:
-            data_line += ' | Model N/A'
+            data_line = 'Model N/A'
         else:
             if (offset_winner != 'STARS' and
                 offset_winner != 'TITAN'):
-                data_line += ' | MODEL'
+                data_line = 'MODEL'
             else:
-                data_line += ' | Model'
-            data_line += ' %d,%d' % model_offset
+                data_line = 'Model'
+            data_line += ' %.2f,%.2f' % model_offset
+            model_confidence = metadata['model_confidence']
+            data_line += '/%.2f' % model_confidence
+            if metadata['model_rings_radial_gradient'] is not None:
+                data_line += ' NOLONG'
+        offsets.append((model_confidence, data_line))
+        
+        titan_confidence = 0.
         if titan_metadata is None:
-            data_line += ' | Titan N/A'
+            data_line = 'Titan N/A'
         elif titan_offset is None:
-            data_line += ' | Titan None'
+            data_line = 'Titan None'
         else:
             if offset_winner == 'TITAN':
-                data_line += ' | TITAN'
+                data_line = 'TITAN'
             else:
-                data_line += ' | Titan'
+                data_line = 'Titan'
             data_line += ' %d,%d' % titan_offset
+            if ('titan_metadata' in metadata and
+                'confidence' in metadata['titan_metadata']):
+                titan_confidence = metadata['titan_metadata']['confidence']
+                data_line += '/%.2f' % titan_confidence
+        offsets.append((titan_confidence, data_line))
+        offsets.sort()
+        
+        data_line = ' | '.join([x[1] for x in offsets])
         data_lines.append(data_line)
 
         model_contents = metadata['model_contents']

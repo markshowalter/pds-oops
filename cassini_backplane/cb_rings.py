@@ -1860,6 +1860,28 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     
     return model
 
+
+#==============================================================================
+# 
+# MISC RING UTILITIES
+#
+#==============================================================================
+
+def rings_offset_radial_projection(obs, offset, 
+                                   extend_fov=(0,0), 
+                                   rings_config=None):
+    set_obs_center_bp(obs)
+    gradient = obs.center_bp.ring_gradient_angle('saturn:ring').vals.astype('float')
+    grad_x = np.cos(gradient)
+    grad_y = np.sin(gradient)
+    # Projection is (a.b) / (b.b) * b
+    # b is a unit vector, so we can ignore b.b
+    scalar = (offset[0]*grad_x + offset[1]*grad_y)
+    proj_x = scalar*grad_x
+    proj_y = scalar*grad_y
+    return (proj_x, proj_y), gradient
+
+                    
 #==============================================================================
 # 
 # RING REPROJECTION UTILITIES

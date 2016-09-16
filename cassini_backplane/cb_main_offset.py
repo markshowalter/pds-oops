@@ -125,7 +125,7 @@ if len(command_list) == 0:
 #    command_line_str = 'N1575647907_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, requires pred kernel 
 #    command_line_str = 'W1553000979_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, BL1, photometry OK
 #    command_line_str = 'W1620385882_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
-    command_line_str = 'N1498395457_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
+#    command_line_str = 'N1498395457_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
 
 
 # MOSAIC TEST
@@ -153,6 +153,8 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset --first-image-num 1521584495 --last-image-num 1521620702 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1644777693 --last-image-num 1644802455 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1717565987 --last-image-num 1717571685 --image-logfile-level debug --max-subprocesses 2'
+
+    command_line_str = 'N1503265864_1 --force-offset --image-console-level debug'
 
     command_list = command_line_str.split()
 
