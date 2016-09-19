@@ -872,7 +872,7 @@ def _stars_mark_conflicts(obs, star, offset, rings_can_conflict, stars_config):
 
     # Check for rings
     if rings_can_conflict:
-        ring_radius = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+        ring_radius = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         ring_longitude = (obs.ext_bp.ring_longitude('saturn:ring').vals.
                           astype('float'))
         rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]

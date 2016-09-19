@@ -83,11 +83,11 @@ def _bodies_create_cartographic(bp, body_data):
     body_mask_inv = ma.getmaskarray(bp_latitude.mvals)
     ok_body_mask = np.logical_not(body_mask_inv)
 
-    bp_latitude = bp_latitude.vals.astype('float')
+    bp_latitude = bp_latitude.mvals.astype('float')
 
     bp_longitude = bp.longitude(body_name, direction=lon_direction,
                                 lon_type=latlon_type)
-    bp_longitude = bp_longitude.vals.astype('float')
+    bp_longitude = bp_longitude.mvals.astype('float')
 
     latitude_pixels = (bp_latitude + oops.HALFPI) / lat_res
     latitude_pixels = np.round(latitude_pixels).astype('int')
@@ -120,7 +120,7 @@ def _bodies_create_cartographic(bp, body_data):
     model[inv_ok_pixel_mask] = 0
 
     # Now figure out the resolution mis-match
-    bp_emission = bp.emission_angle(body_name).vals.astype('float32')
+    bp_emission = bp.emission_angle(body_name).mvals.astype('float32')
     center_resolution = (bp.center_resolution(body_name).
                          vals.astype('float32'))
     image_resolution = center_resolution / np.cos(bp_emission)
@@ -611,7 +611,7 @@ def bodies_create_model(obs, body_name, inventory,
         logger.debug('Making actual model')
     
         if bodies_config['use_lambert']:
-            restr_model = restr_bp.lambert_law(body_name).vals.astype('float')
+            restr_model = restr_bp.lambert_law(body_name).mvals.astype('float')
             # Make a slight glow even past the terminator
             restr_model = restr_model+0.01
             restr_model[restr_body_mask_inv] = 0.
@@ -865,14 +865,14 @@ def bodies_reproject(
         bp = oops.Backplane(obs)
     
     if max_incidence is not None or not mask_only:
-        lambert = bp.lambert_law(body_name).vals.astype('float32')
-        bp_incidence = bp.incidence_angle(body_name).vals.astype('float32') 
+        lambert = bp.lambert_law(body_name).mvals.astype('float32')
+        bp_incidence = bp.incidence_angle(body_name).mvals.astype('float32') 
 
     if max_emission is not None or not mask_only:
-        bp_emission = bp.emission_angle(body_name).vals.astype('float32')
+        bp_emission = bp.emission_angle(body_name).mvals.astype('float32')
         
     if not mask_only:
-        bp_phase = bp.phase_angle(body_name).vals.astype('float32')
+        bp_phase = bp.phase_angle(body_name).mvals.astype('float32')
 
         # Resolution takes into account the emission angle - the "along sight"
         # projection
@@ -882,11 +882,11 @@ def bodies_reproject(
 
     bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = ma.getmaskarray(bp_latitude.mvals)
-    bp_latitude = bp_latitude.vals.astype('float32')
+    bp_latitude = bp_latitude.mvals.astype('float32')
 
     bp_longitude = bp.longitude(body_name, direction=lon_direction,
                                 lon_type=latlon_type)
-    bp_longitude = bp_longitude.vals.astype('float32')
+    bp_longitude = bp_longitude.mvals.astype('float32')
 
     if subimage_edges is not None:
         u_min, u_max, v_min, v_max = subimage_edges

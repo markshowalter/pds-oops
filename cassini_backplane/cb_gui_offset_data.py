@@ -142,22 +142,22 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     if show_rings:
         bp_ring_radius = obs.ext_bp.ring_radius('saturn:ring')
         if not np.all(bp_ring_radius.mask):
-            bp_ring_radius = bp_ring_radius.vals.astype('float')
+            bp_ring_radius = bp_ring_radius.mvals.astype('float')
             metadata['ring_radius'] = bp_ring_radius
             metadata['ring_longitude'] = (
-                obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float') *
+                obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float') *
                                                                 oops.DPR)
             metadata['ring_resolution'] = (
-                obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
+                obs.ext_bp.ring_radial_resolution('saturn:ring').mvals.
                                                             astype('float'))
             metadata['ring_phase'] = (
-                obs.ext_bp.phase_angle('saturn:ring').vals.astype('float') * 
+                obs.ext_bp.phase_angle('saturn:ring').mvals.astype('float') * 
                                                                 oops.DPR)
             metadata['ring_emission'] = (
-                obs.ext_bp.emission_angle('saturn:ring').vals.astype('float') *
+                obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float') *
                                                                 oops.DPR)
             metadata['ring_incidence'] = (
-                obs.ext_bp.incidence_angle('saturn:ring').vals.astype('float')*
+                obs.ext_bp.incidence_angle('saturn:ring').mvals.astype('float')*
                                                                 oops.DPR) 
 
     if show_bodies:

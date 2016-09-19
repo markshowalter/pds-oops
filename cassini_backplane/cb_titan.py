@@ -580,7 +580,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     # We do this by correlating a Lambert law model of Titan with the image.
     trial_offset = (0,0)
     if offset_limit > titan_radius_pix/2:
-        bp_lambert = obs.bp.lambert_law('TITAN+ATMOSPHERE').vals.astype('float')
+        bp_lambert = obs.bp.lambert_law('TITAN+ATMOSPHERE').mvals.astype('float')
         bp_lambert = bp_lambert+0.01
         model_offset_list = find_correlation_and_offset(
                                    obs.data,

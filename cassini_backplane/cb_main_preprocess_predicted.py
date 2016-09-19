@@ -78,8 +78,8 @@ def process_predicted_one_image(image_path):
                                time=polymath.Scalar([obs.midtime,
                                                      obs.midtime-obs.texp/2,
                                                      obs.midtime+obs.texp/2]))
-    ra = center_bp.right_ascension().vals.astype('float')
-    dec = center_bp.declination().vals.astype('float')
+    ra = center_bp.right_ascension().mvals.astype('float')
+    dec = center_bp.declination().mvals.astype('float')
     dra_dt = (ra[2]-ra[1])/obs.texp
     ddec_dt = (dec[2]-dec[1])/obs.texp
     

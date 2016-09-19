@@ -718,11 +718,11 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
 
     set_obs_ext_bp(obs, extend_fov)
         
-    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
-    longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float') 
+    longitudes = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float') 
     min_longitude = np.min(longitudes)
     max_longitude = np.max(longitudes)
 
@@ -874,7 +874,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     min_features = rings_config['fiducial_feature_threshold']
     min_feature_width = rings_config['fiducial_min_feature_width']
 
-    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
@@ -1266,8 +1266,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                              in_front_mask, extend_fov, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')
 
-    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
-    longitudes = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
+    radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
+    longitudes = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float')
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
     
@@ -1365,10 +1365,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                     if min_radius < outer_a < max_radius:
                         outer_radii_bp = _make_ephemeris_radii(obs, outer)
             if inner_radii_bp is not None:
-                inner_radii = inner_radii_bp.vals.astype('float')
+                inner_radii = inner_radii_bp.mvals.astype('float')
                 inner_radii[in_front_mask] = 0.
             if outer_radii_bp is not None:
-                outer_radii = outer_radii_bp.vals.astype('float')
+                outer_radii = outer_radii_bp.mvals.astype('float')
                 outer_radii[in_front_mask] = 0.
             if (inner_radii is not None and outer_radii is not None
                 and entry_type == 'RINGLET'):
@@ -1392,13 +1392,13 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                     # OEG and the A Ring outer edge
                     intersect = obs.ext_bp.border_atop(
                                           inner_radii_bp.key,
-                                          inner_a).vals.astype('bool')
+                                          inner_a).mvals.astype('bool')
                     intersect[in_front_mask] = False
                     intersect_list.append(intersect)
                     text_name_list.append('Keeler OEG')
                     intersect = obs.ext_bp.border_atop(
                                           outer_radii_bp.key,
-                                          outer_a).vals.astype('bool')
+                                          outer_a).mvals.astype('bool')
                     intersect[in_front_mask] = False
                     intersect_list.append(intersect)
                     text_name_list.append('A Ring Outer Edge')                        
@@ -1420,13 +1420,13 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                         # OE and the Huygens Gap outer edge
                         intersect = obs.ext_bp.border_atop(
                                               inner_radii_bp.key,
-                                              inner_a).vals.astype('bool')
+                                              inner_a).mvals.astype('bool')
                         intersect[in_front_mask] = False
                         intersect_list.append(intersect)
                         text_name_list.append('B Ring Outer Edge')
                         intersect = obs.ext_bp.border_atop(
                                               outer_radii_bp.key,
-                                              outer_a).vals.astype('bool')
+                                              outer_a).mvals.astype('bool')
                         intersect[in_front_mask] = False
                         intersect_list.append(intersect)
                         text_name_list.append('Huygens OEG')                        
@@ -1457,7 +1457,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                     if not named_full_gap:
                         intersect = obs.ext_bp.border_atop(
                                               inner_radii_bp.key,
-                                              inner_a).vals.astype('bool')
+                                              inner_a).mvals.astype('bool')
                         intersect[in_front_mask] = False
                         intersect_list.append(intersect)
                         if (feature_name and 
@@ -1483,7 +1483,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                     if not named_full_gap:
                         intersect = obs.ext_bp.border_atop(
                                               outer_radii_bp.key,
-                                              outer_a).vals.astype('bool')
+                                              outer_a).mvals.astype('bool')
                         intersect[in_front_mask] = False
                         intersect_list.append(intersect)
                         if (feature_name and 
@@ -1642,7 +1642,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     
     set_obs_ext_bp(obs, extend_fov)
 
-    radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
 
     min_radius = np.min(radii)
     max_radius = np.max(radii)
@@ -1654,7 +1654,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         metadata['end_time'] = time.time()
         return None, metadata, None
     
-    emission = obs.ext_bp.emission_angle('saturn:ring').vals.astype('float')
+    emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
     good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
                                radii <= RINGS_MAX_RADIUS)
     min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
@@ -1734,7 +1734,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     model_source = rings_config['model_source']
     if model_source != 'ephemeris':
         assert False # Not currently tested
-        radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+        radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         radii = radii.copy()
         
         radii[radii < RINGS_MIN_RADIUS] = 0
@@ -1756,7 +1756,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         if bodies_model_list is not None:
             # Erase from the model any location where the rings are further from
             # the observer than a body
-            rings_dist = obs.ext_bp.distance('saturn:ring').vals.astype('float')
+            rings_dist = obs.ext_bp.distance('saturn:ring').mvals.astype('float')
             for body_model, body_metadata, body_text in bodies_model_list:
                 body_dist = body_metadata['inventory']['range']
                 in_front_mask[((rings_dist>body_dist) & 
@@ -1805,7 +1805,7 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     # a subarray of the extended one.
     set_obs_ext_bp(obs, extend_fov)
 
-    bp_radii = obs.ext_bp.ring_radius('saturn:ring').vals.astype('float')
+    bp_radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     bp_radii = bp_radii[extend_fov[1]:extend_fov[1]+data.shape[0],
                         extend_fov[0]:extend_fov[0]+data.shape[1]]
     min_radius = np.clip(np.min(bp_radii), RINGS_MIN_RADIUS, RINGS_MAX_RADIUS)
@@ -1816,7 +1816,7 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
     radius_resolution = (max_radius-min_radius) / diag
 
     # XXX This will have a problem with wrap-around
-    bp_longitude = obs.ext_bp.ring_longitude('saturn:ring').vals.astype('float')
+    bp_longitude = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float')
     bp_longitude = bp_longitude[extend_fov[1]:extend_fov[1]+data.shape[0],
                                 extend_fov[0]:extend_fov[0]+data.shape[1]]
     min_longitude = np.min(bp_longitude)
@@ -1871,7 +1871,7 @@ def rings_offset_radial_projection(obs, offset,
                                    extend_fov=(0,0), 
                                    rings_config=None):
     set_obs_center_bp(obs)
-    gradient = obs.center_bp.ring_gradient_angle('saturn:ring').vals.astype('float')
+    gradient = obs.center_bp.ring_gradient_angle('saturn:ring').mvals.astype('float')
     grad_x = np.cos(gradient)
     grad_y = np.sin(gradient)
     # Projection is (a.b) / (b.b) * b
@@ -1940,8 +1940,8 @@ def _rings_restrict_longitude_radius_to_obs(obs, longitude, radius,
     u_max = obs.data.shape[1]-1 + obs.extend_fov[0]*2
     v_max = obs.data.shape[0]-1 + obs.extend_fov[1]*2
 
-    bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
-    bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float')
+    bp_radius = bp.ring_radius('saturn:ring').mvals.astype('float')
+    bp_longitude = bp.ring_longitude('saturn:ring').mvals.astype('float')
     
     min_bp_radius = np.min(bp_radius)
     max_bp_radius = np.max(bp_radius)
@@ -2201,15 +2201,15 @@ def rings_reproject(
     else:
         bp = oops.Backplane(obs, meshgrid)
         
-    bp_radius = bp.ring_radius('saturn:ring').vals.astype('float')
-    bp_longitude = bp.ring_longitude('saturn:ring').vals.astype('float')
+    bp_radius = bp.ring_radius('saturn:ring').mvals.astype('float')
+    bp_longitude = bp.ring_longitude('saturn:ring').mvals.astype('float')
     
     if not image_only: 
         bp_resolution = (bp.ring_radial_resolution('saturn:ring')
-                         .vals.astype('float'))
-        bp_phase = bp.phase_angle('saturn:ring').vals.astype('float')
-        bp_emission = bp.emission_angle('saturn:ring').vals.astype('float') 
-        bp_incidence = bp.incidence_angle('saturn:ring').vals.astype('float')
+                         .mvals.astype('float'))
+        bp_phase = bp.phase_angle('saturn:ring').mvals.astype('float')
+        bp_emission = bp.emission_angle('saturn:ring').mvals.astype('float') 
+        bp_incidence = bp.incidence_angle('saturn:ring').mvals.astype('float')
 
     # Clear out any pixels in Saturn's shadow
     if omit_saturns_shadow:
