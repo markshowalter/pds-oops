@@ -154,8 +154,15 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset --first-image-num 1644777693 --last-image-num 1644802455 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1717565987 --last-image-num 1717571685 --image-logfile-level debug --max-subprocesses 2'
 
-    command_line_str = 'N1503265864_1 --force-offset --image-console-level debug'
+#    command_line_str = 'N1511700120_1 W1511714612_1 N1511715316_2 N1511716650_2 N1511718003_2 N1511719101_2 W1511726740_1 --image-console-level debug --force-offset --no-allow-stars'
+#    command_line_str = 'N1511726828_2 N1511726954_2 N1511727079_2 N1511727217_2 N1511727361_2 N1511727503_2 N1511727641_2 N1511727774_2 N1511727899_2 N1511728035_2 N1511728175_2 N1511728315_2 N1511728440_2 N1511728581_2 N1511728708_2 N1511728833_2 N1511728958_2 N1511729097_2 N1511729338_2 N1511729463_2 N1511729588_2 --image-console-level debug --force-offset'
+#    command_line_str = 'W1511726740_1 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
+#    command_line_str = 'N1511727641_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
+#    command_line_str = 'N1511727503_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
+#    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 
+    command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
+    
     command_list = command_line_str.split()
 
 parser = argparse.ArgumentParser(

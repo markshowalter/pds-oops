@@ -558,7 +558,7 @@ def master_find_offset(obs,
                 continue
             if body_name != 'SATURN' and not allow_moons:
                 continue
-            # If the whole image is a single unobsctructed body, then
+            # If the whole image is a single unobstructed body, then
             # we will want to bootstrap later, so don't bother making
             # fancy models, just make the latlon mask.
             mask_only = (entirely_body == body_name and
@@ -771,9 +771,10 @@ def master_find_offset(obs,
         if can_override_body_curvature:
             model_phase_info_list.append((0.35,  True, False, False, False, False))
 
-        # Try overriding just body limbs
-        if can_override_body_limb:
-            model_phase_info_list.append((0.25, False,  True, False, False, False))
+# This is too dangerous
+#        # Try overriding just body limbs
+#        if can_override_body_limb:
+#            model_phase_info_list.append((0.25, False,  True, False, False, False))
 
         if rings_curvature_ok:
             # Try ring blurring
@@ -797,6 +798,12 @@ def master_find_offset(obs,
                 if rings_features_blurred is not None:
                     # ... and blurring
                     model_phase_info_list.append((0.20, False, False, True, False, True))
+                if can_override_ring_features_ok:
+                    # ... and # of ring features
+                    model_phase_info_list.append((0.10, False, False, True, True, False))
+                    if rings_features_blurred is not None:
+                        # ... and # of ring features plus burring
+                        model_phase_info_list.append((0.10, False, False, True, True, True))
 
     model_phase_info_list.sort(reverse=True)
     
@@ -817,6 +824,12 @@ def master_find_offset(obs,
             break
         
         if rings_allow_blur and rings_features_blurred is None:
+            # If no ring blurring is required, then skip over assumptions that
+            # include ring blurring
+            continue
+        if not rings_allow_blur and rings_features_blurred is not None:
+            # If ring blurring is required, then any model that includes
+            # the rings MUST be blurred
             continue
 
         logger.info('*** Trying model offset with:')
@@ -846,10 +859,20 @@ def master_find_offset(obs,
                       body_metadata['curvature_ok']) or
                  not (override_bodies_limb_ok or
                       body_metadata['limb_ok']) or
-                 not body_metadata['size_ok'])):
+                 not body_metadata['size_ok'] or
+                 body_metadata['too_bumpy'])):
                 continue
             body_model_list.append(body_model)
             used_model_str_list.append(body_name)
+            if body_metadata['body_blur'] is not None:
+                if model_blur_amount is None:
+                    model_blur_amount = body_metadata['body_blur']
+                else:
+                    model_blur_amount = max(model_blur_amount,
+                                            body_metadata['body_blur'])
+                logger.info('Blurring model by at least %f because of %s',
+                            body_metadata['body_blur'], body_name)
+
 
         if (override_rings_curvature_ok and len(body_model_list) == 0 and
             model_confidence > 0.3):
@@ -866,8 +889,23 @@ def master_find_offset(obs,
         ### Now deal with rings
         
         use_rings_model = False
-        
+
+        # If the rings are occluded by a bumpy body, give up now because
+        # the correlation will produce bad results. See for example
+        # N1511727503_2.
+        rings_occluded_ok = True
+        if rings_model is not None:
+            for body_name in rings_metadata['occluded_by']:
+                for body_model, body_metadata, body_text in bodies_model_list:
+                    if (body_metadata['body_name'] == body_name and
+                        body_metadata['too_bumpy']):
+                        rings_occluded_ok = False
+                        break
+                    logger.info('Ignoring rings because they are occluded by'+
+                                ' a bumpy %s', body_name)
+                
         if (rings_model is not None and 
+            rings_occluded_ok and
             (override_rings_curvature_ok or rings_curvature_ok) and 
             (override_rings_features_ok or rings_features_ok) and
             (rings_allow_blur or rings_features_blurred is None)):
@@ -921,6 +959,10 @@ def master_find_offset(obs,
                                offset_config['median_filter_size'],
                                offset_config['median_filter_blur'],
                                masked=masked))
+#        plt.imshow(model_filter_func(obs.ext_data))
+#        plt.figure()
+#        plt.imshow(model_filter_func(final_model))
+#        plt.show()
         model_offset_list = find_correlation_and_offset(
                                    obs.ext_data,
                                    final_model, search_size_min=0,
@@ -959,11 +1001,13 @@ def master_find_offset(obs,
                                        extend_fov[0]-model_offset_int[0]+
                                            obs.data.shape[1]]
             sec_search_size = offset_config['secondary_corr_search_size']
+            if model_rings_radial_only:
+                sec_search_size = (search_size_max_u, 
+                                   search_size_max_v)
             model_offset_list = find_correlation_and_offset(
                                    obs.data,
                                    offset_model, search_size_min=0,
-                                   search_size_max=(sec_search_size,
-                                                    sec_search_size),
+                                   search_size_max=sec_search_size,
                                    filter=model_filter_func,
                                    masked=masked_model)
             new_model_offset = None

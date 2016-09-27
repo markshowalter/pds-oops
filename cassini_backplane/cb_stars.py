@@ -1540,7 +1540,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         offset = None
         good_stars = 0
         logger.info('FAILED to find a valid offset')
-        if perform_photometry:
+        if perform_photometry and stars_config['try_without_photometry']:
             logger.info('Trying again with photometry disabled')
             ret = _stars_find_offset(obs, filtered_data, star_list,
                                      min_stars, 1.,

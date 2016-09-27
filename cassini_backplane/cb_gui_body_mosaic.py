@@ -44,6 +44,8 @@ def _command_refresh_color(metadata):
         valsrc = metadata['time']
     elif color_sel == 'relresolution':
         valsrc = metadata['resolution']
+    elif color_sel == 'releffresolution':
+        valsrc = metadata['eff_resolution']
     elif color_sel == 'relphase':
         valsrc = metadata['phase']
     elif color_sel == 'absphase':
@@ -108,6 +110,8 @@ def _callback_mousemove(x, y, metadata):
                            ('%7.3f'%(metadata['emission'][y,x] * oops.DPR)))
         metadata['label_resolution'].config(text=
                            ('%7.3f'%metadata['resolution'][y,x]))
+        metadata['label_eff_resolution'].config(text=
+                           ('%7.3f'%metadata['eff_resolution'][y,x]))
         path = metadata['path_list'][metadata['image_number'][y,x]]
         filename = file_clean_name(path, keep_bootstrap=True)
         metadata['label_image'].config(text=filename[:13])
@@ -255,6 +259,15 @@ def display_body_mosaic(metadata, title=None):
     metadata['label_resolution'] = label_resolution
     gridrow += 1
     
+    label = tk.Label(addon_control_frame, text='Eff Resolution:',
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn, sticky='w')
+    label_eff_resolution = tk.Label(addon_control_frame, text='',
+                                    anchor='e', width=val_width)
+    label_eff_resolution.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    metadata['label_eff_resolution'] = label_eff_resolution
+    gridrow += 1
+    
     gridrow = 0
     gridcolumn = 6
 
@@ -283,6 +296,11 @@ def display_body_mosaic(metadata, title=None):
     tk.Radiobutton(addon_control_frame, text='Rel Resolution', 
                    variable=var_color_by,
                    value='relresolution', command=refresh_color_func).grid(
+                                  row=gridrow, column=gridcolumn, sticky='w')
+    gridrow += 1
+    tk.Radiobutton(addon_control_frame, text='Rel Eff Resolution', 
+                   variable=var_color_by,
+                   value='releffresolution', command=refresh_color_func).grid(
                                   row=gridrow, column=gridcolumn, sticky='w')
     gridrow += 1
     tk.Radiobutton(addon_control_frame, text='Abs Phase', 

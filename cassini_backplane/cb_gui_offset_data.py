@@ -324,7 +324,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         bootstrap_str = 'Yes'
         if (metadata['large_bodies'] is not None and
             len(metadata['large_bodies']) > 0):
-            bootstrap_str += ' (' + metadata['large_bodies'][0][:2]+')'
+            bootstrap_str += ' (' + metadata['large_bodies'][0][:2].capitalize()+')'
 
     label = ttk.Label(addon_control_frame, text='Bootstrap Cand:', 
                      anchor='w', width=label_width)

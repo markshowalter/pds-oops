@@ -148,12 +148,17 @@ def reproject_image(image_path, body_name, bootstrap_pref):
     data = bodies_interpolate_missing_stripes(obs.data)
     offset = metadata['offset']
     
+    navigation_uncertainty = metadata['model_blur_amount']
+    if navigation_uncertainty is None or navigation_uncertainty < 1.:
+        navigation_uncertainty = 1.
+    image_logger.info('Navigation uncertainty %.2f', navigation_uncertainty)
     if offset is None:
         image_logger.error('No valid offset in offset file')
     else:
         repro_metadata = bodies_reproject(
               obs, body_name, data=data, offset=offset,
               offset_path=metadata['offset_path'],
+              navigation_uncertainty=navigation_uncertainty,
               lat_resolution=arguments.lat_resolution*oops.RPD, 
               lon_resolution=arguments.lon_resolution*oops.RPD,
               latlon_type=arguments.latlon_type,

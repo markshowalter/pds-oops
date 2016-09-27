@@ -72,7 +72,7 @@ def _bodies_create_cartographic(bp, body_data):
     lat_res = body_data['lat_resolution']
     lon_res = body_data['lon_resolution']
     data = body_data['img']
-    data_res = body_data['resolution']
+    eff_res = body_data['eff_resolution']
     min_lat_pixel = body_data['lat_idx_range'][0]
     min_lon_pixel = body_data['lon_idx_range'][0]
     body_name = body_data['body_name']
@@ -125,27 +125,30 @@ def _bodies_create_cartographic(bp, body_data):
                          vals.astype('float32'))
     image_resolution = center_resolution / np.cos(bp_emission)
 
-    mosaic_res = data_res[latitude_pixels, longitude_pixels]
+    mosaic_eff_res = eff_res[latitude_pixels, longitude_pixels]
 
     image_resolution = image_resolution[ok_pixel_mask]
-    mosaic_res = mosaic_res[ok_pixel_mask]
+    mosaic_res = mosaic_eff_res[ok_pixel_mask]
     image_resolution = image_resolution[mosaic_res != 0]
     mosaic_res = mosaic_res[mosaic_res != 0]
     
     logger.debug('Image resolution %.5f to %.5f',
                  np.min(image_resolution), np.max(image_resolution))
-    logger.debug('Cartographic resolution %.5f to %.5f',
+    logger.debug('Cartographic effective resolution %.5f to %.5f',
                  np.min(mosaic_res), np.max(mosaic_res))
     
     res_ratio = mosaic_res / image_resolution
     best_ratio = np.min(res_ratio)
     worst_ratio = np.max(res_ratio)
+    median_ratio = np.median(res_ratio)
+    
+    blur_amt = median_ratio
     
     logger.debug('Best resolution ratio %.5f, worst %.5f, mean %.5f, '+
                  'median %.5f', best_ratio, worst_ratio,
                  np.mean(res_ratio), np.median(res_ratio))
     
-    return model, best_ratio
+    return model, blur_amt
 
 def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                        bodies_config):
@@ -337,6 +340,9 @@ def bodies_create_model(obs, body_name, inventory,
                                shifted to the maximum extent specified by
                                extend_fov. This is based purely on geometry, 
                                not looking at whether other objects occult it.
+        'too_bumpy'            True if the image is high enough resolution that
+                               surface features distort the circularity of the
+                               moon.
         'occulted_by'          A list of body names or 'RINGS' that occult some
                                or all of this body. This is set in the main
                                offset loop, not in this procedure. None if
@@ -388,8 +394,10 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['curvature_ok'] = None
     metadata['limb_ok'] = None
     metadata['entirely_visible'] = None
+    metadata['too_bumpy'] = None
     metadata['occulted_by'] = None
     metadata['in_saturn_shadow'] = None
+    metadata['body_blur'] = None
     metadata['latlon_mask'] = None
     metadata['mask_lat_resolution'] = None
     metadata['mask_lon_resolution'] = None
@@ -443,8 +451,6 @@ def bodies_create_model(obs, body_name, inventory,
             metadata['end_time'] = time.time()
             return None, metadata, None
         
-    # Analyze the curvature
-            
     u_min = inventory['u_min_unclipped']
     u_max = inventory['u_max_unclipped']
     v_min = inventory['v_min_unclipped']
@@ -462,30 +468,29 @@ def bodies_create_model(obs, body_name, inventory,
         # the extended FOV
         entirely_visible = True
     metadata['entirely_visible'] = entirely_visible
-    
-    curvature_threshold_frac = bodies_config['curvature_threshold_frac']
-    curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
+
+    if body_name in bodies_config['surface_bumpiness']:
+        center_resolution = (obs.ext_bp.center_resolution(body_name).
+                             vals.astype('float32'))
+        if (center_resolution < 
+            bodies_config['surface_bumpiness'][body_name]):
+            metadata['too_bumpy'] = True
+            logger.info('Resolution %.2f is too high - limb will look bumpy',
+                        center_resolution)
+        else:
+            metadata['too_bumpy'] = False
+
+    # For curvature later
     u_center = (u_min+u_max)/2
     v_center = (v_min+v_max)/2
     width = u_max-u_min+1
     height = v_max-v_min+1
+    curvature_threshold_frac = bodies_config['curvature_threshold_frac']
+    curvature_threshold_pix = bodies_config['curvature_threshold_pixels']
     width_threshold = max(width * curvature_threshold_frac,
                           curvature_threshold_pix)
     height_threshold = max(height * curvature_threshold_frac,
                            curvature_threshold_pix)
-    # Slightly more than half of the body must be visible in each of the
-    # horizontal and vertical directions
-    if (((u_center-width_threshold > extend_fov[0] and # Body is to left 
-          u_center+width/2 < obs.data.shape[1]-1-extend_fov[0]) or
-         (u_center+width_threshold < obs.data.shape[1]-1-extend_fov[0] and
-          u_center-width/2 > extend_fov[0])) and # Body is to right
-        ((v_center-height_threshold > extend_fov[1] and  # Body is at top
-          v_center+height/2 < obs.data.shape[0]-1-extend_fov[1]) or
-         (v_center+height_threshold < obs.data.shape[0]-1-extend_fov[1] and
-          v_center-height/2 > extend_fov[1]))): # Body is at bottom
-        metadata['curvature_ok'] = True
-    else:
-        metadata['curvature_ok'] = False
     
     u_min -= int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
     u_max += int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
@@ -511,14 +516,9 @@ def bodies_create_model(obs, body_name, inventory,
                  obs.data.shape[1], obs.data.shape[0],
                  u_min, u_max, v_min, v_max)
     if entirely_visible:
-        logger.info('All of body is visible')
+        logger.info('All of body is guaranteed visible')
     else:
-        logger.info('Not all of body is visible')
-
-    if metadata['curvature_ok']:
-        logger.info('Curvature OK')
-    else:
-        logger.info('Curvature BAD')
+        logger.info('Not all of body guaranteed to be visible')
 
     # Create a Meshgrid that only covers the extent of the body
     restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
@@ -570,34 +570,115 @@ def bodies_create_model(obs, body_name, inventory,
     limb_mask_total = np.logical_or(limb_mask_total, limb_mask_4)
     limb_mask = np.logical_and(limb_mask, limb_mask_total)
 
+    masked_incidence = incidence.mask_where(np.logical_not(limb_mask))
+    
     if not np.any(limb_mask):
         limb_incidence_min = 1e38
         limb_incidence_max = 1e38
         logger.info('No limb')
     else:
-        limb_incidence_min = np.min(incidence[limb_mask].vals)
-        limb_incidence_max = np.max(incidence[limb_mask].vals)
+        limb_incidence_min = np.min(masked_incidence.mvals)
+        limb_incidence_max = np.max(masked_incidence.mvals)
         logger.info('Limb incidence angle min %.2f max %.2f',
                      limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
-    limb_threshold = bodies_config['limb_incidence_threshold']
-    # If we can see the entire body, then we only need part of the limb to be
-    # OK. If the body is partially off the edge, then we need the entire limb
-    # to be OK. If we have cartographic data, then we don't need a limb
-    # at all.
-    if ((entirely_visible and limb_incidence_min < limb_threshold) or
-        (not entirely_visible and limb_incidence_max < limb_threshold)):
-        logger.info('Limb meets criteria')
-        metadata['limb_ok'] = True
-    elif cartographic_data and body_name in cartographic_data:
-        logger.info('Limb ignored because cartographic data available')
-        metadata['limb_ok'] = True
-    else:
-        metadata['limb_ok'] = False
-        logger.info('Limb fails criteria')
-        if not always_create_model:
-            metadata['end_time'] = time.time()
-            return None, metadata, None
 
+        limb_threshold = bodies_config['limb_incidence_threshold']
+        limb_frac = bodies_config['limb_incidence_frac']
+            
+        # Slightly more than half of the body must be visible in each of the
+        # horizontal and vertical directions AND also have a good limb in
+        # those quadrants
+        
+        curvature_ok = False
+        limb_ok = False
+        l_edge = extend_fov[0]
+        r_edge = obs.data.shape[1]-1-extend_fov[0]
+        t_edge = extend_fov[1]
+        b_edge = obs.data.shape[0]-1-extend_fov[1]
+        inc_r_edge = masked_incidence.vals.shape[1]-1
+        inc_b_edge = masked_incidence.vals.shape[0]-1
+        for l_moon, r_moon, lr_str in ((u_center-width_threshold,
+                                       u_center+width/2, 'L'),
+                                      (u_center-width/2,
+                                       u_center+width_threshold, 'R')):
+            for t_moon, b_moon, tb_str in ((v_center-height_threshold,
+                                            v_center+height/2, 'T'),
+                                           (v_center-height/2,
+                                            v_center+height_threshold, 'B')):
+                if (l_moon >= l_edge and r_moon <= r_edge and 
+                    t_moon >= t_edge and b_moon <= b_edge):
+                    l_moon_clip = np.clip(l_moon-u_min, 0, inc_r_edge)
+                    r_moon_clip = np.clip(r_moon-u_min, 0, inc_r_edge)
+                    t_moon_clip = np.clip(t_moon-v_min, 0, inc_b_edge)
+                    b_moon_clip = np.clip(b_moon-v_min, 0, inc_b_edge)
+                    sub_inc = masked_incidence[t_moon_clip:b_moon_clip+1,
+                                               l_moon_clip:r_moon_clip+1].mvals
+                    sub_inc_min = np.min(sub_inc)
+                    if (sub_inc_min < limb_threshold):
+                        logger.debug('Curvature+limb quadrant %s%s OK', 
+                                     tb_str, lr_str)
+                        curvature_ok = True
+    
+        if (not curvature_ok and
+            extend_fov[0] < u_center < obs.data.shape[1]-1-extend_fov[0] and
+            extend_fov[1] < v_center < obs.data.shape[0]-1-extend_fov[1]):
+            # See if the moon is mostly centered on the image, and just extends
+            # past the edges on each side leaving enough curvature behind
+            full_inc = ma.zeros((obs.data.shape[0]+extend_fov[1]*2,
+                                 obs.data.shape[1]+extend_fov[0]*2),
+                                dtype=np.float32)
+            full_inc[:,:] = ma.masked
+            full_inc[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
+                     u_min+extend_fov[0]:u_max+extend_fov[0]+1] = masked_incidence.mvals
+            full_inc[:extend_fov[1]*2,:] = ma.masked
+            full_inc[:,:extend_fov[0]*2] = ma.masked
+            full_inc[-extend_fov[1]*2:,:] = ma.masked
+            full_inc[:,-extend_fov[0]*2:] = ma.masked
+            tl_inc = full_inc[:v_center+extend_fov[1],
+                              :u_center+extend_fov[0]]
+            tr_inc = full_inc[:v_center+extend_fov[1],
+                              u_center+extend_fov[0]:]
+            bl_inc = full_inc[v_center+extend_fov[1]:,
+                              :u_center+extend_fov[0]]
+            br_inc = full_inc[v_center+extend_fov[1]:,
+                              u_center+extend_fov[0]:]
+            if ((np.min(tl_inc) < limb_threshold and 
+                 np.min(br_inc) < limb_threshold) or
+                (np.min(tr_inc) < limb_threshold and
+                 np.min(bl_inc) < limb_threshold)):
+                curvature_ok = True
+
+        metadata['curvature_ok'] = curvature_ok
+        if metadata['curvature_ok']:
+            metadata['limb_ok'] = True
+            logger.info('Curvature+limb OK')
+        else:
+            logger.info('Curvature+limb BAD')    
+    
+            if cartographic_data and body_name in cartographic_data:
+                logger.info('Limb ignored because cartographic data available')
+                metadata['limb_ok'] = True
+            else:
+                ok_masked_incidence = masked_incidence.mvals[np.where(
+                                          masked_incidence.mvals < 
+                                          limb_threshold)]
+                inc_frac = (float(ok_masked_incidence.compressed().shape[0]) /
+                            float(masked_incidence.mvals.compressed().
+                                  flatten().shape[0]))
+                if inc_frac >= limb_frac:
+                    metadata['limb_ok'] = True
+                    logger.info('Limb alone meets criteria '+
+                                '(%.2f%% is less than %.2f deg)',
+                                inc_frac*100, limb_threshold*oops.DPR)
+                else:
+                    logger.info('Limb alone fails criteria '+
+                                '(%.2f%% is less than %.2f deg, %.2f%% needed)',
+                                inc_frac*100, limb_threshold*oops.DPR,
+                                limb_frac*100)
+                    if not always_create_model:
+                        metadata['end_time'] = time.time()
+                        return None, metadata, None
+                
     # Make the actual model
 
     restr_model = None    
@@ -628,6 +709,7 @@ def bodies_create_model(obs, body_name, inventory,
                     cart_model, blur_amt = _bodies_create_cartographic(
                                                    restr_bp, cart_body_data)
                     restr_model *= cart_model
+                    metadata['too_bumpy'] = False
                 else:
                     logger.info('Cartographic data provided for %s',
                                 cart_body)
@@ -744,6 +826,7 @@ def bodies_latitude_longitude_to_pixels(obs, body_name, latitude, longitude,
 def bodies_reproject(
             obs, body_name, data=None, offset=None,
             offset_path=None,
+            navigation_uncertainty=1,
             lat_resolution=_BODIES_DEFAULT_REPRO_LAT_RESOLUTION,
             lon_resolution=_BODIES_DEFAULT_REPRO_LON_RESOLUTION,
             max_incidence=_BODIES_REPRO_MAX_INCIDENCE,
@@ -767,9 +850,10 @@ def bodies_reproject(
                                  values.
         offset_path              The full path of the OFFSET file used to
                                  determine the offset.
-        lat_resolution      The latitude resolution of the new image
+        navigation_uncertainty   The maximum uncertainty in pixel pointing.
+        lat_resolution           The latitude resolution of the new image
                                  (rad/pix).
-        lon_resolution     The longitude resolution of the new image
+        lon_resolution           The longitude resolution of the new image
                                  (rad/pix).
         max_incidence            The maximum incidence angle (rad) to permit
                                  for a valid pixel. None for no check.
@@ -833,7 +917,11 @@ def bodies_reproject(
                            this mask is the full lat/lon size. Otherwise it
                            is restricted to the sub-set like everything
                            else.
-        'resolution'       The radial resolution [latitude,longitude].
+        'resolution'       The radial resolution (km/pix) [latitude,longitude]
+                           of the data used to populate each bin.
+        'eff_resolution'   The effective resolution (km/pix) 
+                           [latitude,longitude]. This is the data resolution 
+                           multiplied by the navigation error.
         'phase'            The phase angle [latitude,longitude].
         'emission'         The emission angle [latitude,longitude].
         'incidence'        The incidence angle [latitude,longitude].
@@ -1138,6 +1226,7 @@ def bodies_reproject(
     ret['offset'] = offset
     ret['img'] = repro_img
     ret['resolution'] = repro_res
+    ret['eff_resolution'] = repro_res * navigation_uncertainty
     ret['phase'] = repro_phase
     ret['emission'] = repro_emission
     ret['incidence'] = repro_incidence
@@ -1152,9 +1241,9 @@ def bodies_mosaic_init(body_name,
     """Create the data structure for a moon mosaic.
 
     Inputs:
-        lat_resolution      The latitude resolution of the new image
+        lat_resolution           The latitude resolution of the new image
                                  (rad/pix).
-        lon_resolution     The longitude resolution of the new image
+        lon_resolution           The longitude resolution of the new image
                                  (rad/pix).
         latlon_type              The coordinate system to use for latitude and
                                  longitude. One of 'centric', 'graphic', or 
@@ -1179,6 +1268,7 @@ def bodies_mosaic_init(body_name,
                            above).
         'lon_direction'    The longitude coordinate system (see above).
         'resolution'       The per-pixel resolution.
+        'eff_resolution'   The per-pixel effective resolution.
         'phase'            The per-pixel phase angle.
         'emission'         The per-pixel emission angle.
         'incidence'        The per-pixel incidence angle.
@@ -1205,6 +1295,8 @@ def bodies_mosaic_init(body_name,
     ret['lon_direction'] = lon_direction
     ret['resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
                                  dtype=np.float32)
+    ret['eff_resolution'] = np.zeros((latitude_pixels, longitude_pixels), 
+                                     dtype=np.float32)
     ret['phase'] = np.zeros((latitude_pixels, longitude_pixels), 
                             dtype=np.float32)
     ret['emission'] = np.zeros((latitude_pixels, longitude_pixels), 
@@ -1234,7 +1326,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
         resolution_threshold   The factor that the repro image resolution
                                must be greater than the mosaic resolution
                                to copy a pixel. Should be >= 1.
-        copy_slop              The number of additional pixels around
+        copy_slop              The number of additional valid pixels around
                                a copied pixel to also copy. This is to
                                reduce the occurance of isolated pixels
                                from one image being surrounded by pixels
@@ -1267,6 +1359,12 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
               repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
                                 repro_metadata['resolution']
     
+    mosaic_eff_res = mosaic_metadata['eff_resolution']
+    repro_eff_res = np.zeros(mosaic_eff_res.shape, dtype=np.float32)
+    repro_eff_res[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
+              repro_lon_idx_range[0]:repro_lon_idx_range[1]+1] = \
+                                repro_metadata['eff_resolution']
+    
     mosaic_phase = mosaic_metadata['phase']
     repro_phase = np.zeros(mosaic_phase.shape, dtype=np.float32)
     repro_phase[repro_lat_idx_range[0]:repro_lat_idx_range[1]+1,
@@ -1289,7 +1387,8 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     mosaic_time = mosaic_metadata['time']
     
     # Calculate where the new resolution is better
-    better_resolution_mask = (repro_res * resolution_threshold) < mosaic_res
+    better_resolution_mask = ((repro_eff_res * resolution_threshold) < 
+                              mosaic_eff_res)
 #    plt.figure()
 #    plt.imshow(better_resolution_mask)
 #    if copy_slop > 0:
@@ -1315,6 +1414,8 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
 
     mosaic_img[replace_mask] = repro_img[replace_mask]
     mosaic_res[replace_mask] = repro_res[replace_mask] 
+    mosaic_eff_res[replace_mask] = np.maximum(mosaic_eff_res[replace_mask],
+                                              repro_eff_res[replace_mask]) 
     mosaic_phase[replace_mask] = repro_phase[replace_mask] 
     mosaic_emission[replace_mask] = repro_emission[replace_mask] 
     mosaic_incidence[replace_mask] = repro_incidence[replace_mask]

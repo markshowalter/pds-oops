@@ -129,6 +129,9 @@ STARS_DEFAULT_CONFIG = {
     # Verify offset with photometry?
     'perform_photometry': True,
     
+    # If using photometry, try again at the end without using it?
+    'try_without_photometry': False,
+    
     # Minimum number of stars that must photometrically match for an offset
     # to be considered acceptable and the corresponding confidence.
     # Also the minimum number of stars that must match to give a confidence 
@@ -150,9 +153,12 @@ STARS_DEFAULT_CONFIG = {
     # guarantee a good smear.
     'max_movement_steps': 50,
     
-    # The maximum amoung of smearing to tolerate before giving up on star
-    # navigation entirely. This is currently set low because the smear angles
-    # are wrong thanks to SPICE inaccuracies.
+    # The maximum amount of smearing to tolerate before giving up on star
+    # navigation entirely. 
+    # OLD: This is currently set low because the smear angles
+    #      are wrong thanks to SPICE inaccuracies.
+    # NEW: This is currently set high because we have access to the
+    #      predicted kernels.
     'max_smear': 5000, # XXX
     
     # The default star class when none is available in the star catalog.
@@ -220,8 +226,36 @@ BODIES_DEFAULT_CONFIG = {
     # terminator.
     # Set to oops.TWOPI to eliminate the check for limbs and mark
     # all bodies as OK.
-    'limb_incidence_threshold': 180*oops.RPD, # XXX 87. * oops.RPD, # cos = 0.05
+    'limb_incidence_threshold': 87. * oops.RPD, # cos = 0.05
     
+    # What fraction of the total visible limb needs to meet the above criterion
+    # in order for the limb to be marked as OK. This is only used in the case
+    # where curvature is bad.
+    'limb_incidence_frac': 0.4, 
+    
+    # What resolution is so small that the surface features make the moon
+    # non-circular when viewing the limb?
+    'surface_bumpiness':
+        {'PAN': 7., #30.,
+         'DAPHNIS': 3., #9.,
+         'ATLAS': 10., #41.,
+         'PROMETHEUS': 75., #140.,
+         'PANDORA': 52., #105.,
+         'EPIMETHEUS': 21., # 131
+         'JANUS': 35., # 205
+         'MIMAS': 0.5,
+         'ENCELADUS': 0.5,
+         'TETHYS': 1.,
+         'TELESTO': 34.,
+         'CALYPSO': 32.,
+         'DIONE': 1.,
+         'HELENE': 45.,
+         'RHEA': 1.2,
+         'TITAN': 0.,
+         'HYPERION': 0.,
+         'IAPETUS': 35.,
+         'PHOEBE': 0.,},
+                         
     # Whether or not Lambert shading should be used, as opposed to just a
     # solid unshaded shape, when a cartographic reprojection is not
     # available.
@@ -279,8 +313,13 @@ RINGS_DEFAULT_CONFIG = {
     'fiducial_rms_gain': 2,
     
     # A full gap or ringlet must be at least this many pixels wide at some
-    # place in the image to use it
-    'fiducial_min_feature_width': 2,
+    # place in the image to use it.
+    'fiducial_min_feature_width': 3,
+    
+    # Assume a one-sided feature is about this wide in km. This is used to 
+    # determine if the local resolution is high enough for the feature to be 
+    # visible. 
+    'one_sided_feature_width': 30.,
     
     # When manufacturing a model from an ephemeris list, each one-sided feature 
     # is shaded approximately this many pixels wide.
@@ -292,7 +331,7 @@ RINGS_DEFAULT_CONFIG = {
     
     # The minimum ring emission angle in the image must be at least this
     # many degrees away from 90 for rings to be used for correlation.
-    'emission_threshold': 5., 
+    'emission_threshold': 2., #5., 
     
     # Remove the shadow of Saturn from the model
     'remove_saturn_shadow': True,
@@ -338,7 +377,7 @@ OFFSET_DEFAULT_CONFIG = {
     #^^^
     
     # The number of pixels to search in U,V during secondary correlation.
-    'secondary_corr_search_size': 15,  
+    'secondary_corr_search_size': (15,15),  
     
     # If the stars-based and bodies/rings-based correlations differ by at
     # least this number of pixels, then we need to choose between the stars
@@ -388,5 +427,5 @@ BOOTSTRAP_DEFAULT_CONFIG = {
     
     # The maximum difference in resolution allowable between the mosaic
     # and the image to be bootstrapped.
-    'max_res_factor': 4,
+    'max_res_factor': 10000, # XXX
 }

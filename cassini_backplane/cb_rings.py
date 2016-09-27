@@ -37,6 +37,10 @@ import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
 from PIL import Image, ImageDraw, ImageFont
 
+from imgdisp import *
+import Tkinter as tk
+import ttk
+
 import polymath
 import oops
 import cspice
@@ -809,20 +813,14 @@ def _find_resolutions_by_a(obs, extend_fov, a):
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
     
-    longitudes = rings_generate_longitudes(longitude_resolution=0.1*oops.RPD)
+    radii_bp = obs.ext_bp.ring_radius('saturn:ring')
+    radii = radii_bp.mvals.astype('float').filled(0.)
+    border = obs.ext_bp.border_atop(
+                          radii_bp.key,
+                          a).mvals.astype('bool').filled(False)
+    res_set = resolutions[border]
 
-    new_long, new_rad, u, v = _rings_restrict_longitude_radius_to_obs(
-                              obs, longitudes, a, extend_fov=extend_fov)
-
-    u = u.astype('int')
-    v = v.astype('int')
-    feature_res = resolutions[v,u]
-    if len(feature_res) == 0:
-        return None, None
-    min_res = np.min(feature_res)
-    max_res = np.max(feature_res)
-    
-    return min_res, max_res
+    return np.min(res_set), np.max(res_set)
 
 def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur, 
                     min_sub_radius, max_sub_radius, extend_fov):
@@ -839,16 +837,16 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
     if not min_sub_radius < a < max_sub_radius:
         if not min_radius < a < max_radius:
             # It's not in the extended FOV at all
-            return None, None
+            return None, None, None, None
         # It's not in the extended FOV, but is in the original image
         out_of_frame = True
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
     if max_res is None:
-        return None, None # Something went wrong; we couldn't find a resolution
+        return None, None, None, None # Something went wrong; we couldn't find a resolution
     if rms*rms_gain/blur > max_res:
         # Additional blurring needed
-        return (rms*rms_gain/blur)/max_res, out_of_frame
-    return 1., out_of_frame # OK as is
+        return (rms*rms_gain/blur)/max_res, out_of_frame, min_res, max_res
+    return 1., out_of_frame, min_res, max_res # OK as is
     
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     """Return a list of fiducial features in the image.
@@ -890,8 +888,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     resolutions = (obs.ext_bp.ring_radial_resolution('saturn:ring').vals.
                    astype('float'))
 
-    min_res = np.min(resolutions)
-    max_res = np.max(resolutions)
+    good_radius_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
+                                      radii <= RINGS_MAX_RADIUS)
+    min_res = np.min(resolutions[good_radius_mask])
+    max_res = np.max(resolutions[good_radius_mask])
     
     logger.debug('Resolution %.2f to %.2f', min_res, max_res)
     
@@ -937,8 +937,11 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             outer_out_of_frame = False
             ret_inner = None
             ret_outer = None
+            # Features aren't THAT big, so just use the resolution for the 
+            # inner or outer, whichever we have
             if inner is not None:
-                ret_inner, inner_out_of_frame = _fiducial_is_ok(
+                (ret_inner, inner_out_of_frame, min_res_a_inner,
+                 max_res_a_inner) = _fiducial_is_ok(
                                             obs, inner, min_radius, max_radius, 
                                             rms_gain, blur, 
                                             min_sub_radius, max_sub_radius,
@@ -948,9 +951,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                     # candidate during this phase.
                     inner = None
             if outer is not None:
-                if pretty_name == 'Keeler-A Ring OE':
-                    pass
-                ret_outer, outer_out_of_frame = _fiducial_is_ok(
+                (ret_outer, outer_out_of_frame, min_res_a_outer,
+                 max_res_a_outer) = _fiducial_is_ok(
                                             obs, outer, min_radius, max_radius, 
                                             rms_gain, blur, 
                                             min_sub_radius, max_sub_radius,
@@ -960,31 +962,43 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                     # candidate during this phase
                     outer = None
 
-            # Features aren't THAT big, so just use the resolution for the 
-            # inner or outer, whichever we have
-            if inner is not None:       
-                (min_res_inner_outer, 
-                 max_res_inner_outer) = _find_resolutions_by_a(
-                                              obs, extend_fov, inner[0][1])
-            elif outer is not None:
-                (min_res_inner_outer, 
-                 max_res_inner_outer) = _find_resolutions_by_a(
-                                              obs, extend_fov, outer[0][1])
-
-            # If there is a full gap or ringlet, see if it's big enough to be
-            # readily seen.
-            force_keep_feature = False  
-            if inner is not None and outer is not None:
+            if inner is not None or outer is not None:
+                min_res_inner_outer = min_res_a_inner
+                max_res_inner_outer = max_res_a_inner
+                if min_res_inner_outer is None:
+                    min_res_inner_outer = min_res_a_outer
+                    max_res_inner_outer = max_res_a_outer
+                    
+                force_keep_feature = False  
+    
                 # See if the gap or ringlet is too small to be seen in
-                # the image
-                feature_width = ((outer[0][1]-inner[0][1]) / 
+                # the image. We use the minimum resolution to see if it's
+                # visible _somewhere_, but not necessarily _everywhere_.
+                if inner is not None and outer is not None:
+                    feature_size_km = outer[0][1]-inner[0][1]
+                else:
+                    feature_size_km = rings_config['one_sided_feature_width']
+                feature_width = (feature_size_km / 
                                  min_res_inner_outer)
                 if feature_width < min_feature_width:
-                    logger.debug(
-                         'Ignoring complete %s %s %.2f to %.2f - '+
-                         'feature too narrow (%.2f pixels)',
-                         pretty_name, entry_type, inner[0][1], outer[0][1],
-                         feature_width)
+                    if inner is not None and outer is not None:
+                        logger.debug(
+                             'Ignoring complete %s %s %.2f to %.2f - '+
+                             'feature too narrow (%.2f pixels)',
+                             pretty_name, entry_type, inner[0][1], outer[0][1],
+                             feature_width)
+                    elif inner is not None:
+                        logger.debug(
+                             'Ignoring inner %s %s %.2f - '+
+                             'feature too narrow (%.2f pixels)',
+                             pretty_name, entry_type, inner[0][1],
+                             feature_width)
+                    else:
+                        logger.debug(
+                             'Ignoring outer %s %s %.2f - '+
+                             'feature too narrow (%.2f pixels)',
+                             pretty_name, entry_type, outer[0][1],
+                             feature_width)
                     # However, in the special case of the Huygen Gap,
                     # we can go ahead and keep the inner edge because that's
                     # the B ring outer edge and it's really visible.
@@ -998,56 +1012,55 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                         force_keep_feature = True
                     else:
                         continue
-
-            # For single-sided features, see if there is another feature that
-            # is too close. If there is, then throw away the current feature
-            # because it won't be readily distinguishable in the real image.
-            
-            if (inner is None) != (outer is None) and not force_keep_feature:
-                feature = inner
-                if feature is None:
-                    feature = outer
-                    
-                bad = False
-                for fiducial_feature2 in restricted_feature_list:
-                    (entry_type_str2, feature_pretty_name, inner2, 
-                     outer2) = fiducial_feature2
-                    if fiducial_feature == fiducial_feature2:
-                        continue
-                    # If the feature we're going to compare against is itself
-                    # too narrow to be seen, then don't bother with the 
-                    # comparison
-                    if inner2 is not None and outer2 is not None:
-                        feature_width = ((outer2[0][1]-inner2[0][1]) / 
-                                         min_res_inner_outer)
-                        if feature_width < min_feature_width:
+                        
+                # For single-sided features, see if there is another feature that
+                # is too close. If there is, then throw away the current feature
+                # because it won't be readily distinguishable in the real image.
+                if (inner is None) != (outer is None) and not force_keep_feature:
+                    feature = inner
+                    if feature is None:
+                        feature = outer
+                        
+                    bad = False
+                    for fiducial_feature2 in restricted_feature_list:
+                        (entry_type_str2, feature_pretty_name, inner2, 
+                         outer2) = fiducial_feature2
+                        if fiducial_feature == fiducial_feature2:
                             continue
-                    for inner_outer2 in [inner2, outer2]:
-                        if inner_outer2 is None:
-                            continue
-                        feature_dist_pix = abs(inner_outer2[0][1]-
-                            feature[0][1]) / min_res_inner_outer
-                        if (feature_dist_pix < min_feature_width):
-                            in_out_str = 'inner'
-                            if inner_outer2 == outer2:
-                                in_out_str = 'outer'
-                            logger.debug(
-                             'Ignoring partial %s %s %s %.2f - '+
-                             'feature too close to another '+
-                             '(a=%.2f, %.2f pixels)',
-                             in_out_str, pretty_name, entry_type,
-                             feature[0][1],
-                             inner_outer2[0][1], feature_dist_pix)
-                            bad = True
+                        # If the feature we're going to compare against is itself
+                        # too narrow to be seen, then don't bother with the 
+                        # comparison
+                        if inner2 is not None and outer2 is not None:
+                            feature_width = ((outer2[0][1]-inner2[0][1]) / 
+                                             min_res_inner_outer)
+                            if feature_width < min_feature_width:
+                                continue
+                        for inner_outer2 in [inner2, outer2]:
+                            if inner_outer2 is None:
+                                continue
+                            feature_dist_pix = abs(inner_outer2[0][1]-
+                                feature[0][1]) / min_res_inner_outer
+                            if (feature_dist_pix < min_feature_width):
+                                in_out_str = 'inner'
+                                if inner_outer2 == outer2:
+                                    in_out_str = 'outer'
+                                logger.debug(
+                                 'Ignoring partial %s %s %s %.2f - '+
+                                 'feature too close to another '+
+                                 '(a=%.2f, %.2f pixels)',
+                                 in_out_str, pretty_name, entry_type,
+                                 feature[0][1],
+                                 inner_outer2[0][1], feature_dist_pix)
+                                bad = True
+                        if bad:
+                            break
                     if bad:
-                        break
-                if bad:
-                    if inner is not None:
-                        inner = None
-                        ret_inner = None
-                    else:
-                        outer = None
-                        ret_outer = None
+                        if inner is not None:
+                            inner = None
+                            ret_inner = None
+                        else:
+                            outer = None
+                            ret_outer = None
                 
             # Everything is going well...we can at least use this to determine
             # the blur amount
@@ -1232,18 +1245,20 @@ def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
     shade[shade > 1.] = 0.
     shade *= max
     
+    shade[radii.mask] = 0.
+    
     return shade
     
-def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
-                 feature_list_by_a):
+def _shade_model(model, radii, a, shade_above, radius_width_km, min_radius_width_km,
+                 resolutions, feature_list_by_a):
     # shade_above == True means shade towards larger a
     # The primary shade - the hard edge and shade away from it
     logger = logging.getLogger(_LOGGING_NAME+'._shade_model')
 
     if shade_above:
-        shade_sign = 1.
+        shade_sign = 1
     else:
-        shade_sign = -1.
+        shade_sign = -1
         
     # Check to see if there is another feature that's going to be in the way
     for other_a, other_type in feature_list_by_a:
@@ -1254,13 +1269,127 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, resolutions,
             logger.debug(
                  'Fixing conflicting feature at %.2f vs. %.2f, new width %.2f', 
                  a, other_a, radius_width_km)
-    shade = 1.-shade_sign*(radii-a)/radius_width_km
-    shade[shade < 0.] = 0.
-    shade[shade > 1.] = 0.
+            
+    if radius_width_km < min_radius_width_km:
+        logger.debug('Ignoring feature at %.2f due to close proximity', a)
+        return None
     
-    shade_anti = _shade_antialias(radii, a, shade_above, resolutions)
+    # Shading starts at a = a0 and continues to a = a0+w where w is the
+    # shading width in km. For each pixel of radial size s, there are
+    # four possibilities:
+    #
+    # Let r be the center of the pixel. Let r-s/2 and r+s/2 be the two extremes
+    # of the pixel (since r is halfway down the length of the pixel).
+    #
+    # 1) If r-s/2 <= a0 < r+s/2 AND r-s/2 <= a0+w < r+s/2 then we are only 
+    # filling the part of the pixel starting at a0 and going to a0+w.
+    #
+    # Otherwise:
+    # 2) If r-s/2 <= a0 < r+s/2 then we are only filling the part of the pixel 
+    # starting at a0 and going to r+s/2.
+    #
+    # 3) If r-s/2 <= a0+w < r+s/2 then we are only filling the part of the
+    # pixel starting at r-s/2 and going to a0+w.
+    #
+    # 4) If a0 < r-s/2 AND a0+w > r+s/2 then we are filling the entire pixel.
+    #
+    # How much do we fill it? The shading function is 1-(a-a0)/w for arbitrary
+    # a. If a < a0 or a > a0+w then the function is zero. The amount of shading
+    # is the integral of this function:
+    #     Z0 = int[1+a0/w - a/w] = (1+a0/w)a - a^2/2w
+    # The area under this curve needs to be scaled by 1/s to that the maximum
+    # value of the integral over r-s/2 to r+s/2 is 1. Thus we use Z = Z0/s
+    # as the function:
+    #    Z = [(1+a0/w)a - a^2/2w] / s
     
-    return model + shade + shade_anti
+    def int_func(a0, a1):
+        def Z(x): return ((1+a/radius_width_km)*x - 
+                          x**2/(2*radius_width_km)) / resolutions
+        return Z(a1) - Z(a0)
+
+    def int_func2(a0, a1):
+        # Shade function 1-(a0-a)/w
+        # int[1-a0/w + a/w = (1-a0/w)a + a^2/2w
+        def Z(x): return ((1-a/radius_width_km)*x + 
+                          x**2/(2*radius_width_km)) / resolutions
+        return Z(a1) - Z(a0)
+    
+    shade = np.zeros(radii.shape)
+    
+    if shade_above:
+        eq2 = np.logical_and(radii-resolutions/2 <= a,
+                             a < radii+resolutions/2)
+        eq3 = np.logical_and(radii-resolutions/2 <= a+radius_width_km,
+                             a+radius_width_km < radii+resolutions/2)
+        
+        eq_case1 = np.logical_and(eq2, eq3)
+        case1 = int_func(a, a+radius_width_km)
+        shade[eq_case1] = case1[eq_case1]
+        
+        eq_case4 = np.logical_and(a < radii-resolutions/2,
+                                  a+radius_width_km > radii+resolutions/2)
+        case4 = int_func(radii-resolutions/2, radii+resolutions/2)
+        shade[eq_case4] = case4[eq_case4]
+        
+        eq_case2 = np.logical_and(eq2, np.logical_not(eq_case1))
+        case2 = int_func(a, radii+resolutions/2)
+        shade[eq_case2] = case2[eq_case2]
+        
+        eq_case3 = np.logical_and(eq3, np.logical_not(eq_case1))
+        case3 = int_func(radii-resolutions/2, a+radius_width_km)
+        shade[eq_case3] = case3[eq_case3]
+    else:
+    # For the non-shade-above case:
+    #
+    # 1) If r-s/2 <= a0 < r+s/2 AND r-s/2 <= a0+w < r+s/2 then we are only 
+    # filling the part of the pixel starting at a0-w and going to a0.
+    #
+    # Otherwise:
+    # 2) If r-s/2 < a0 <= r+s/2 then we are only filling the part of the pixel 
+    # starting at r-s/2 and going to a0.
+    #
+    # 3) If r-s/2 < a0-w <= r+s/2 then we are only filling the part of the
+    # pixel starting at a0-w and going to r+s/2.
+    #
+    # 4) If a0 > r+s/2 AND a0-w < r-s/2 then we are filling the entire pixel.
+        eq2 = np.logical_and(radii-resolutions/2 < a,
+                             a <= radii+resolutions/2)
+        eq3 = np.logical_and(radii-resolutions/2 < a-radius_width_km,
+                             a-radius_width_km <= radii+resolutions/2)
+        
+        eq_case1 = np.logical_and(eq2, eq3)
+        case1 = int_func2(a-radius_width_km, a)
+        shade[eq_case1] = case1[eq_case1]
+        
+        eq_case4 = np.logical_and(a > radii+resolutions/2,
+                                  a-radius_width_km < radii-resolutions/2)
+        case4 = int_func2(radii-resolutions/2, radii+resolutions/2)
+        shade[eq_case4] = case4[eq_case4]
+        
+        eq_case2 = np.logical_and(eq2, np.logical_not(eq_case1))
+        case2 = int_func2(radii-resolutions/2, a)
+        shade[eq_case2] = case2[eq_case2]
+        
+        eq_case3 = np.logical_and(eq3, np.logical_not(eq_case1))
+        case3 = int_func2(a-radius_width_km, radii+resolutions/2)
+        shade[eq_case3] = case3[eq_case3]
+    
+    return model+shade
+    
+#    shade = 1.-shade_sign*(radii-a)/radius_width_km
+#    shade[shade < 0.] = 0.
+#    shade[shade > 1.] = 0.
+#    plt.imshow(shade)
+#    
+#    shade_anti = _shade_antialias(radii, a, shade_above, resolutions)
+#
+#    plt.figure()
+#    plt.imshow(shade_anti)
+#    plt.figure()
+#    plt.imshow(shade+shade_anti)
+#    plt.show()
+#    
+#    return model + shade + shade_anti
 
 def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, 
                              in_front_mask, extend_fov, rings_config):
@@ -1274,11 +1403,6 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
     min_radius = np.min(radii)
     max_radius = np.max(radii)
 
-    min_res = np.min(resolutions)
-    
-    radius_width_pix = rings_config['fiducial_ephemeris_width']
-    radius_width_km = radius_width_pix * min_res
-    
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
@@ -1328,6 +1452,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
             feature_list_by_a.append((outer[0][1], 
                                       'OEG' if entry_type == 'GAP' else 'OER'))
     feature_list_by_a.sort(key=lambda x: x[0], reverse=True)
+    
+    radius_width_pix = rings_config['fiducial_ephemeris_width']
 
     # Do gaps first, because gaps might actually have ringlets inside of them.
     # Then go back and add the ringlets, which might fill in the gaps.
@@ -1367,25 +1493,45 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
             if inner_radii_bp is not None:
                 inner_radii = inner_radii_bp.mvals.astype('float')
                 inner_radii[in_front_mask] = 0.
+                inner_min_res, inner_max_res = _find_resolutions_by_a(
+                                                      obs, extend_fov, inner_a)
+                inner_radius_width_km = radius_width_pix * inner_min_res
+                min_inner_radius_width_km = inner_min_res * 3
             if outer_radii_bp is not None:
                 outer_radii = outer_radii_bp.mvals.astype('float')
                 outer_radii[in_front_mask] = 0.
+                outer_min_res, outer_max_res = _find_resolutions_by_a(
+                                                      obs, extend_fov, outer_a)
+                outer_radius_width_km = radius_width_pix * outer_min_res
+                min_outer_radius_width_km = outer_min_res * 3
             if (inner_radii is not None and outer_radii is not None
                 and entry_type == 'RINGLET'):
                 # We have both edges for a ringlet - just make it solid
-                logger.debug('Adding %s %s a=%.2f to %.2f', 
+                logger.debug('Adding %s %s a=%.2f to %.2f',
                              pretty_name, entry_type, inner_a, outer_a)
-                inner_above = inner_radii >= inner_a
-                outer_below = outer_radii <= outer_a
-                intersect = np.logical_and(inner_above, outer_below)
+                # We add/subtract 1/2 the resolution because the radius location
+                # is the middle of the pixel and shade_antialias below will take
+                # care of the fractional part.
+                inner_above = inner_radii-resolutions/2 >= inner_a
+                outer_below = outer_radii+resolutions/2 <= outer_a
+                intersect = (np.logical_and(inner_above, outer_below).
+                             filled(False))
                 intersect[in_front_mask] = False
+                plt.imshow(intersect)
+                plt.show()
                 model[intersect] += 1.
-                shade = _shade_antialias(inner_radii, inner_a, False,
-                                         resolutions, max=0.5)
-                model += shade
-                shade = _shade_antialias(outer_radii, outer_a, True,
-                                         resolutions, max=0.5)
-                model += shade
+                plt.imshow(model)
+                plt.show()
+                shade1 = _shade_antialias(inner_radii, inner_a, False,
+                                          resolutions)
+                model += shade1
+                shade2 = _shade_antialias(outer_radii, outer_a, True,
+                                          resolutions)
+                model += shade2
+                imgdisp = ImageDisp([shade1+shade2], [intersect.astype('float')], canvas_size=(512,512),
+                                    allow_enlarge=True,
+                                    auto_update=True)
+                tk.mainloop()
                 if (feature_name and 
                     feature_name.upper().startswith('KEELER-A RING')):
                     # We need to fake this one out - it's really the Keeler
@@ -1436,7 +1582,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                         # going to shade the edges separately later
                         inner_above = inner_radii >= inner_a
                         outer_below = outer_radii <= outer_a
-                        intersect = np.logical_and(inner_above, outer_below)
+                        intersect = (np.logical_and(inner_above, outer_below).
+                                     filled(False))
                         intersect[in_front_mask] = False
                         intersect_list.append(intersect)
                         if feature_name:
@@ -1449,55 +1596,63 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
-                    logger.debug('Adding %s inner %s a=%.2f shade_above %d',
-                                 pretty_name, entry_type, inner_a, shade_above)
-                    model = _shade_model(model, inner_radii, inner_a, 
-                                         shade_above, radius_width_km, 
-                                         resolutions, feature_list_by_a)
-                    if not named_full_gap:
-                        intersect = obs.ext_bp.border_atop(
-                                              inner_radii_bp.key,
-                                              inner_a).mvals.astype('bool')
-                        intersect[in_front_mask] = False
-                        intersect_list.append(intersect)
-                        if (feature_name and 
-                            feature_name.upper().startswith('KEELER-A RING')):
-                            text_name_list.append('Keeler OEG')
-                        else:
-                            feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
-                                                      else 'IEG')
-                            if feature_name:
-                                text_name_list.append(feature_name + ' ' +
-                                                      feature_name_sfx) 
+                    logger.debug('Adding %s inner %s a=%.2f shade_above %d shading width %.2f',
+                                 pretty_name, entry_type, inner_a, shade_above,
+                                 inner_radius_width_km)
+                    new_model = _shade_model(model, inner_radii, inner_a, 
+                                             shade_above, inner_radius_width_km, 
+                                             min_inner_radius_width_km,
+                                             resolutions, feature_list_by_a)
+                    if new_model is not None:
+                        model = new_model
+                        if not named_full_gap:
+                            intersect = obs.ext_bp.border_atop(
+                                                  inner_radii_bp.key,
+                                                  inner_a).mvals.astype('bool')
+                            intersect[in_front_mask] = False
+                            intersect_list.append(intersect)
+                            if (feature_name and 
+                                feature_name.upper().startswith('KEELER-A RING')):
+                                text_name_list.append('Keeler OEG')
                             else:
-                                text_name_list.append(('a=%.2f' % inner_a) + 
-                                                      ' ' + feature_name_sfx)                     
+                                feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
+                                                          else 'IEG')
+                                if feature_name:
+                                    text_name_list.append(feature_name + ' ' +
+                                                          feature_name_sfx) 
+                                else:
+                                    text_name_list.append(('a=%.2f' % inner_a) + 
+                                                          ' ' + feature_name_sfx)                     
                 if outer_radii is not None:
                     # Isolated outer ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'GAP'
-                    logger.debug('Adding %s outer %s a=%.2f shade_above %d',
-                                 pretty_name, entry_type, outer_a, shade_above)
-                    model = _shade_model(model, outer_radii, outer_a, 
-                                         shade_above, radius_width_km, 
-                                         resolutions, feature_list_by_a)
-                    if not named_full_gap:
-                        intersect = obs.ext_bp.border_atop(
-                                              outer_radii_bp.key,
-                                              outer_a).mvals.astype('bool')
-                        intersect[in_front_mask] = False
-                        intersect_list.append(intersect)
-                        if (feature_name and 
-                            feature_name.upper().startswith('KEELER-A RING')):
-                            text_name_list.append('A Ring Outer Edge')
-                        else:
-                            feature_name_sfx = ('OER' if entry_type == 'RINGLET' 
-                                                      else 'OEG')
-                            if feature_name:
-                                text_name_list.append(feature_name + ' ' +
-                                                      feature_name_sfx) 
+                    logger.debug('Adding %s outer %s a=%.2f shade_above %d shading width %.2f',
+                                 pretty_name, entry_type, outer_a, shade_above,
+                                 outer_radius_width_km)
+                    new_model = _shade_model(model, outer_radii, outer_a, 
+                                             shade_above, outer_radius_width_km, 
+                                             min_outer_radius_width_km,
+                                             resolutions, feature_list_by_a)
+                    if new_model is not None:
+                        model = new_model
+                        if not named_full_gap:
+                            intersect = obs.ext_bp.border_atop(
+                                                  outer_radii_bp.key,
+                                                  outer_a).mvals.astype('bool')
+                            intersect[in_front_mask] = False
+                            intersect_list.append(intersect)
+                            if (feature_name and 
+                                feature_name.upper().startswith('KEELER-A RING')):
+                                text_name_list.append('A Ring Outer Edge')
                             else:
-                                text_name_list.append(('a=%.2f' % outer_a) + 
-                                                      ' ' + feature_name_sfx)                     
+                                feature_name_sfx = ('OER' if entry_type == 'RINGLET' 
+                                                          else 'OEG')
+                                if feature_name:
+                                    text_name_list.append(feature_name + ' ' +
+                                                          feature_name_sfx) 
+                                else:
+                                    text_name_list.append(('a=%.2f' % outer_a) + 
+                                                          ' ' + feature_name_sfx)                     
 
             # Now find a good place for each label that doesn't overlap other
             # labels and doesn't overlap text from previous model steps
@@ -1602,6 +1757,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                     correlation.
             'emission_ok'           True if the emission angle is sufficient 
                                     for correlation.
+            'occluded_by'           A list of bodies that partially or fully
+                                    occlude the rings.
             'num_good_fiducial_features'
                                     The number of fiducial features that are
                                     fully contained within the sub-image
@@ -1634,6 +1791,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['shadow_bodies'] = []
     metadata['curvature_ok'] = False
     metadata['emission_ok'] = False
+    metadata['occluded_by'] = []
     metadata['num_good_fiducial_features'] = 0
     metadata['fiducial_features'] = []
     metadata['fiducial_features_ok'] = False
@@ -1653,18 +1811,6 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         logger.info('No main rings in image - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
-    
-    emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
-    good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
-                               radii <= RINGS_MAX_RADIUS)
-    min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
-    if min_emission < rings_config['emission_threshold']:
-        logger.info('Minimum emission angle %.2f from 90 too close to ring '+
-                    'plane - aborting', min_emission)
-        return None, metadata, None
-
-    logger.debug('Minimum emission angle %.2f from 90 OK', min_emission)
-    metadata['emission_ok'] = True
 
     if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
                                       rings_config=rings_config):
@@ -1675,25 +1821,41 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     else:
         logger.info('Curvature OK')
         metadata['curvature_ok'] = True     
-   
-    num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
-                                         obs, extend_fov, rings_config)
-    metadata['num_good_fiducial_features'] = num_features
-    metadata['fiducial_features'] = fiducial_features
-    metadata['fiducial_blur'] = fiducial_blur
-    
-    fiducial_features_ok = (num_features >=
-                            rings_config['fiducial_feature_threshold'])
-    metadata['fiducial_features_ok'] = fiducial_features_ok
-    
-    if not fiducial_features_ok:
-        logger.info('Insufficient number (%d) of in-frame fiducial features', 
-                    num_features)
-        if not always_create_model:
-            metadata['end_time'] = time.time()
-            return None, metadata, None
+       
+    emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
+    good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
+                               radii <= RINGS_MAX_RADIUS)
+    min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
+    if min_emission < rings_config['emission_threshold']:
+        logger.info('Minimum emission angle %.2f from 90 too close to ring '+
+                    'plane - using plain model', min_emission)
+        metadata['emission_ok'] = False
+        metadata['num_good_fiducial_features'] = 0
+        metadata['fiducial_features'] = []
+        metadata['fiducial_blur'] = None
+        metadata['fiducial_features_ok'] = True
     else:
-        logger.info('Enough fiducial features (%d)', num_features)
+        logger.debug('Minimum emission angle %.2f from 90 OK', min_emission)
+        metadata['emission_ok'] = True
+    
+        num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
+                                             obs, extend_fov, rings_config)
+        metadata['num_good_fiducial_features'] = num_features
+        metadata['fiducial_features'] = fiducial_features
+        metadata['fiducial_blur'] = fiducial_blur
+        
+        fiducial_features_ok = (num_features >=
+                                rings_config['fiducial_feature_threshold'])
+        metadata['fiducial_features_ok'] = fiducial_features_ok
+        
+        if not fiducial_features_ok:
+            logger.info('Insufficient number (%d) of in-frame fiducial features', 
+                        num_features)
+            if not always_create_model:
+                metadata['end_time'] = time.time()
+                return None, metadata, None
+        else:
+            logger.info('Enough fiducial features (%d)', num_features)
 
     shadow_body_list = []
 
@@ -1730,45 +1892,61 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                 logger.info('Rings at least partially shadowed by %s', body_name)
     
     metadata['shadow_bodies'] = shadow_body_list
-    
-    model_source = rings_config['model_source']
-    if model_source != 'ephemeris':
-        assert False # Not currently tested
+
+    in_front_mask = np.zeros(radii.shape, dtype=np.bool)
+    if bodies_model_list is not None:
+        # Erase from the model any location where the rings are further from
+        # the observer than a body and the body overlaps the rings
+        rings_dist = obs.ext_bp.distance('saturn:ring').mvals.astype('float')
         radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
-        radii = radii.copy()
-        
-        radii[radii < RINGS_MIN_RADIUS] = 0
-        radii[radii > RINGS_MAX_RADIUS] = 0
-        
-        ret = _compute_ring_radial_data(model_source, 0.) # XXX
-        radial_data, start_radius, end_radius, radial_resolution = ret
-    
-        radii[radii < start_radius] = 0
-        radii[radii > end_radius] = 0
-    
-        radial_index = np.round((radii-start_radius)/radial_resolution)
-        radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
-        radial_index = radial_index.astype('int')
-        model = radial_data[radial_index]
-        model_text = np.zeros(model.shape, dtype=np.uint8)
+        for body_model, body_metadata, body_text in bodies_model_list:
+            body_dist = body_metadata['inventory']['range']
+            intersect = (rings_dist>body_dist) & (body_model != 0)
+            intersect[radii < RINGS_MIN_RADIUS] = False
+            intersect[radii > RINGS_MAX_RADIUS] = False
+            if np.any(intersect):
+                logger.info('Rings partially occluded by %s', 
+                            body_metadata['body_name'])
+                in_front_mask[intersect] = True
+                metadata['occluded_by'].append(body_metadata['body_name'])
+
+    if not metadata['emission_ok']:
+        # Plain model
+        radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
+        model = 1.-radii/RINGS_MAX_RADIUS
+        model[radii < RINGS_MIN_RADIUS] = 0.
+        model[radii > RINGS_MAX_RADIUS] = 0.
+        model[in_front_mask] = 0.
+        model_text = np.zeros(radii.shape, dtype=np.bool)
     else:
-        in_front_mask = np.zeros(radii.shape, dtype=np.bool)
-        if bodies_model_list is not None:
-            # Erase from the model any location where the rings are further from
-            # the observer than a body
-            rings_dist = obs.ext_bp.distance('saturn:ring').mvals.astype('float')
-            for body_model, body_metadata, body_text in bodies_model_list:
-                body_dist = body_metadata['inventory']['range']
-                in_front_mask[((rings_dist>body_dist) & 
-                               (body_model != 0))] = True
-    
-        if shadows is not None:
-            label_avoid_mask = np.logical_or(label_avoid_mask, shadows)
-        model, model_text = _compute_model_ephemeris(obs, fiducial_features,
-                                                     label_avoid_mask,
-                                                     in_front_mask,
-                                                     extend_fov, rings_config)
-    
+        model_source = rings_config['model_source']
+        if model_source != 'ephemeris':
+            assert False # Not currently tested
+            radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
+            radii = radii.copy()
+            
+            radii[radii < RINGS_MIN_RADIUS] = 0
+            radii[radii > RINGS_MAX_RADIUS] = 0
+            
+            ret = _compute_ring_radial_data(model_source, 0.) # XXX
+            radial_data, start_radius, end_radius, radial_resolution = ret
+        
+            radii[radii < start_radius] = 0
+            radii[radii > end_radius] = 0
+        
+            radial_index = np.round((radii-start_radius)/radial_resolution)
+            radial_index = np.clip(radial_index, 0, radial_data.shape[0]-1)
+            radial_index = radial_index.astype('int')
+            model = radial_data[radial_index]
+            model_text = np.zeros(model.shape, dtype=np.uint8)
+        else:
+            if shadows is not None:
+                label_avoid_mask = np.logical_or(label_avoid_mask, shadows)
+            model, model_text = _compute_model_ephemeris(obs, fiducial_features,
+                                                         label_avoid_mask,
+                                                         in_front_mask,
+                                                         extend_fov, rings_config)
+
     if not np.any(model):
         logger.info('Model is empty - aborting')
         metadata['end_time'] = time.time()
