@@ -6,6 +6,7 @@
 # Exported routines:
 #    master_find_offset
 #    offset_create_overlay_image
+#    offset_result_str
 ###############################################################################
 
 import cb_logging

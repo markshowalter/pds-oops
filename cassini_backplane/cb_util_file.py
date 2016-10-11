@@ -14,11 +14,19 @@
 #    file_img_to_log_path
 #    file_offset_to_img_path
 #    file_read_offset_metadata
+#    file_read_offset_metadata_path
 #    file_write_offset_metadata
-#    file_img_to_png_file
+#    file_img_to_png_path
 #    file_write_png_from_image
+#    file_img_to_predicted_path
 #    file_read_predicted_metadata
 #    file_write_predicted_metadata
+#    file_bootstrap_good_image_path
+#    file_bootstrap_candidate_image_path
+#    file_img_to_reproj_body_path
+#    file_read_reproj_body_path
+#    file_read_reproj_body
+#    file_write_reproj_body
 #    file_mosaic_path
 #    file_read_mosaic_metadata
 #    file_write_mosaic_metadata
@@ -157,10 +165,10 @@ def file_yield_image_filenames_from_arguments(arguments):
                 csvreader = csv.reader(csvfile)
                 header = csvreader.next()
                 for colnum in xrange(len(header)):
-                    if header[colnum] == 'primaryfilespec':
+                    if header[colnum] == 'Primary File Spec':
                         break
                 else:
-                    main_logger.error('Badly formatted CSV file %s', filename)
+                    print 'Badly formatted CSV file %s'
                     sys.exit(-1)
                 if arguments.image_name is None:
                     arguments.image_name = []
@@ -663,6 +671,27 @@ def file_img_to_reproj_body_path(img_path, body_name, lat_res, lon_res,
               body_name.upper())
     return fn
 
+def file_read_reproj_body_path(reproj_path):
+    if not os.path.exists(reproj_path):
+        return None
+
+    reproj_fp = open(reproj_path, 'rb')
+    metadata = msgpack.unpackb(reproj_fp.read(), 
+                               object_hook=msgpack_numpy.decode)
+    reproj_fp.close()
+    
+    return metadata
+
+def file_read_reproj_body(img_path, body_name, lat_res, lon_res, 
+                          latlon_type, lon_dir):
+    """Read reprojection metadata file for img_path."""
+    reproj_path = file_img_to_reproj_body_path(img_path, body_name,
+                                               lat_res, lon_res, 
+                                               latlon_type, lon_dir, 
+                                               make_dirs=False)
+
+    return file_read_reproj_body_path(reproj_path)
+
 def file_write_reproj_body(img_path, metadata):
     """Write reprojection metadata file for img_path."""
     logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body')
@@ -679,25 +708,6 @@ def file_write_reproj_body(img_path, metadata):
     reproj_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     reproj_fp.close()
-
-def file_read_reproj_body(img_path, body_name, lat_res, lon_res, 
-                          latlon_type, lon_dir):
-    """Read reprojection metadata file for img_path."""
-    reproj_path = file_img_to_reproj_body_path(img_path, body_name,
-                                               lat_res, lon_res, 
-                                               latlon_type, lon_dir, 
-                                               make_dirs=False)
-    
-    if not os.path.exists(reproj_path):
-        return None
-
-    reproj_fp = open(reproj_path, 'rb')
-    metadata = msgpack.unpackb(reproj_fp.read(), 
-                               object_hook=msgpack_numpy.decode)
-    reproj_fp.close()
-    
-    return metadata
-
 
 ### MOSAICS
     

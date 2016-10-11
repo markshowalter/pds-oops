@@ -24,4 +24,4 @@ while True:
     metadata = file_read_mosaic_metadata_path(path)
     _, filename = os.path.split(path)
     title = filename + ' / ' + metadata['body_name']
-    display_body_mosaic(metadata, title=title)
+    display_body_mosaic_metadata(metadata, title=title)

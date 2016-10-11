@@ -236,6 +236,7 @@ def get_shadow_dirs(sub_solar_lon, sub_obs_lon, sub_solar_lat, sub_obs_lat):
         sub_solar_lat += oops.PI
     lat_shadow_dir = sub_solar_lat < sub_obs_lat
 
+    return False, False # XXX
     return lon_shadow_dir, lat_shadow_dir
 
 def process_body(body_name, good_image_list, cand_image_list):

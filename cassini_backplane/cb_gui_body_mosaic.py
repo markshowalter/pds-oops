@@ -4,7 +4,8 @@
 # Interactively display body mosaic metadata.
 #
 # Exported routines:
-#    display_body_mosaic_data
+#    display_body_mosaic_metadata
+#    display_body_reproj_metadata
 ###############################################################################
 
 import cb_logging
@@ -136,9 +137,9 @@ def _callback_b1press_mosaic(x, y, metadata):
     path = metadata['path_list'][metadata['image_number'][y,x]]
     
     subprocess.Popen([PYTHON_EXE, DISPLAY_OFFSET_METADATA_PY,
-                      path])
+                      '--image-full-path', path])
     
-def display_body_mosaic(metadata, title=None):
+def display_body_mosaic_metadata(metadata, title=None):
     metadata = metadata.copy() # Don't mutate the one given to us
 
     metadata['latitude'] = bodies_generate_latitudes(lat_resolution=
@@ -149,7 +150,7 @@ def display_body_mosaic(metadata, title=None):
     if title is None:
         title = metadata['body_name']
 
-    imgdisp = ImageDisp([metadata['img']], canvas_size=(1024,400),
+    imgdisp = ImageDisp([metadata['img']], canvas_size=(720,360),
                         title=title, allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)
 
@@ -342,4 +343,16 @@ def display_body_mosaic(metadata, title=None):
     imgdisp.pack(side=tk.LEFT)
     
     tk.mainloop()
-    
+
+
+def display_body_reproj_metadata(metadata, title=None):
+    mosaic_metadata = bodies_mosaic_init(
+                     metadata['body_name'],
+                     lat_resolution=metadata['lat_resolution'],
+                     lon_resolution=metadata['lon_resolution'],
+                     latlon_type=metadata['latlon_type'],
+                     lon_direction=metadata['lon_direction'])
+
+    bodies_mosaic_add(mosaic_metadata, metadata) 
+
+    display_body_mosaic_metadata(mosaic_metadata, title)

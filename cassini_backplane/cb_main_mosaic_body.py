@@ -120,7 +120,9 @@ def add_image_to_mosaic(mosaic_root, reset_mosaic, image_path):
         mask = repro_metadata['full_mask']
         repro_metadata['img'] = data / np.mean(data[mask])
         
-    bodies_mosaic_add(mosaic_metadata, repro_metadata) 
+    bodies_mosaic_add(mosaic_metadata, repro_metadata,
+                      resolution_threshold=1.1,
+                      copy_slop=5) 
 
     file_write_mosaic_metadata(body_name, mosaic_root, mosaic_metadata,
                                reset_num=reset_mosaic)

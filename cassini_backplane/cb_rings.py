@@ -723,9 +723,13 @@ def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
     set_obs_ext_bp(obs, extend_fov)
         
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
+    if np.all(radii.mask):
+        logger.debug('No main rings in image - returning bad curvature')
+        return False
+
     min_radius = np.min(radii)
     max_radius = np.max(radii)
-    
+
     longitudes = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float') 
     min_longitude = np.min(longitudes)
     max_longitude = np.max(longitudes)
@@ -873,13 +877,19 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     min_feature_width = rings_config['fiducial_min_feature_width']
 
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
+    if np.all(radii.mask):
+        return 0, [], None
+    
     min_radius = np.min(radii)
     max_radius = np.max(radii)
     
-    min_sub_radius = np.min(radii[extend_fov[1]*2:-extend_fov[1]*2,
-                                  extend_fov[0]*2:-extend_fov[0]*2])
-    max_sub_radius = np.max(radii[extend_fov[1]*2:-extend_fov[1]*2,
-                                  extend_fov[0]*2:-extend_fov[0]*2])
+    sub_radii = radii[extend_fov[1]*2:-extend_fov[1]*2,
+                      extend_fov[0]*2:-extend_fov[0]*2]
+    if np.all(sub_radii.mask):
+        return 0, [], None
+    
+    min_sub_radius = np.min(sub_radii)
+    max_sub_radius = np.max(sub_radii)
 
     logger.debug('Looking for features based on RMS residual vs. resolution')
     logger.debug('Extended FOV radii %.2f to %.2f', min_radius, max_radius)
@@ -1517,21 +1527,13 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                 intersect = (np.logical_and(inner_above, outer_below).
                              filled(False))
                 intersect[in_front_mask] = False
-                plt.imshow(intersect)
-                plt.show()
                 model[intersect] += 1.
-                plt.imshow(model)
-                plt.show()
                 shade1 = _shade_antialias(inner_radii, inner_a, False,
                                           resolutions)
                 model += shade1
                 shade2 = _shade_antialias(outer_radii, outer_a, True,
                                           resolutions)
                 model += shade2
-                imgdisp = ImageDisp([shade1+shade2], [intersect.astype('float')], canvas_size=(512,512),
-                                    allow_enlarge=True,
-                                    auto_update=True)
-                tk.mainloop()
                 if (feature_name and 
                     feature_name.upper().startswith('KEELER-A RING')):
                     # We need to fake this one out - it's really the Keeler
@@ -1801,7 +1803,11 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     set_obs_ext_bp(obs, extend_fov)
 
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
-
+    if np.all(radii.mask):
+        logger.info('No main rings in image - aborting')
+        metadata['end_time'] = time.time()
+        return None, metadata, None
+        
     min_radius = np.min(radii)
     max_radius = np.max(radii)
         

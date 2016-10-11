@@ -1328,7 +1328,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
                                to copy a pixel. Should be >= 1.
         copy_slop              The number of additional valid pixels around
                                a copied pixel to also copy. This is to
-                               reduce the occurance of isolated pixels
+                               reduce the occurrence of isolated pixels
                                from one image being surrounded by pixels
                                from another image.
     """
@@ -1389,14 +1389,7 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     # Calculate where the new resolution is better
     better_resolution_mask = ((repro_eff_res * resolution_threshold) < 
                               mosaic_eff_res)
-#    plt.figure()
-#    plt.imshow(better_resolution_mask)
-#    if copy_slop > 0:
-#        better_resolution_mask = filt.maximum_filter(better_resolution_mask,
-#                                                     copy_slop*2+1)
-#    plt.figure()
-#    plt.imshow(better_resolution_mask)
-    
+    better_resolution_mask = repro_incidence > mosaic_incidence    
     replace_mask = np.logical_and(repro_mask,
                                   np.logical_or(better_resolution_mask, 
                                                 np.logical_not(mosaic_mask)))
@@ -1404,13 +1397,6 @@ def bodies_mosaic_add(mosaic_metadata, repro_metadata,
     if copy_slop > 0:
         replace_mask = filt.maximum_filter(replace_mask, copy_slop*2+1)
         replace_mask = np.logical_and(repro_mask, replace_mask)
-
-#    plt.figure()
-#    plt.imshow(repro_mask)
-#
-#    plt.figure()
-#    plt.imshow(replace_mask)
-#    plt.show()
 
     mosaic_img[replace_mask] = repro_img[replace_mask]
     mosaic_res[replace_mask] = repro_res[replace_mask] 
