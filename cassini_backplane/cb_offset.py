@@ -1353,10 +1353,11 @@ def master_find_offset(obs,
 def offset_create_overlay_image(obs, metadata,
                                 blackpoint=None, whitepoint=None,
                                 whitepoint_ignore_frac=1., 
-                                gamma=0.5,
+                                gamma=None,
                                 stars_blackpoint=None, stars_whitepoint=None,
                                 stars_whitepoint_ignore_frac=1., 
-                                stars_gamma=0.5):
+                                stars_gamma=0.5,
+                                font=None):
     img = obs.data
     offset = metadata['offset']
     if offset is None:
@@ -1368,9 +1369,11 @@ def offset_create_overlay_image(obs, metadata,
     rings_overlay = metadata['rings_overlay']
     rings_overlay_text = metadata['rings_overlay_text']
     bodies_metadata = metadata['bodies_metadata']
-    
-    gamma = 0.5
-    
+
+    image_font = None
+    if font is not None:
+        image_font = ImageFont.truetype(font[0], font[1])
+        
     # Contrast stretch the main image
     if blackpoint is None:
         blackpoint = np.min(img)
@@ -1380,6 +1383,9 @@ def offset_create_overlay_image(obs, metadata,
         whitepoint = img_sorted[np.clip(int(len(img_sorted)*
                                             whitepoint_ignore_frac),
                                         0, len(img_sorted)-1)]
+    if gamma is None:
+        gamma = 0.5
+        
     greyscale_img = ImageDisp.scale_image(img,
                                           blackpoint,
                                           whitepoint,
@@ -1542,7 +1548,7 @@ def offset_create_overlay_image(obs, metadata,
     text_size_h_list = []
     text_size_v_list = []
     for data_line in data_lines:
-        text_size = text_draw.textsize(data_line)
+        text_size = text_draw.textsize(data_line, font=image_font)
         text_size_h_list.append(text_size[0])
         text_size_v_list.append(text_size[1])
 
@@ -1570,7 +1576,8 @@ def offset_create_overlay_image(obs, metadata,
     best_v += 3
     
     for data_line, v_inc in zip(data_lines, text_size_v_list):
-        text_draw.text((best_u,best_v), data_line, fill=(255,255,255))
+        text_draw.text((best_u,best_v), data_line, fill=(255,255,255),
+                       font=image_font)
         best_v += v_inc
 
     combined_data = np.array(text_im.getdata()).reshape(combined_data.shape)

@@ -40,13 +40,13 @@ if len(command_list) == 0:
 
 #    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else
-#    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with Mimas
+    command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results --stars-label-font courbd.ttf,30 --png-label-font courbd.ttf,30' # Star smear with Mimas
 
 #    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # Rings closeup - A ring - no features
-#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results --rings-label-font courbd.ttf,30' # Colombo->Huygens closeup
 #    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 #    command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
+#    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Colombo->Huygens closeup
 #    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
 #    command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Wide angle ring with full B ring gap
 
@@ -159,9 +159,7 @@ if len(command_list) == 0:
 #    command_line_str = 'W1511726740_1 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727641_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727503_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
-#    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
-
-    command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
+#    command_line_str = 'N1492180176_1 --image-console-level debug --force-offset --no-allow-stars --display-offset-results --bodies-label-font courbd.ttf,30'
     
     command_list = command_line_str.split()
 
@@ -230,7 +228,7 @@ parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
     help='Graphically display the results of the offset process')
 parser.add_argument(
-    '--botsim-offset', type=str,
+    '--botsim-offset', type=str, metavar='U,V',
     help='Force the offset to be u,v')
 parser.add_argument(
     '--stars-only', action='store_true', default=False,
@@ -291,6 +289,18 @@ parser.add_argument(
 parser.add_argument(
     '--png-gamma', type=float, default=None,
     help='Set the gamma for the PNG file')
+parser.add_argument(
+    '--png-label-font', type=str, default=None, metavar='FONTFILE,SIZE',
+    help='Set the font for the PNG metadata info')
+parser.add_argument(
+    '--stars-label-font', type=str, default=None, metavar='FONTFILE,SIZE',
+    help='Set the font for star labels')
+parser.add_argument(
+    '--rings-label-font', type=str, default=None, metavar='FONTFILE,SIZE',
+    help='Set the font for ring labels')
+parser.add_argument(
+    '--bodies-label-font', type=str, default=None, metavar='FONTFILE,SIZE',
+    help='Set the font for body labels')
 
 file_add_selection_arguments(parser)
 
@@ -470,7 +480,10 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                               bodies_cartographic_data=cartographic_data,
                               bootstrapped=bootstrapped,
                               stars_show_streaks=
-                                 arguments.overlay_show_star_streaks)
+                                 arguments.overlay_show_star_streaks,
+                              stars_config=stars_config,
+                              rings_config=rings_config,
+                              bodies_config=bodies_config)
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
@@ -523,7 +536,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         obs, metadata,
                         blackpoint=arguments.png_blackpoint,
                         whitepoint=arguments.png_whitepoint,
-                        gamma=arguments.png_gamma)
+                        gamma=arguments.png_gamma,
+                        font=png_label_font)
     file_write_png_from_image(image_path, png_image,
                               bootstrap=metadata['bootstrapped'])
     
@@ -585,6 +599,23 @@ botsim_offset = None
 if arguments.botsim_offset:
     x, y = arguments.botsim_offset.split(',')
     botsim_offset = (float(x.replace('"','')), float(y.replace('"','')))
+
+pnt_label_font = None
+if arguments.png_label_font is not None:
+    x, y = arguments.png_label_font.split(',')
+    png_label_font = (x.replace('"',''), int(y.replace('"','')))
+stars_config = STARS_DEFAULT_CONFIG.copy()
+if arguments.stars_label_font is not None:
+    x, y = arguments.stars_label_font.split(',')
+    stars_config['font'] = (x.replace('"',''), int(y.replace('"','')))
+rings_config = RINGS_DEFAULT_CONFIG.copy()
+if arguments.rings_label_font is not None:
+    x, y = arguments.rings_label_font.split(',')
+    rings_config['font'] = (x.replace('"',''), int(y.replace('"','')))
+bodies_config = BODIES_DEFAULT_CONFIG.copy()
+if arguments.bodies_label_font is not None:
+    x, y = arguments.bodies_label_font.split(',')
+    bodies_config['font'] = (x.replace('"',''), int(y.replace('"','')))
     
 if arguments.stars_only:
     arguments.allow_rings = False

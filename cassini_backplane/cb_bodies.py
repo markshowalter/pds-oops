@@ -170,6 +170,10 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
                                      model_text.shape[0]), 
                                model_text, 'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
+    font = None
+    if bodies_config['font'] is not None:
+        font = ImageFont.truetype(bodies_config['font'][0], 
+                                  size=bodies_config['font'][1])
 
     body_u = dict_entry['center_uv'][0]+extend_fov[0]
     body_v = dict_entry['center_uv'][1]+extend_fov[1]
@@ -227,7 +231,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     text_name = body_name.capitalize()
     # Have to add the leading space because there seems to be a bug in ImageDraw
     # that cuts of part of the leading character in some cases
-    text_size = text_draw.textsize(' '+text_name+'->')
+    text_size = text_draw.textsize(' '+text_name+'->', font=font)
     u = None
     v = None
     first_u = None
@@ -281,7 +285,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         text = ' <-'+text_name
         
     if u is not None:
-        text_draw.text((u,v), text, fill=1)
+        text_draw.text((u,v), text, fill=1, font=font)
 
     model_text = (np.array(text_im.getdata()).astype('bool').
                   reshape(model_text.shape))

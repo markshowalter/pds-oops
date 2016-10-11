@@ -196,7 +196,10 @@ STARS_DEFAULT_CONFIG = {
     # If star navigation fails, get rid of the brightest star if it's at least
     # this much brighter (factor) than the next dimmest star. None means don't
     # apply this test.
-    'too_bright_factor': None
+    'too_bright_factor': None,
+
+    # The font and font size for star labels (font filename, size)
+    'font': None
 }
 
 BODIES_DEFAULT_CONFIG = {
@@ -273,6 +276,9 @@ BODIES_DEFAULT_CONFIG = {
     
     # A body has to take up at least this many pixels in order to be labeled.
     'min_text_area': 0.5,
+
+    # The font and font size for body labels (font filename, size)
+    'font': None
 }
 
 TITAN_DEFAULT_CONFIG = {
@@ -337,7 +343,10 @@ RINGS_DEFAULT_CONFIG = {
     'remove_saturn_shadow': True,
     
     # Remove the shadow of other bodies from the model
-    'remove_body_shadows': False
+    'remove_body_shadows': False,
+    
+    # The font and font size for ring labels (font filename, size)
+    'font': None
 }
 
 OFFSET_DEFAULT_CONFIG = {
