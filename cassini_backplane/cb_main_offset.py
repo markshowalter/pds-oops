@@ -603,7 +603,7 @@ if arguments.botsim_offset:
     x, y = arguments.botsim_offset.split(',')
     botsim_offset = (float(x.replace('"','')), float(y.replace('"','')))
 
-pnt_label_font = None
+png_label_font = None
 if arguments.png_label_font is not None:
     x, y = arguments.png_label_font.split(',')
     png_label_font = (x.replace('"',''), int(y.replace('"','')))
