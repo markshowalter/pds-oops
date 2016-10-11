@@ -1241,9 +1241,9 @@ def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
     # If we're shading the main object above, then the anti-aliasing
     # is shaded below!
     if shade_above:
-        shade_sign = -1.
-    else:
         shade_sign = 1.
+    else:
+        shade_sign = -1.
 
     shade = 1.-shade_sign*(radii-a)/resolutions
     # Since the radius is actually the middle of a pixel, when radii==a the
@@ -1421,6 +1421,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                                      model_text.shape[0]), 
                                model_text, 'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
+    font = None
+    if rings_config['font'] is not None:
+        font = ImageFont.truetype(rings_config['font'][0], 
+                                  size=rings_config['font'][1])
     
     if label_avoid_mask is not None:
         label_avoid_mask = label_avoid_mask.copy()
@@ -1659,7 +1663,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
             # Now find a good place for each label that doesn't overlap other
             # labels and doesn't overlap text from previous model steps
             for text_name, intersect in zip(text_name_list, intersect_list):
-                text_size = text_draw.textsize(text_name+'->')
+                text_size = text_draw.textsize(text_name+'->', font=font)
+                text_size = (text_size[0],text_size[1]*3)
                 dist = dist_from_center.copy()
                 dist[np.logical_not(intersect)] = 1e38
                 first_u = None
@@ -1708,7 +1713,7 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                     text = first_text
                 
                 if u is not None:
-                    text_draw.text((u,v), text, fill=1)
+                    text_draw.text((u,v), text, fill=1, font=font)
                     label_avoid_mask[v:v+text_size[1],
                                      u:u+text_size[0]] = True
 

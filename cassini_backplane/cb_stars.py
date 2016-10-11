@@ -421,7 +421,11 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
     text_im = Image.frombuffer('L', (text.shape[1], text.shape[0]), text,
                                'raw', 'L', 0, 1)
     text_draw = ImageDraw.Draw(text_im)
-#    font = ImageFont('')
+    font = None
+    if stars_config['font'] is not None:
+        font = ImageFont.truetype(stars_config['font'][0], 
+                                  size=stars_config['font'][1])
+
     if show_streaks:
         psf_size = stars_config['min_psf_size']
         max_move_steps = stars_config['max_movement_steps']
@@ -514,7 +518,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
         star_str1 = '%09d' % (star.unique_number)
         star_str2 = '%.3f %s' % (star.vmag,
             'XX' if star.spectral_class is None else star.spectral_class)
-        text_size = text_draw.textsize(star_str1)
+        text_size = text_draw.textsize(star_str1, font=font)
 
         locations = []
         v_text = v_idx-text_size[1] # Whole size because we're doing two lines
@@ -600,9 +604,9 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             
         if good_u is not None:
             text_draw.text((good_u,good_v), star_str1, 
-                           fill=1)
+                           fill=1, font=font)
             text_draw.text((good_u,good_v+text_size[1]), star_str2, 
-                           fill=1)
+                           fill=1, font=font)
     
     text = np.array(text_im.getdata()).astype('bool').reshape(text.shape)
     

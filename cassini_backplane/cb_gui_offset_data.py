@@ -21,6 +21,7 @@ import ttk
 import cspice
 import oops
 
+from cb_bodies import *
 from cb_config import *
 from cb_util_oops import *
 
@@ -108,7 +109,8 @@ def _callback_mousemove(x, y, metadata):
         
 def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                         latlon_type='centric', lon_direction='east',
-                        canvas_size=(1024,512)):
+                        canvas_size=None,
+                        interpolate_missing_stripes=False):
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']
@@ -127,6 +129,9 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         overlay = metadata['ext_overlay']
     stars_metadata = metadata['stars_metadata']
     
+    if interpolate_missing_stripes:
+        ext_data = bodies_interpolate_missing_stripes(ext_data)
+        
     ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
     ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
     metadata['ext_u'] = ext_u
