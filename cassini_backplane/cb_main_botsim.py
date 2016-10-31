@@ -14,6 +14,7 @@ import logging
 import argparse
 import cProfile, pstats, StringIO
 import os
+import subprocess
 import sys
 import time
 import traceback
@@ -64,7 +65,7 @@ parser.add_argument(
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
-    '--image-console-level', metavar='LEVEL', default='info',
+    '--image-console-level', metavar='LEVEL', default='warning',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for each image')
 parser.add_argument(
