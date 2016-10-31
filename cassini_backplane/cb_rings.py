@@ -55,6 +55,7 @@ _LOGGING_NAME = 'cb.' + __name__
 
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
+RINGS_MAX_RADIUS_F = oops.SATURN_F_RING_LIMIT
 
 _RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02 * oops.RPD
 _RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5. # KM
@@ -1757,6 +1758,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     Returns:
         metadata           A dictionary containing information about the
                            offset result:
+            'min_radius'            The minimum rings radius in the image.
+            'max_radius'            The maximum rings radius in the image.
             'shadow_bodies'         The list of Bodies that shadow the rings.
                                     Only populated if rings_config allows
                                     shadow removal. 
@@ -1795,13 +1798,15 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     assert rings_config['model_source'] in ('uvis', 'voyager', 'ephemeris')
     
     metadata = {}
+    metadata['min_radius'] = None
+    metadata['max_radius'] = None
     metadata['shadow_bodies'] = []
-    metadata['curvature_ok'] = False
-    metadata['emission_ok'] = False
+    metadata['curvature_ok'] = None
+    metadata['emission_ok'] = None
     metadata['occluded_by'] = []
     metadata['num_good_fiducial_features'] = 0
     metadata['fiducial_features'] = []
-    metadata['fiducial_features_ok'] = False
+    metadata['fiducial_features_ok'] = None
     metadata['fiducial_blur'] = None
     metadata['start_time'] = start_time
     
@@ -1809,13 +1814,16 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
 
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     if np.all(radii.mask):
-        logger.info('No main rings in image - aborting')
+        logger.info('No rings in image - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
         
     min_radius = np.min(radii)
     max_radius = np.max(radii)
         
+    metadata['min_radius'] = min_radius
+    metadata['max_radius'] = max_radius
+    
     logger.info('Radii %.2f to %.2f', min_radius, max_radius)
         
     if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
@@ -1825,6 +1833,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
 
     if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
                                       rings_config=rings_config):
+        metadata['curvature_ok'] = False     
         logger.info('Too little curvature')
         if not always_create_model:
             metadata['end_time'] = time.time()

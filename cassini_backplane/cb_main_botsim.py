@@ -196,13 +196,13 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
                                  image_path_nac)
                 return False
         else:
-            main_logger.debug('Skipping %s - Better offset already found '+
-                              '(NAC %d,%d / WAC %d,%d)', image_path_nac,
+            main_logger.debug('Skipping %s - NAC offset already found '+
+                              '(NAC %.2f,%.2f / WAC %.2f,%.2f)', image_path_nac,
                               nac_offset[0], nac_offset[1],
                               wac_offset[0], wac_offset[1])
             if (abs(nac_offset[0]-botsim_offset[0]) > 10 or
                 abs(nac_offset[1]-botsim_offset[1]) > 10):
-                main_logger.info('%s - WARNING - Offsets differ by too much',
+                main_logger.warn('%s - WARNING - Offsets differ by too much',
                                  image_path_nac)
             return False
             
