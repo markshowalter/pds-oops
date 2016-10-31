@@ -132,7 +132,12 @@ total_spice_error = 0
 total_other_error = 0
 other_error_db = {}
 other_error_file_db = {}
+total_bad_but_botsim_candidate = 0
 total_botsim_candidate = 0
+total_botsim_winner_excess_diff = 0
+total_botsim_potential_excess_diff = 0
+botsim_potential_excess_diff_x_list = []
+botsim_potential_excess_diff_y_list = []
 total_good_offset = 0
 total_good_offset_list = []
 total_good_star_offset = 0
@@ -144,14 +149,28 @@ total_winner_model = 0
 total_winner_titan = 0
 total_winner_botsim = 0
 body_only_db = {}
+total_rings_entirely = 0
+total_rings_entirely_no_offset = 0
+total_rings_entirely_no_offset_bad_curvature = 0
+total_rings_entirely_no_offset_bad_emission = 0
+total_rings_entirely_no_offset_bad_features = 0
 total_rings_only = 0
 total_rings_only_no_offset = 0
+total_rings_only_no_offset_bad_curvature = 0
+total_rings_only_no_offset_bad_emission = 0
+total_rings_only_no_offset_bad_features = 0
+total_rings_only_no_offset_fring = 0
+total_bad_offset_no_rings_or_bodies = 0
+total_bad_offset_no_rings_titan = 0
 total_bootstrap_cand = 0
+total_bootstrap_cand_no_offset = 0
 bootstrap_cand_db = {}
 titan_status_db = {}
 total_titan_attempt = 0
 time_list = []
 longest_time_filenames = []
+earliest_date = 1e38
+latest_date = 0
 
 last_nac_filename = None
 last_nac_image_path = None
@@ -190,6 +209,8 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     other_error_file_db[error] = filename
                 other_error_db[error] += 1
         else:
+            earliest_date = min(metadata['start_time'], earliest_date)
+            latest_date = max(metadata['end_time'], latest_date)
             total_time = metadata['end_time']-metadata['start_time']
             time_list.append(total_time)
             longest_time_filenames.append((total_time, filename))
@@ -197,20 +218,76 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             longest_time_filenames = longest_time_filenames[:max_num_longest_time]
                 
             offset = metadata['offset']
+            if filename[0] == 'N':
+                last_nac_offset = offset
+            winner = metadata['offset_winner']
+            stars_metadata = metadata['stars_metadata']
+            rings_metadata = metadata['rings_metadata']
+            bodies_metadata = metadata['bodies_metadata']
+            titan_metadata = metadata['titan_metadata']
+            
             if offset is not None:
                 total_good_offset += 1
                 total_good_offset_list.append(tuple(offset))
             else:
                 if metadata['rings_only']:
+                    total_rings_entirely_no_offset += 1
+                    if rings_metadata and rings_metadata['curvature_ok'] == False:
+                        total_rings_entirely_no_offset_bad_curvature += 1
+                    if rings_metadata and rings_metadata['emission_ok'] == False:
+                        total_rings_entirely_no_offset_bad_emission += 1
+                    if rings_metadata and rings_metadata['fiducial_features_ok'] == False:
+                        total_rings_entirely_no_offset_bad_features += 1
+
+                if ((rings_metadata is not None and 
+                     'max_radius' in rings_metadata and
+                     (rings_metadata['max_radius'] >= RINGS_MIN_RADIUS and
+                      rings_metadata['min_radius'] <= RINGS_MAX_RADIUS_F)) and
+                    len(metadata['large_bodies']) == 0):
                     total_rings_only_no_offset += 1
-                if filename[0] == 'N':
-                    last_nac_offset = offset
-                elif (last_nac_filename is not None and
-                      last_nac_offset is None and 
-                      filename[0] == 'W' and
-                      filename[1:] == last_nac_filename[1:]):
-                    total_botsim_candidate += 1
+                    if rings_metadata['curvature_ok'] == False:
+                        total_rings_only_no_offset_bad_curvature += 1
+                    if rings_metadata['emission_ok'] == False:
+                        total_rings_only_no_offset_bad_emission += 1
+                    if rings_metadata['fiducial_features_ok'] == False:
+                        total_rings_only_no_offset_bad_features += 1
+                    if (rings_metadata['max_radius'] >= RINGS_MAX_RADIUS and
+                        rings_metadata['min_radius'] <= RINGS_MAX_RADIUS_F):
+                        total_rings_only_no_offset_fring += 1
+                    
+                if ((rings_metadata is not None and 
+                     'max_radius' in rings_metadata and
+                     (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
+                      rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) and
+                    len(metadata['large_bodies']) == 0):
+                    total_bad_offset_no_rings_or_bodies += 1
+                if ((rings_metadata is not None and 
+                     'max_radius' in rings_metadata and
+                     (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
+                      rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) and
+                    len(metadata['large_bodies']) == 1 and
+                    metadata['large_bodies'][0] == 'TITAN'):
+                    total_bad_offset_no_rings_titan += 1
+                        
+            if (last_nac_filename is not None and
+                filename[0] == 'W' and
+                filename[1:] == last_nac_filename[1:]):
+                total_botsim_candidate += 1
                 
+                if last_nac_offset is None and offset is not None:
+                    total_bad_but_botsim_candidate += 1
+                    
+                if last_nac_offset is not None and offset is not None:
+                    if (abs(last_nac_offset[0]-offset[0]*10) > 10 or
+                        abs(last_nac_offset[1]-offset[1]*10) > 10):
+                        if winner == 'BOTSIM':
+                            total_botsim_winner_excess_diff += 1
+                        else:
+                            total_botsim_potential_excess_diff += 1
+                            botsim_potential_excess_diff_x_list.append(
+                                               last_nac_offset[0]-offset[0]*10)                
+                            botsim_potential_excess_diff_y_list.append(
+                                               last_nac_offset[1]-offset[1]*10)                
             stars_offset = metadata['stars_offset']
             if stars_offset is not None:
                 total_good_star_offset += 1
@@ -226,7 +303,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if titan_offset is not None:
                 total_good_titan_offset += 1
         
-            winner = metadata['offset_winner']
             if winner == 'STARS':
                 total_winner_star += 1
             elif winner == 'MODEL':
@@ -246,7 +322,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if metadata['rings_only']:
                 total_rings_only += 1
 
-            titan_metadata = metadata['titan_metadata']
             if titan_metadata is not None:
                 total_titan_attempt += 1
                 titan_status = titan_metadata_to_status(titan_metadata)
@@ -291,6 +366,8 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
 
             if bootstrap_cand:
                 total_bootstrap_cand += 1
+                if offset is None:
+                    total_bootstrap_cand_no_offset += 1
                     
     if arguments.verbose:
         print status
@@ -363,27 +440,96 @@ if total_offset:
                 total_winner_botsim, 
                 float(total_winner_botsim)/total_good_offset*100,
                 float(total_winner_botsim)/total_offset*100)
+    
+    print sep
     total_bad_offset = total_offset-total_good_offset
-    print 'Bad final offset:                   %6d (%6.2f%%)' % (
+    print 'No final offset:                    %6d (%6.2f%%)' % (
                 total_bad_offset, 
                 float(total_bad_offset)/total_offset*100)
-    print '  Filled by rings:     %6d (%6.2f%%, %6.2f%% of total)' % (
+    print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bad_but_botsim_candidate, 
+                float(total_bad_but_botsim_candidate)/total_bad_offset*100,
+                float(total_bad_but_botsim_candidate)/total_offset*100)
+    print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bootstrap_cand_no_offset, 
+                float(total_bootstrap_cand_no_offset)/total_bad_offset*100,
+                float(total_bootstrap_cand_no_offset)/total_offset*100)
+    print '  Entirely main rings: %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_rings_entirely_no_offset, 
+                float(total_rings_entirely_no_offset)/total_bad_offset*100,
+                float(total_rings_entirely_no_offset)/total_offset*100)
+    if total_rings_entirely_no_offset:
+        print '    Bad curvature:         %6d (%6.2f%%)' % (
+                    total_rings_entirely_no_offset_bad_curvature, 
+                    float(total_rings_entirely_no_offset_bad_curvature)/total_rings_entirely_no_offset*100)
+        print '    Bad emission:          %6d (%6.2f%%)' % (
+                    total_rings_entirely_no_offset_bad_emission,
+                    float(total_rings_entirely_no_offset_bad_emission)/total_rings_entirely_no_offset*100)
+        print '    Bad features:          %6d (%6.2f%%)' % (
+                    total_rings_entirely_no_offset_bad_features, 
+                    float(total_rings_entirely_no_offset_bad_features)/total_rings_entirely_no_offset*100)
+    print '  Only main+F rings:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_only_no_offset, 
                 float(total_rings_only_no_offset)/total_bad_offset*100,
                 float(total_rings_only_no_offset)/total_offset*100)
-    print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bootstrap_cand, 
-                float(total_bootstrap_cand)/total_bad_offset*100,
-                float(total_bootstrap_cand)/total_offset*100)
-#     failed = total_offset-total_good_offset-total_bootstrap_cand
-#     print '   Not bootstrap cand: %6d (%6.2f%%, %6.2f%% of total)' % (
-#                 failed, 
-#                 float(failed)/total_bad_offset*100,
-#                 float(failed)/total_offset*100)
-    print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_botsim_candidate, 
-                float(total_botsim_candidate)/total_bad_offset*100,
+    if total_rings_only_no_offset:
+        print '    Bad curvature:         %6d (%6.2f%%)' % (
+                    total_rings_only_no_offset_bad_curvature, 
+                    float(total_rings_only_no_offset_bad_curvature)/total_rings_only_no_offset*100)
+        print '    Bad emission:          %6d (%6.2f%%)' % (
+                    total_rings_only_no_offset_bad_emission,
+                    float(total_rings_only_no_offset_bad_emission)/total_rings_only_no_offset*100)
+        print '    Bad features:          %6d (%6.2f%%)' % (
+                    total_rings_only_no_offset_bad_features, 
+                    float(total_rings_only_no_offset_bad_features)/total_rings_only_no_offset*100)
+        print '    F ring only:           %6d (%6.2f%%)' % (
+                    total_rings_only_no_offset_fring, 
+                    float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
+    print '  No rings Titan only: %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bad_offset_no_rings_titan, 
+                float(total_bad_offset_no_rings_titan)/total_bad_offset*100,
+                float(total_bad_offset_no_rings_titan)/total_offset*100)
+    print '  No rings or bodies:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bad_offset_no_rings_or_bodies, 
+                float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
+                float(total_bad_offset_no_rings_or_bodies)/total_offset*100)
+             
+    print sep
+    print 'BOTSIM opportunity:                 %6d (%6.2f%%)' % (
+                total_botsim_candidate,
                 float(total_botsim_candidate)/total_offset*100)
+    print '  Winner bad diff:     %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_botsim_winner_excess_diff, 
+                float(total_botsim_winner_excess_diff)/total_botsim_candidate*100,
+                float(total_botsim_winner_excess_diff)/total_offset*100)
+    print '  Potential bad diff:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_botsim_potential_excess_diff, 
+                float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
+                float(total_botsim_potential_excess_diff)/total_offset*100)
+    print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                            np.min(botsim_potential_excess_diff_x_list),
+                                            np.max(botsim_potential_excess_diff_x_list),
+                                            np.mean(botsim_potential_excess_diff_x_list),
+                                            np.std(botsim_potential_excess_diff_x_list))
+    print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                            np.min(botsim_potential_excess_diff_y_list),
+                                            np.max(botsim_potential_excess_diff_y_list),
+                                            np.mean(botsim_potential_excess_diff_y_list),
+                                            np.std(botsim_potential_excess_diff_y_list))
+
+    print sep
+    print 'Total bootstrap candidates:         %6d (%6.2f%%)' % (
+                total_bootstrap_cand, 
+                float(total_bootstrap_cand)/total_offset*100)
+    for body_name in sorted(bootstrap_cand_db):
+        cand_count, bootstrap_status_db = bootstrap_cand_db[body_name]
+        print '  %-10s %6d' % (body_name+':', cand_count)
+        for bootstrap_status in sorted(bootstrap_status_db):
+            print '    %-28s %6d (%6.2f%%)' % (
+                               bootstrap_status+':',
+                               bootstrap_status_db[bootstrap_status],
+                               float(bootstrap_status_db[bootstrap_status])/
+                               cand_count*100)
     
     print sep
     print 'Total Titan navigation attempts:    %6d (%6.2f%%)' % (
@@ -397,17 +543,6 @@ if total_offset:
                            total_titan_attempt*100)
     
     print sep
-    print 'Valid bootstrap candidates:'
-    for body_name in sorted(bootstrap_cand_db):
-        cand_count, bootstrap_status_db = bootstrap_cand_db[body_name]
-        print '  %-10s %6d' % (body_name+':', cand_count)
-        for bootstrap_status in sorted(bootstrap_status_db):
-            print '     %-28s %6d (%6.2f%%)' % (
-                               bootstrap_status+':',
-                               bootstrap_status_db[bootstrap_status],
-                               float(bootstrap_status_db[bootstrap_status])/
-                               cand_count*100) 
-    print sep
     total_body_only = 0
     for body_name in sorted(body_only_db):
         total_body_only += body_only_db[body_name] 
@@ -416,6 +551,9 @@ if total_offset:
         print '    %-10s %6d' % (body_name+':', body_only_db[body_name]) 
     print 'Total filled by rings:              %6d (%6.2f%%)' % (total_rings_only, float(total_rings_only)/total_offset*100)
     print sep
+    print 'Earliest offset:', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(earliest_date))
+    print 'Latest offset:  ', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(latest_date))
+    print
     print 'Run time: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (np.min(time_list),
                                                               np.max(time_list),
                                                               np.mean(time_list),

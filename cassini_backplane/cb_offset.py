@@ -901,10 +901,10 @@ def master_find_offset(obs,
                     if (body_metadata['body_name'] == body_name and
                         body_metadata['too_bumpy']):
                         rings_occluded_ok = False
+                        logger.info('Ignoring rings because they are occluded by'+
+                                    ' a bumpy %s', body_name)
                         break
-                    logger.info('Ignoring rings because they are occluded by'+
-                                ' a bumpy %s', body_name)
-                
+
         if (rings_model is not None and 
             rings_occluded_ok and
             (override_rings_curvature_ok or rings_curvature_ok) and 
