@@ -398,6 +398,14 @@ if total_offset:
     print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
                 total_good_offset, 
                 float(total_good_offset)/total_offset*100)
+    off_list = [x[0] for x in total_good_offset_list]
+    print '  X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                        np.min(off_list), np.max(off_list), 
+                        np.mean(off_list), np.std(off_list))
+    off_list = [x[1] for x in total_good_offset_list]
+    print '  Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                        np.min(off_list), np.max(off_list), 
+                        np.mean(off_list), np.std(off_list))
     print '  Good star  offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_star_offset, 
                 float(total_good_star_offset)/total_good_offset*100,
@@ -506,12 +514,12 @@ if total_offset:
                 total_botsim_potential_excess_diff, 
                 float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
                 float(total_botsim_potential_excess_diff)/total_offset*100)
-    print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+    print '    X DIFF: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
                                             np.min(botsim_potential_excess_diff_x_list),
                                             np.max(botsim_potential_excess_diff_x_list),
                                             np.mean(botsim_potential_excess_diff_x_list),
                                             np.std(botsim_potential_excess_diff_x_list))
-    print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+    print '    Y DIFF: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
                                             np.min(botsim_potential_excess_diff_y_list),
                                             np.max(botsim_potential_excess_diff_y_list),
                                             np.mean(botsim_potential_excess_diff_y_list),

@@ -121,6 +121,9 @@ def file_add_selection_arguments(parser):
     parser.add_argument(
         '--has-no-png-file', action='store_true', default=False,
         help='Only process images that don\'t already have a PNGfile')
+    parser.add_argument(
+        '--selection-expr', type=str, metavar='EXPR',
+        help='Expression to evaluate to decide whether to reprocess an offset')
 
 def file_log_arguments(arguments, log):
     if arguments.image_full_path:
@@ -199,7 +202,8 @@ def file_yield_image_filenames_from_arguments(arguments):
                 force_has_offset_file=arguments.has_offset_file,
                 force_has_no_offset_file=arguments.has_no_offset_file,
                 force_has_png_file=arguments.has_png_file,
-                force_has_no_png_file=arguments.has_no_png_file):
+                force_has_no_png_file=arguments.has_no_png_file,
+                selection_expr=arguments.selection_expr):
         yield image_path
 
 def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
@@ -209,6 +213,7 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                                force_has_no_offset_file=False,
                                force_has_png_file=False,
                                force_has_no_png_file=False,
+                               selection_expr=None,
                                image_root=COISS_2XXX_DERIVED_ROOT,
                                suffix='_CALIB.IMG'):
     search_root = COISS_2XXX_DERIVED_ROOT
@@ -308,7 +313,13 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     png_path = file_img_to_png_path(img_path)
                     if os.path.isfile(png_path):
                         continue
-    
+                if selection_expr is not None:
+                    metadata = file_read_offset_metadata(
+                                 img_path, bootstrap_pref='no', overlay=False)
+                    bs_metadata = file_read_offset_metadata(
+                                 img_path, bootstrap_pref='force', overlay=False)
+                    if metadata is None or not eval(selection_expr):
+                        continue
                 yield img_path
             if done:
                 break
