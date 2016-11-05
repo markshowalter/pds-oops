@@ -123,6 +123,39 @@ class Histogram(object):
             his += line
         return his
 
+def dump_body_info(body_db):    
+    for body_name in sorted(body_db):
+        (count, 
+         no_metadata, no_metadata_filename_list,
+         bad_size, bad_size_filename_list,
+         bad_curvature, bad_curvature_filename_list,
+         bad_limb, bad_limb_filename_list,
+         ok, ok_filename_list) = body_db[body_name]
+        print '      %-15s  %6d (%6.2f%%, %6.2f%% of total)' % (
+                    body_name, count,
+                    float(count)/total_bad_offset*100,
+                    float(count)/total_offset*100)
+        if no_metadata:
+            print '        No metadata:         %6d (%6.2f%%) [%s]' % (
+                        no_metadata, float(no_metadata)/count*100,
+                        no_metadata_filename_list[0])
+        if bad_size:
+            print '        Bad size:            %6d (%6.2f%%) [%s]' % (
+                        bad_size, float(bad_size)/count*100,
+                        bad_size_filename_list[0])
+        if bad_curvature:
+            print '        Bad curvature:       %6d (%6.2f%%) [%s]' % (
+                        bad_curvature, float(bad_curvature)/count*100,
+                        bad_curvature_filename_list[0])
+        if bad_limb:
+            print '        Bad limb:            %6d (%6.2f%%) [%s]' % (
+                        bad_limb, float(bad_limb)/count*100,
+                        bad_limb_filename_list[0])
+        if ok:
+            print '        All OK:              %6d (%6.2f%%) [%s]' % (
+                        ok, float(ok)/count*100,
+                        ok_filename_list[0])
+
 bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
 max_num_longest_time = 10
 
@@ -154,14 +187,19 @@ total_rings_entirely_no_offset = 0
 total_rings_entirely_no_offset_bad_curvature = 0
 total_rings_entirely_no_offset_bad_emission = 0
 total_rings_entirely_no_offset_bad_features = 0
+total_rings_entirely_no_offset_ok = 0
 total_rings_only = 0
 total_rings_only_no_offset = 0
 total_rings_only_no_offset_bad_curvature = 0
 total_rings_only_no_offset_bad_emission = 0
 total_rings_only_no_offset_bad_features = 0
+total_rings_only_no_offset_ok = 0
 total_rings_only_no_offset_fring = 0
 total_bad_offset_no_rings_or_bodies = 0
-total_bad_offset_no_rings_titan = 0
+no_rings_single_body_db = {}
+no_rings_multi_body_db = {}
+with_rings_single_body_db = {}
+with_rings_multi_body_db = {}
 total_bootstrap_cand = 0
 total_bootstrap_cand_no_offset = 0
 bootstrap_cand_db = {}
@@ -226,24 +264,84 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             bodies_metadata = metadata['bodies_metadata']
             titan_metadata = metadata['titan_metadata']
             
+            bootstrap_cand = False        
+            if (metadata['bootstrap_candidate'] or
+                metadata['bootstrapped']):
+                bodies_metadata = metadata['bodies_metadata']
+                if bodies_metadata is not None:
+                    for body_name in metadata['large_bodies']:
+                        if (body_name not in bootstrap_config['body_list'] or
+                            body_name in FUZZY_BODY_LIST or
+                            body_name == 'TITAN'):
+                            continue
+                        if body_name not in bodies_metadata:
+                            continue
+                        body_metadata = bodies_metadata[body_name]
+                        if not body_metadata['size_ok']:
+                            continue
+                        if body_name not in bootstrap_cand_db:
+                            cand_count = 0
+                            bootstrap_status_db = {}
+                        else:
+                            (cand_count, 
+                             bootstrap_status_db) = bootstrap_cand_db[body_name]
+                        bootstrap_cand = True
+                        bootstrap_status = 'Not bootstrapped'
+                        if metadata['bootstrapped']:
+                            bootstrap_status = metadata['bootstrap_status']
+                        bootstrap_status_db[bootstrap_status] = bootstrap_status_db.get(bootstrap_status,0)+1
+                        
+                        bootstrap_cand_db[body_name] = (cand_count+1, 
+                                                        bootstrap_status_db)
+                        status += '  %s: %s' % (body_name, bootstrap_status)
+                    
+                        break # Only allow one bootstrap body for now XXX
+
+            if bootstrap_cand:
+                total_bootstrap_cand += 1
+                if offset is None:
+                    total_bootstrap_cand_no_offset += 1
+                    
             if offset is not None:
                 total_good_offset += 1
                 total_good_offset_list.append(tuple(offset))
             else:
-                if metadata['rings_only']:
-                    total_rings_entirely_no_offset += 1
-                    if rings_metadata and rings_metadata['curvature_ok'] == False:
-                        total_rings_entirely_no_offset_bad_curvature += 1
-                    if rings_metadata and rings_metadata['emission_ok'] == False:
-                        total_rings_entirely_no_offset_bad_emission += 1
-                    if rings_metadata and rings_metadata['fiducial_features_ok'] == False:
-                        total_rings_entirely_no_offset_bad_features += 1
+                has_rings = not (
+                    rings_metadata is None or
+                    (rings_metadata is not None and 
+                     (('max_radius' in rings_metadata and
+                       (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
+                        rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) or
+                      ('max_radius' not in rings_metadata and
+                       not rings_metadata['curvature_ok'] and
+                       not rings_metadata['emission_ok'] and
+                       not rings_metadata['fiducial_features_ok'])))) 
 
-                if ((rings_metadata is not None and 
-                     'max_radius' in rings_metadata and
-                     (rings_metadata['max_radius'] >= RINGS_MIN_RADIUS and
-                      rings_metadata['min_radius'] <= RINGS_MAX_RADIUS_F)) and
-                    len(metadata['large_bodies']) == 0):
+                closest_body_name = 'NONE'
+                if len(metadata['large_bodies']):
+                    closest_body_name = metadata['large_bodies'][0]
+                if metadata['bootstrap_candidate']:
+                    closest_body_name += ' (BS)'
+
+                body_db_to_update = None
+                
+                if metadata['rings_only']:
+                    assert has_rings
+                    # MAIN RINGS fill entire image (no bodies)
+                    total_rings_entirely_no_offset += 1
+                    if rings_metadata is not None:
+                        if rings_metadata['curvature_ok'] == False:
+                            total_rings_entirely_no_offset_bad_curvature += 1
+                        if rings_metadata['emission_ok'] == False:
+                            total_rings_entirely_no_offset_bad_emission += 1
+                        if rings_metadata['fiducial_features_ok'] == False:
+                            total_rings_entirely_no_offset_bad_features += 1
+                        if (rings_metadata['curvature_ok'] and
+                            rings_metadata['emission_ok'] and
+                            rings_metadata['fiducial_features_ok']):
+                            total_rings_entirely_no_offset_ok += 1
+                elif (has_rings and len(metadata['large_bodies']) == 0):
+                    # ANY RINGS but NO BODIES and MAIN RINGS DON'T FILL ENTIRE IMAGE
                     total_rings_only_no_offset += 1
                     if rings_metadata['curvature_ok'] == False:
                         total_rings_only_no_offset_bad_curvature += 1
@@ -251,24 +349,69 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                         total_rings_only_no_offset_bad_emission += 1
                     if rings_metadata['fiducial_features_ok'] == False:
                         total_rings_only_no_offset_bad_features += 1
-                    if (rings_metadata['max_radius'] >= RINGS_MAX_RADIUS and
+                    if (rings_metadata['curvature_ok'] and
+                        rings_metadata['emission_ok'] and
+                        rings_metadata['fiducial_features_ok']):
+                        total_rings_only_no_offset_ok += 1
+                    if ('max_radius' in rings_metadata and
+                        rings_metadata['max_radius'] >= RINGS_MAX_RADIUS and
                         rings_metadata['min_radius'] <= RINGS_MAX_RADIUS_F):
                         total_rings_only_no_offset_fring += 1
-                    
-                if ((rings_metadata is not None and 
-                     'max_radius' in rings_metadata and
-                     (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
-                      rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) and
-                    len(metadata['large_bodies']) == 0):
+                elif has_rings and len(metadata['large_bodies']) == 1:
+                    # HAS RINGS and HAS SINGLE BODY
+                    body_db_to_update = with_rings_single_body_db
+                elif has_rings and len(metadata['large_bodies']) > 1:
+                    # HAS RINGS and HAS MULTIPLE BODIES
+                    body_db_to_update = with_rings_multi_body_db
+                elif not has_rings and len(metadata['large_bodies']) == 0:
+                    # NO RINGS or BODIES
                     total_bad_offset_no_rings_or_bodies += 1
-                if ((rings_metadata is not None and 
-                     'max_radius' in rings_metadata and
-                     (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
-                      rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) and
-                    len(metadata['large_bodies']) == 1 and
-                    metadata['large_bodies'][0] == 'TITAN'):
-                    total_bad_offset_no_rings_titan += 1
-                        
+                elif not has_rings and len(metadata['large_bodies']) == 1:
+                    # NO RINGS but HAS SINGLE BODY
+                    body_db_to_update = no_rings_single_body_db
+                elif not has_rings and len(metadata['large_bodies']) > 1:
+                    # NO RINGS but HAS MULTIPLE BODIES
+                    body_db_to_update = no_rings_multi_body_db
+                else:
+                    assert False
+            
+                if body_db_to_update is not None:
+                    (count, 
+                     no_metadata, no_metadata_filename_list,
+                     bad_size, bad_size_filename_list,
+                     bad_curvature, bad_curvature_filename_list,
+                     bad_limb, bad_limb_filename_list,
+                     ok, ok_filename_list) = body_db_to_update.get(closest_body_name,
+                                                           (0,0,[],0,[],0,[],0,[],0,[]))
+                    count += 1
+                    if closest_body_name != 'NONE':
+                        if closest_body_name.replace(' (BS)','') not in metadata['bodies_metadata']:
+                            no_metadata += 1
+                            no_metadata_filename_list.append(filename)
+                        else:
+                            body_metadata = metadata['bodies_metadata'][closest_body_name.replace(' (BS)','')]
+                            if not body_metadata['size_ok']:
+                                bad_size += 1
+                                bad_size_filename_list.append(filename)
+                            if not body_metadata['curvature_ok']:
+                                bad_curvature += 1
+                                bad_curvature_filename_list.append(filename)
+                            if not body_metadata['limb_ok']:
+                                bad_limb += 1
+                                bad_limb_filename_list.append(filename)
+                            if (body_metadata['size_ok'] and
+                                body_metadata['curvature_ok'] and
+                                body_metadata['limb_ok']):
+                                ok += 1
+                                ok_filename_list.append(filename)
+                    body_db_to_update[closest_body_name] = (
+                        count, 
+                        no_metadata, no_metadata_filename_list,
+                        bad_size, bad_size_filename_list,
+                        bad_curvature, bad_curvature_filename_list,
+                        bad_limb, bad_limb_filename_list,
+                        ok, ok_filename_list)
+            
             if (last_nac_filename is not None and
                 filename[0] == 'W' and
                 filename[1:] == last_nac_filename[1:]):
@@ -315,9 +458,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 print image_path, 'Unknown offset winner', winner
             body_only = metadata['body_only']
             if body_only:
-                if body_only not in body_only_db:
-                    body_only_db[body_only] = 0
-                body_only_db[body_only] += 1
+                body_only_db[body_only] = body_only_db.get(body_only, 0)+1
                 
             if metadata['rings_only']:
                 total_rings_only += 1
@@ -325,50 +466,8 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if titan_metadata is not None:
                 total_titan_attempt += 1
                 titan_status = titan_metadata_to_status(titan_metadata)
-                if titan_status not in titan_status_db:
-                    titan_status_db[titan_status] = 0
-                titan_status_db[titan_status] += 1
+                titan_status_db[titan_status] = titan_status_db.get(titan_status, 0)+1
                 
-            bootstrap_cand = False        
-            if (metadata['bootstrap_candidate'] or
-                metadata['bootstrapped']):
-                bodies_metadata = metadata['bodies_metadata']
-                if bodies_metadata is not None:
-                    for body_name in metadata['large_bodies']:
-                        if (body_name not in bootstrap_config['body_list'] or
-                            body_name in FUZZY_BODY_LIST or
-                            body_name == 'TITAN'):
-                            continue
-                        if body_name not in bodies_metadata:
-                            continue
-                        body_metadata = bodies_metadata[body_name]
-                        if not body_metadata['size_ok']:
-                            continue
-                        if body_name not in bootstrap_cand_db:
-                            cand_count = 0
-                            bootstrap_status_db = {}
-                        else:
-                            (cand_count, 
-                             bootstrap_status_db) = bootstrap_cand_db[body_name]
-                        bootstrap_cand = True
-                        bootstrap_status = 'Not bootstrapped'
-                        if metadata['bootstrapped']:
-                            bootstrap_status = metadata['bootstrap_status']
-                        if bootstrap_status not in bootstrap_status_db:
-                            bootstrap_status_db[bootstrap_status] = 0
-                        bootstrap_status_db[bootstrap_status] += 1
-                        
-                        bootstrap_cand_db[body_name] = (cand_count+1, 
-                                                        bootstrap_status_db)
-                        status += '  %s: %s' % (body_name, bootstrap_status)
-                    
-                        break # Only allow one bootstrap body for now XXX
-
-            if bootstrap_cand:
-                total_bootstrap_cand += 1
-                if offset is None:
-                    total_bootstrap_cand_no_offset += 1
-                    
     if arguments.verbose:
         print status
 
@@ -380,7 +479,7 @@ print 'Total with offset file:             %6d' % total_offset
 print sep
 
 if total_offset:
-    print 'Spice error:                        %6d (%6.2f%%)' % (
+    print 'SPICE error:                        %6d (%6.2f%%)' % (
                 total_spice_error, 
                 float(total_spice_error)/total_offset*100)
     print 'Other error:                        %6d (%6.2f%%)' % (
@@ -454,46 +553,70 @@ if total_offset:
                 total_bootstrap_cand_no_offset, 
                 float(total_bootstrap_cand_no_offset)/total_bad_offset*100,
                 float(total_bootstrap_cand_no_offset)/total_offset*100)
-    print '  Entirely main rings: %6d (%6.2f%%, %6.2f%% of total)' % (
+
+    print
+    print 'Reasons:'
+    print '  No rings'
+    print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
+                total_bad_offset_no_rings_or_bodies, 
+                float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
+                float(total_bad_offset_no_rings_or_bodies)/total_offset*100)
+    print '    Single body only:'
+    dump_body_info(no_rings_single_body_db)
+    print '    Multiple bodies, closest:'
+    dump_body_info(no_rings_multi_body_db)
+    print '  Has rings (main or F)'
+    print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_entirely_no_offset, 
                 float(total_rings_entirely_no_offset)/total_bad_offset*100,
                 float(total_rings_entirely_no_offset)/total_offset*100)
     if total_rings_entirely_no_offset:
-        print '    Bad curvature:         %6d (%6.2f%%)' % (
-                    total_rings_entirely_no_offset_bad_curvature, 
-                    float(total_rings_entirely_no_offset_bad_curvature)/total_rings_entirely_no_offset*100)
-        print '    Bad emission:          %6d (%6.2f%%)' % (
-                    total_rings_entirely_no_offset_bad_emission,
-                    float(total_rings_entirely_no_offset_bad_emission)/total_rings_entirely_no_offset*100)
-        print '    Bad features:          %6d (%6.2f%%)' % (
-                    total_rings_entirely_no_offset_bad_features, 
-                    float(total_rings_entirely_no_offset_bad_features)/total_rings_entirely_no_offset*100)
-    print '  Only main+F rings:   %6d (%6.2f%%, %6.2f%% of total)' % (
+        if total_rings_entirely_no_offset_bad_curvature:
+            print '      Bad curvature:         %6d (%6.2f%%)' % (
+                        total_rings_entirely_no_offset_bad_curvature, 
+                        float(total_rings_entirely_no_offset_bad_curvature)/total_rings_entirely_no_offset*100)
+        if total_rings_entirely_no_offset_bad_emission:
+            print '      Bad emission:          %6d (%6.2f%%)' % (
+                        total_rings_entirely_no_offset_bad_emission,
+                        float(total_rings_entirely_no_offset_bad_emission)/total_rings_entirely_no_offset*100)
+        if total_rings_entirely_no_offset_bad_features:
+            print '      Bad features:          %6d (%6.2f%%)' % (
+                        total_rings_entirely_no_offset_bad_features, 
+                        float(total_rings_entirely_no_offset_bad_features)/total_rings_entirely_no_offset*100)
+        if total_rings_entirely_no_offset_ok:
+            print '      All OK:                %6d (%6.2f%%)' % (
+                        total_rings_entirely_no_offset_ok, 
+                        float(total_rings_entirely_no_offset_ok)/total_rings_entirely_no_offset*100)
+    print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_only_no_offset, 
                 float(total_rings_only_no_offset)/total_bad_offset*100,
                 float(total_rings_only_no_offset)/total_offset*100)
     if total_rings_only_no_offset:
-        print '    Bad curvature:         %6d (%6.2f%%)' % (
-                    total_rings_only_no_offset_bad_curvature, 
-                    float(total_rings_only_no_offset_bad_curvature)/total_rings_only_no_offset*100)
-        print '    Bad emission:          %6d (%6.2f%%)' % (
-                    total_rings_only_no_offset_bad_emission,
-                    float(total_rings_only_no_offset_bad_emission)/total_rings_only_no_offset*100)
-        print '    Bad features:          %6d (%6.2f%%)' % (
-                    total_rings_only_no_offset_bad_features, 
-                    float(total_rings_only_no_offset_bad_features)/total_rings_only_no_offset*100)
-        print '    F ring only:           %6d (%6.2f%%)' % (
-                    total_rings_only_no_offset_fring, 
-                    float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
-    print '  No rings Titan only: %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bad_offset_no_rings_titan, 
-                float(total_bad_offset_no_rings_titan)/total_bad_offset*100,
-                float(total_bad_offset_no_rings_titan)/total_offset*100)
-    print '  No rings or bodies:  %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bad_offset_no_rings_or_bodies, 
-                float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
-                float(total_bad_offset_no_rings_or_bodies)/total_offset*100)
-             
+        if total_rings_only_no_offset_bad_curvature:
+            print '      Bad curvature:         %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_bad_curvature, 
+                        float(total_rings_only_no_offset_bad_curvature)/total_rings_only_no_offset*100)
+        if total_rings_only_no_offset_bad_emission:
+            print '      Bad emission:          %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_bad_emission,
+                        float(total_rings_only_no_offset_bad_emission)/total_rings_only_no_offset*100)
+        if total_rings_only_no_offset_bad_features:
+            print '      Bad features:          %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_bad_features, 
+                        float(total_rings_only_no_offset_bad_features)/total_rings_only_no_offset*100)
+        if total_rings_only_no_offset_ok:
+            print '      All OK:                %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_ok, 
+                        float(total_rings_only_no_offset_ok)/total_rings_only_no_offset*100)
+        if total_rings_only_no_offset_fring:
+            print '      F ring only:           %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_fring, 
+                        float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
+    print '    Single body only:'
+    dump_body_info(with_rings_single_body_db)
+    print '    Multiple bodies, closest:'
+    dump_body_info(with_rings_multi_body_db)
+
     print sep
     print 'BOTSIM opportunity:                 %6d (%6.2f%%)' % (
                 total_botsim_candidate,
@@ -506,16 +629,17 @@ if total_offset:
                 total_botsim_potential_excess_diff, 
                 float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
                 float(total_botsim_potential_excess_diff)/total_offset*100)
-    print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
-                                            np.min(botsim_potential_excess_diff_x_list),
-                                            np.max(botsim_potential_excess_diff_x_list),
-                                            np.mean(botsim_potential_excess_diff_x_list),
-                                            np.std(botsim_potential_excess_diff_x_list))
-    print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
-                                            np.min(botsim_potential_excess_diff_y_list),
-                                            np.max(botsim_potential_excess_diff_y_list),
-                                            np.mean(botsim_potential_excess_diff_y_list),
-                                            np.std(botsim_potential_excess_diff_y_list))
+    if len(botsim_potential_excess_diff_x_list):
+        print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                np.min(botsim_potential_excess_diff_x_list),
+                                                np.max(botsim_potential_excess_diff_x_list),
+                                                np.mean(botsim_potential_excess_diff_x_list),
+                                                np.std(botsim_potential_excess_diff_x_list))
+        print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                np.min(botsim_potential_excess_diff_y_list),
+                                                np.max(botsim_potential_excess_diff_y_list),
+                                                np.mean(botsim_potential_excess_diff_y_list),
+                                                np.std(botsim_potential_excess_diff_y_list))
 
     print sep
     print 'Total bootstrap candidates:         %6d (%6.2f%%)' % (

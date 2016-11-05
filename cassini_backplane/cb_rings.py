@@ -1920,6 +1920,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         rings_dist = obs.ext_bp.distance('saturn:ring').mvals.astype('float')
         radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         for body_model, body_metadata, body_text in bodies_model_list:
+            if body_metadata['body_name'] in RINGS_BODY_LIST:
+                continue
             body_dist = body_metadata['inventory']['range']
             intersect = (rings_dist>body_dist) & (body_model != 0)
             intersect[radii < RINGS_MIN_RADIUS] = False
@@ -2068,8 +2070,8 @@ def rings_create_model_from_image(obs, extend_fov=(0,0), data=None):
 def rings_offset_radial_projection(obs, offset, 
                                    extend_fov=(0,0), 
                                    rings_config=None):
-    set_obs_center_bp(obs)
-    gradient = obs.center_bp.ring_gradient_angle('saturn:ring').mvals.astype('float')
+    bp_gradient = obs.ext_bp.ring_gradient_angle('saturn:ring').mvals
+    gradient = float(np.median(bp_gradient))
     grad_x = np.cos(gradient)
     grad_y = np.sin(gradient)
     # Projection is (a.b) / (b.b) * b

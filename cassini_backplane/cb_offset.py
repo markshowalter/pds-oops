@@ -904,6 +904,8 @@ def master_find_offset(obs,
                         logger.info('Ignoring rings because they are occluded by'+
                                     ' a bumpy %s', body_name)
                         break
+                if not rings_occluded_ok:
+                    break
 
         if (rings_model is not None and 
             rings_occluded_ok and
@@ -987,6 +989,11 @@ def master_find_offset(obs,
                                                   obs, model_offset,
                                                   extend_fov=extend_fov,
                                                   rings_config=rings_config)
+                if (abs(model_offset[0]) >= extend_fov[0] or
+                    abs(model_offset[1]) >= extend_fov[1]):
+                    logger.info('Radially reprojected offset is larger than search limits')
+                    model_offset = None
+        if model_offset is not None and not masked_model:
             model_offset_int = (int(np.round(model_offset[0])),
                                 int(np.round(model_offset[1])))
             # Run it again to make sure it works with a fully sliced

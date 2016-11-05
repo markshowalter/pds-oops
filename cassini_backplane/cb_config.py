@@ -106,6 +106,10 @@ LARGE_BODY_LIST = ['SATURN', 'PAN', 'DAPHNIS', 'ATLAS', 'PROMETHEUS',
 # are "fuzzy" in some way or at least don't have a well-defined orientation.
 FUZZY_BODY_LIST = ['HYPERION', 'PHOEBE']
 
+# These are bodies inside the rings that should not be used to compute
+# ring occlusions.
+RINGS_BODY_LIST = ['PAN', 'DAPHNIS']
+
 
 ##################
 # CONFIGURATIONS #
@@ -159,7 +163,7 @@ STARS_DEFAULT_CONFIG = {
     #      are wrong thanks to SPICE inaccuracies.
     # NEW: This is currently set high because we have access to the
     #      predicted kernels.
-    'max_smear': 5000, # XXX
+    'max_smear': 10, # XXX
     
     # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',

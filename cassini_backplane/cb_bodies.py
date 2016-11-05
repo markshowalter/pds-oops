@@ -350,7 +350,7 @@ def bodies_create_model(obs, body_name, inventory,
         'occulted_by'          A list of body names or 'RINGS' that occult some
                                or all of this body. This is set in the main
                                offset loop, not in this procedure. None if
-                               Nothing occults it or it hasn't been processed
+                               nothing occults it or it hasn't been processed
                                by the main loop yet.
         'in_saturn_shadow'     True if the body is in Saturn's shadow and only
                                illuminated by Saturn-shine.
@@ -435,12 +435,15 @@ def bodies_create_model(obs, body_name, inventory,
                                          limit =(ctr_uv[0]+.5, ctr_uv[1]+.5),
                                          swap  =True)
     ctr_bp = oops.Backplane(obs, meshgrid=ctr_meshgrid)
-    saturn_shadow = ctr_bp.where_inside_shadow(body_name, 'saturn').vals
-    if np.any(saturn_shadow):
-        logger.info('Body is in Saturn\'s shadow')
-        metadata['in_saturn_shadow'] = True
-    else:
+    if body_name == 'SATURN':
         metadata['in_saturn_shadow'] = False
+    else:
+        saturn_shadow = ctr_bp.where_inside_shadow(body_name, 'saturn').vals
+        if np.any(saturn_shadow):
+            logger.info('Body is in Saturn\'s shadow')
+            metadata['in_saturn_shadow'] = True
+        else:
+            metadata['in_saturn_shadow'] = False
         
     bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
     if bb_area >= bodies_config['min_bounding_box_area']:
