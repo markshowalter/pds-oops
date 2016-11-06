@@ -1825,12 +1825,20 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['max_radius'] = max_radius
     
     logger.info('Radii %.2f to %.2f', min_radius, max_radius)
-        
+
     if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
         logger.info('No main rings in image - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
 
+    good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
+                               radii <= RINGS_MAX_RADIUS)
+        
+    if not np.any(good_mask):
+        logger.info('Main rings present but not visible - aborting')
+        metadata['end_time'] = time.time()
+        return None, metadata, None
+        
     if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
                                       rings_config=rings_config):
         metadata['curvature_ok'] = False     
@@ -1843,8 +1851,6 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         metadata['curvature_ok'] = True     
        
     emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
-    good_mask = np.logical_and(radii >= RINGS_MIN_RADIUS,
-                               radii <= RINGS_MAX_RADIUS)
     min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
     if min_emission < rings_config['emission_threshold']:
         logger.info('Minimum emission angle %.2f from 90 too close to ring '+

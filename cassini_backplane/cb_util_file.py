@@ -12,6 +12,7 @@
 #    file_clean_name
 #    file_read_iss_file
 #    file_img_to_log_path
+#    file_img_to_offset_path
 #    file_offset_to_img_path
 #    file_read_offset_metadata
 #    file_read_offset_metadata_path
@@ -193,6 +194,10 @@ def file_yield_image_filenames_from_arguments(arguments):
     last_image_number = arguments.last_image_num
     volume = arguments.volume
     
+    if len(restrict_image_list):
+        first_image_number = min([int(x[1:11]) for x in restrict_image_list])
+        last_image_number = max([int(x[1:11]) for x in restrict_image_list])
+        
     for image_path in file_yield_image_filenames(
                 first_image_number, 
                 last_image_number,
@@ -298,11 +303,11 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                 if not os.path.isfile(img_path):
                     continue
                 if force_has_offset_file and not searching_offset:
-                    offset_path = _file_img_to_offset_path(img_path)
+                    offset_path = file_img_to_offset_path(img_path)
                     if not os.path.isfile(offset_path):
                         continue
                 if force_has_no_offset_file:
-                    offset_path = _file_img_to_offset_path(img_path)
+                    offset_path = file_img_to_offset_path(img_path)
                     if os.path.isfile(offset_path):
                         continue
                 if force_has_png_file and not searching_png:
@@ -406,7 +411,7 @@ def file_img_to_log_path(img_path, log_type, bootstrap=False, make_dirs=True):
 
 ### OFFSETS AND OVERLAYS
 
-def _file_img_to_offset_path(img_path, bootstrap=False, make_dirs=False):
+def file_img_to_offset_path(img_path, bootstrap=False, make_dirs=False):
     fn = _results_path(img_path, 'offsets', make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
@@ -459,16 +464,16 @@ def file_read_offset_metadata(img_path, bootstrap_pref='prefer', overlay=True):
     assert bootstrap_pref in ('no', 'force', 'prefer')
     
     if bootstrap_pref == 'no':
-        offset_path = _file_img_to_offset_path(img_path, bootstrap=False,
+        offset_path = file_img_to_offset_path(img_path, bootstrap=False,
                                                make_dirs=False)
     elif bootstrap_pref == 'force':
-        offset_path = _file_img_to_offset_path(img_path, bootstrap=True,
+        offset_path = file_img_to_offset_path(img_path, bootstrap=True,
                                                make_dirs=False)
     else:
-        offset_path = _file_img_to_offset_path(img_path, bootstrap=True,
+        offset_path = file_img_to_offset_path(img_path, bootstrap=True,
                                                make_dirs=False)
         if not os.path.exists(offset_path):
-            offset_path = _file_img_to_offset_path(img_path, bootstrap=False,
+            offset_path = file_img_to_offset_path(img_path, bootstrap=False,
                                                    make_dirs=False)
             
     return file_read_offset_metadata_path(offset_path, overlay=overlay)
@@ -529,7 +534,7 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
     bootstrap = False
     if 'bootstrapped' in metadata:
         bootstrap = metadata['bootstrapped']
-    offset_path = _file_img_to_offset_path(img_path, bootstrap=bootstrap, make_dirs=True)
+    offset_path = file_img_to_offset_path(img_path, bootstrap=bootstrap, make_dirs=True)
     logger.debug('Writing offset file %s', offset_path)
     
     metadata = copy.deepcopy(metadata)

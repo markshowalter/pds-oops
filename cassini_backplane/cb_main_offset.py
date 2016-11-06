@@ -162,7 +162,8 @@ if len(command_list) == 0:
 #    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
-    command_line_str = 'N1532435381_1 --image-console-level debug --force-offset --no-allow-stars'
+#    command_line_str = 'N1669812089_1 --image-console-level debug --force-offset'
+    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --redo-non-spice-error --no-allow-stars'
     
     command_list = command_line_str.split()
 
@@ -224,9 +225,13 @@ parser.add_argument(
     '--force-offset', action='store_true', default=False,
     help='Force offset computation even if the offset file exists')
 parser.add_argument(
-    '--offset-redo-error', action='store_true', default=False,
+    '--redo-error', action='store_true', default=False,
     help='''Force offset computation if the offset file exists and 
             indicates a fatal error''')
+parser.add_argument(
+    '--redo-non-spice-error', action='store_true', default=False,
+    help='''Force offset computation if the offset file exists and 
+            indicates a fatal error other than missing SPICE data''')
 parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
     help='Graphically display the results of the offset process')
@@ -408,10 +413,10 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         bootstrap_pref = 'force'
     else:
         bootstrap_pref = 'no'
-    file_exists = os.path.exists(image_path)
+    file_exists = os.path.exists(file_img_to_offset_path(image_path))
     if file_exists:
         if not force_offset:
-            if redo_offset_error:
+            if redo_offset_error or redo_offset_nonspice_error:
                 offset_metadata = file_read_offset_metadata(
                                             image_path, overlay=False,
                                             bootstrap_pref=bootstrap_pref)
@@ -420,14 +425,27 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         'Skipping %s - offset file exists and metadata OK', 
                         image_path)
                     return False
-                main_logger.debug(
-                    'Processing %s - offset file indicates error', image_path)
+                if redo_offset_error: 
+                    main_logger.debug(
+                        'Processing %s - offset file indicates error', image_path)
+                else:
+                    assert redo_offset_nonspice_error
+                    error = offset_metadata['error']
+                    if error == '':
+                        error = metadata['error_traceback'].split('\n')[-2]
+                    if error.startswith('SPICE(NOFRAMECONNECT)'):
+                        main_logger.debug(
+                            'Skipping %s - offset file indicates SPICE error', image_path)
+                        return False
+                    main_logger.debug(
+                        'Processing %s - offset file indicates non-SPICE error', image_path)
             else:
                 main_logger.debug('Skipping %s - offset file exists', 
                                   image_path)
                 return False
-        main_logger.debug(
-          'Processing %s - offset file exists but redoing offsets', image_path)
+        else:
+            main_logger.debug(
+              'Processing %s - offset file exists but redoing offsets', image_path)
     else:
         main_logger.debug('Processing %s - no previous offset file', image_path)
 
@@ -597,7 +615,8 @@ main_logger, image_logger = log_setup_main_logging(
 image_logfile_level = log_decode_level(arguments.image_logfile_level)
     
 force_offset = arguments.force_offset
-redo_offset_error = arguments.offset_redo_error
+redo_offset_error = arguments.redo_error
+redo_offset_nonspice_error = arguments.redo_non_spice_error
 
 botsim_offset = None
 
