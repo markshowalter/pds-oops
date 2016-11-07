@@ -331,7 +331,7 @@ def master_find_offset(obs,
     metadata['camera'] = obs.detector
     metadata['filter1'] = obs.filter1
     metadata['filter2'] = obs.filter2
-    metadata['image_shape'] = obs.data.shape
+    metadata['image_shape'] = tuple(obs.data.shape)
     metadata['midtime'] = obs.midtime
     metadata['texp'] = obs.texp
     metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(

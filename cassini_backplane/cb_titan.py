@@ -271,7 +271,8 @@ def titan_find_symmetry_offset(
     if titan_size_u >= offset_limit or titan_size_v >= offset_limit:    
         best_max_diff_dist = 0
     else:
-        if abs(best_max_diff_dist) == offset_limit+1:
+        if (best_max_diff_dist is None or 
+            abs(best_max_diff_dist) == offset_limit+1):
             return None, None
 
     best_rms = 1e38

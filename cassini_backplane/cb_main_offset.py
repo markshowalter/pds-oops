@@ -432,7 +432,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     assert redo_offset_nonspice_error
                     error = offset_metadata['error']
                     if error == '':
-                        error = metadata['error_traceback'].split('\n')[-2]
+                        error = offset_metadata['error_traceback'].split('\n')[-2]
                     if error.startswith('SPICE(NOFRAMECONNECT)'):
                         main_logger.debug(
                             'Skipping %s - offset file indicates SPICE error', image_path)

@@ -161,6 +161,7 @@ max_num_longest_time = 10
 
 total_files = 0
 total_offset = 0
+total_has_offset_result = 0
 total_spice_error = 0
 total_other_error = 0
 other_error_db = {}
@@ -255,6 +256,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             longest_time_filenames.sort(reverse=True)
             longest_time_filenames = longest_time_filenames[:max_num_longest_time]
                 
+            total_has_offset_result += 1
             offset = metadata['offset']
             if filename[0] == 'N':
                 last_nac_offset = offset
@@ -305,6 +307,12 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if offset is not None:
                 total_good_offset += 1
                 total_good_offset_list.append(tuple(offset))
+                max_offset = MAX_POINTING_ERROR[(tuple(metadata['image_shape']),
+                                                 metadata['camera'])]
+                if (abs(offset[0]) > max_offset[0] or
+                    abs(offset[1]) > max_offset[1]):
+                    print 'WARNING - ', filename, '-',
+                    print 'Offset', winner, offset, 'exceeds maximum', max_offset 
             else:
                 has_rings = not (
                     rings_metadata is None or
@@ -496,7 +504,7 @@ if total_offset:
 
     print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
                 total_good_offset, 
-                float(total_good_offset)/total_offset*100)
+                float(total_good_offset)/total_has_offset_result*100)
     off_list = [x[0] for x in total_good_offset_list]
     print '  X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
                         np.min(off_list), np.max(off_list), 
@@ -505,62 +513,62 @@ if total_offset:
     print '  Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
                         np.min(off_list), np.max(off_list), 
                         np.mean(off_list), np.std(off_list))
-    print '  Good star  offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
+    print '  Good star   offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_star_offset, 
                 float(total_good_star_offset)/total_good_offset*100,
-                float(total_good_star_offset)/total_offset*100)
+                float(total_good_star_offset)/total_has_offset_result*100)
     total_good_model_offset = total_good_model_bs_offset+total_good_model_nobs_offset
-    print '  Good model offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
+    print '  Good model  offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_model_offset, 
                 float(total_good_model_offset)/total_good_offset*100,
-                float(total_good_model_offset)/total_offset*100)
+                float(total_good_model_offset)/total_has_offset_result*100)
     print '    Bootstrapped:      %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_model_bs_offset, 
                 float(total_good_model_bs_offset)/total_good_offset*100,
-                float(total_good_model_bs_offset)/total_offset*100)
+                float(total_good_model_bs_offset)/total_has_offset_result*100)
     print '    Not bootstrapped:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_model_nobs_offset, 
                 float(total_good_model_nobs_offset)/total_good_offset*100,
-                float(total_good_model_nobs_offset)/total_offset*100)
-    print '  Good Titan offset:   %6d (%6.2f%%, %6.2f%% of total)' % (
+                float(total_good_model_nobs_offset)/total_has_offset_result*100)
+    print '  Good Titan  offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_titan_offset, 
                 float(total_good_titan_offset)/total_good_offset*100,
-                float(total_good_titan_offset)/total_offset*100)
+                float(total_good_titan_offset)/total_has_offset_result*100)
     print '  Good BOTSIM offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_winner_botsim, 
                 float(total_winner_botsim)/total_good_offset*100,
-                float(total_winner_botsim)/total_offset*100)
+                float(total_winner_botsim)/total_has_offset_result*100)
     print '  Winners:'
     print '    Star:   %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_winner_star, 
                 float(total_winner_star)/total_good_offset*100,
-                float(total_winner_star)/total_offset*100)
+                float(total_winner_star)/total_has_offset_result*100)
     print '    Model:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_winner_model, 
                 float(total_winner_model)/total_good_offset*100,
-                float(total_winner_model)/total_offset*100)
+                float(total_winner_model)/total_has_offset_result*100)
     print '    Titan:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_winner_titan, 
                 float(total_winner_titan)/total_good_offset*100,
-                float(total_winner_titan)/total_offset*100)
+                float(total_winner_titan)/total_has_offset_result*100)
     print '    BOTSIM: %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_winner_botsim, 
                 float(total_winner_botsim)/total_good_offset*100,
-                float(total_winner_botsim)/total_offset*100)
+                float(total_winner_botsim)/total_has_offset_result*100)
     
     print sep
-    total_bad_offset = total_offset-total_good_offset
+    total_bad_offset = total_has_offset_result-total_good_offset
     print 'No final offset:                    %6d (%6.2f%%)' % (
                 total_bad_offset, 
-                float(total_bad_offset)/total_offset*100)
+                float(total_bad_offset)/total_has_offset_result*100)
     print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_bad_but_botsim_candidate, 
                 float(total_bad_but_botsim_candidate)/total_bad_offset*100,
-                float(total_bad_but_botsim_candidate)/total_offset*100)
+                float(total_bad_but_botsim_candidate)/total_has_offset_result*100)
     print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_bootstrap_cand_no_offset, 
                 float(total_bootstrap_cand_no_offset)/total_bad_offset*100,
-                float(total_bootstrap_cand_no_offset)/total_offset*100)
+                float(total_bootstrap_cand_no_offset)/total_has_offset_result*100)
 
     print
     print 'Reasons:'
@@ -568,7 +576,7 @@ if total_offset:
     print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_bad_offset_no_rings_or_bodies, 
                 float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
-                float(total_bad_offset_no_rings_or_bodies)/total_offset*100)
+                float(total_bad_offset_no_rings_or_bodies)/total_has_offset_result*100)
     print '    Single body only:'
     dump_body_info(no_rings_single_body_db)
     print '    Multiple bodies, closest:'
@@ -577,7 +585,7 @@ if total_offset:
     print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_entirely_no_offset, 
                 float(total_rings_entirely_no_offset)/total_bad_offset*100,
-                float(total_rings_entirely_no_offset)/total_offset*100)
+                float(total_rings_entirely_no_offset)/total_has_offset_result*100)
     if total_rings_entirely_no_offset:
         if total_rings_entirely_no_offset_bad_curvature:
             print '      Bad curvature:         %6d (%6.2f%%)' % (
@@ -598,7 +606,7 @@ if total_offset:
     print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_only_no_offset, 
                 float(total_rings_only_no_offset)/total_bad_offset*100,
-                float(total_rings_only_no_offset)/total_offset*100)
+                float(total_rings_only_no_offset)/total_has_offset_result*100)
     if total_rings_only_no_offset:
         if total_rings_only_no_offset_bad_curvature:
             print '      Bad curvature:         %6d (%6.2f%%)' % (
@@ -628,15 +636,15 @@ if total_offset:
     print sep
     print 'BOTSIM opportunity:                 %6d (%6.2f%%)' % (
                 total_botsim_candidate,
-                float(total_botsim_candidate)/total_offset*100)
+                float(total_botsim_candidate)/total_has_offset_result*100)
     print '  Winner bad diff:     %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_botsim_winner_excess_diff, 
                 float(total_botsim_winner_excess_diff)/total_botsim_candidate*100,
-                float(total_botsim_winner_excess_diff)/total_offset*100)
+                float(total_botsim_winner_excess_diff)/total_has_offset_result*100)
     print '  Potential bad diff:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_botsim_potential_excess_diff, 
                 float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
-                float(total_botsim_potential_excess_diff)/total_offset*100)
+                float(total_botsim_potential_excess_diff)/total_has_offset_result*100)
     if len(botsim_potential_excess_diff_x_list):
         print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
                                                 np.min(botsim_potential_excess_diff_x_list),
@@ -652,7 +660,7 @@ if total_offset:
     print sep
     print 'Total bootstrap candidates:         %6d (%6.2f%%)' % (
                 total_bootstrap_cand, 
-                float(total_bootstrap_cand)/total_offset*100)
+                float(total_bootstrap_cand)/total_has_offset_result*100)
     for body_name in sorted(bootstrap_cand_db):
         cand_count, bootstrap_status_db = bootstrap_cand_db[body_name]
         print '  %-10s %6d' % (body_name+':', cand_count)
@@ -666,7 +674,7 @@ if total_offset:
     print sep
     print 'Total Titan navigation attempts:    %6d (%6.2f%%)' % (
                 total_titan_attempt, 
-                float(total_titan_attempt)/total_offset*100)
+                float(total_titan_attempt)/total_has_offset_result*100)
     for titan_status in sorted(titan_status_db):
         print '  %-26s %6d (%6.2f%%)' % (
                            titan_status+':',
@@ -678,10 +686,10 @@ if total_offset:
     total_body_only = 0
     for body_name in sorted(body_only_db):
         total_body_only += body_only_db[body_name] 
-    print 'Total filled by body:               %6d (%6.2f%%)' % (total_body_only, float(total_body_only)/total_offset*100)
+    print 'Total filled by body:               %6d (%6.2f%%)' % (total_body_only, float(total_body_only)/total_has_offset_result*100)
     for body_name in sorted(body_only_db):
         print '    %-10s %6d' % (body_name+':', body_only_db[body_name]) 
-    print 'Total filled by rings:              %6d (%6.2f%%)' % (total_rings_only, float(total_rings_only)/total_offset*100)
+    print 'Total filled by rings:              %6d (%6.2f%%)' % (total_rings_only, float(total_rings_only)/total_has_offset_result*100)
     print sep
     print 'Earliest offset:', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(earliest_date))
     print 'Latest offset:  ', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(latest_date))
