@@ -30,7 +30,6 @@ import logging
 import os
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
@@ -1171,13 +1170,6 @@ def _blur_ring_radial_data(tab, resolution):
         replace_bool = fiducial_dist >= (dist+min_blur)
         blurred_data[replace_bool] = one_blur[replace_bool]
     
-#    fig = plt.figure()
-#    ax = fig.add_subplot(111)
-##    plt.plot(new_radius, fiducial_dist, '-', color='black')
-#    plt.plot(new_radius, data, '-', color='#ff4040')
-#    plt.plot(new_radius, blurred_data, '-', color='black')
-#    plt.show()
-    
     return blurred_data, start_radius, end_radius, radial_resolution
 
 def _compute_ring_radial_data(source, resolution):
@@ -1383,21 +1375,6 @@ def _shade_model(model, radii, a, shade_above, radius_width_km, min_radius_width
     
     return model+shade
     
-#    shade = 1.-shade_sign*(radii-a)/radius_width_km
-#    shade[shade < 0.] = 0.
-#    shade[shade > 1.] = 0.
-#    plt.imshow(shade)
-#    
-#    shade_anti = _shade_antialias(radii, a, shade_above, resolutions)
-#
-#    plt.figure()
-#    plt.imshow(shade_anti)
-#    plt.figure()
-#    plt.imshow(shade+shade_anti)
-#    plt.show()
-#    
-#    return model + shade + shade_anti
-
 def _compute_model_ephemeris(obs, feature_list, label_avoid_mask, 
                              in_front_mask, extend_fov, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._compute_model_ephemeris')

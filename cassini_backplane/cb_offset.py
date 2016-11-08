@@ -14,14 +14,12 @@ import logging
 
 import time
 
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.filters as filt
 
-import imgdisp
 import oops
 
 from cb_bodies import *
@@ -962,10 +960,6 @@ def master_find_offset(obs,
                                offset_config['median_filter_size'],
                                offset_config['median_filter_blur'],
                                masked=masked))
-#        plt.imshow(model_filter_func(obs.ext_data))
-#        plt.figure()
-#        plt.imshow(model_filter_func(final_model))
-#        plt.show()
         model_offset_list = find_correlation_and_offset(
                                    obs.ext_data,
                                    final_model, search_size_min=0,

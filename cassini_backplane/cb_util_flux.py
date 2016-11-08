@@ -23,7 +23,12 @@ import numpy as np
 import scipy.constants as const
 import scipy.interpolate as interp
 import scipy.integrate as integrate
-import matplotlib.pyplot as plt
+
+_TKINTER_AVAILABLE = True
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 import oops
 
@@ -473,6 +478,7 @@ def plot_cassini_filter_transmission():
         'IRP90':('#4040c0', '--')
     }
     
+    assert _TKINTER_AVAILABLE
     cassini_filter_transmission('NAC', 'CL1') # This reads all filters
     for detector in ['NAC', 'WAC']:
         fig = plt.figure()
@@ -510,6 +516,7 @@ _JOHNSON_V = np.array([
 
 def plot_johnson_filter_transmission():
     """Plot the Johnson B and V filter transmission functions"""
+    assert _TKINTER_AVAILABLE
     fig = plt.figure()
     plt.plot(_JOHNSON_B_WL, _JOHNSON_B, '-', color='blue', label='B')
     plt.plot(_JOHNSON_V_WL, _JOHNSON_V, '-', color='green', label='V')
@@ -537,7 +544,8 @@ def _compute_planck_curve(wavelength, T):
 
 def plot_planck_vs_solar_flux():
     """Plot a scale Planck curve vs. the solar flux."""
-    
+    assert _TKINTER_AVAILABLE
+
     solarflux_wl, solarflux_flux = _cisscal_solar_flux()
 
     planck_flux = _compute_planck_curve(solarflux_wl, 5778)

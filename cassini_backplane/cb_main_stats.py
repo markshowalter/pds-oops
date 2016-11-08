@@ -12,7 +12,6 @@ import math
 import numpy as np
 import os
 import sys
-import matplotlib.pyplot as plt
 
 import oops.inst.cassini.iss as iss
 import oops

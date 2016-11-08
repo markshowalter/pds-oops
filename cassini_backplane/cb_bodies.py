@@ -27,7 +27,6 @@ import numpy as np
 import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import scipy.ndimage.filters as filt
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 
 import oops

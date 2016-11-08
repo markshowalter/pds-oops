@@ -14,12 +14,12 @@ import logging
 import numpy as np
 import numpy.ma as ma
 import scipy.fftpack as fftpack
-import matplotlib.pyplot as plt
-from imgdisp import ImageDisp
 
 _TKINTER_AVAILABLE = True
 try:
+    import matplotlib.pyplot as plt
     import Tkinter as tk
+    from imgdisp import ImageDisp
 except ImportError:
     _TKINTER_AVAILABLE = False
 
@@ -254,6 +254,7 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
         peak = np.where(slice == slice.max())
 
         if DEBUG_CORRELATE_PLOT:
+            assert _TKINTER_AVAILABLE
             plt.jet()
             plt.imshow(slice, interpolation='none')
             plt.contour(slice)

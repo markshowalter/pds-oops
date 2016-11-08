@@ -20,8 +20,13 @@ import time
 
 import numpy as np
 import numpy.ma as ma
-import matplotlib.pyplot as plt
 import scipy.interpolate as interp
+
+_TKINTER_AVAILABLE = True
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 import oops
 
@@ -130,6 +135,7 @@ def titan_find_symmetry_offset(
             total_intersect = np.logical_or(total_intersect, intersect)
 
     if display_total_intersect:
+        assert _TKINTER_AVAILABLE
         plt.figure()
         plt.imshow(total_intersect)
         plt.show()
@@ -658,6 +664,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['confidence'] = confidence
 
     if False:
+        assert _TKINTER_AVAILABLE
         plt.figure()
         plt.plot(baseline_x, baseline_profile, '-', color='black')
         plt.plot(ext_baseline_x, profile, '-', color='red')
