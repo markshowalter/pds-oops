@@ -17,8 +17,12 @@ import numpy as np
 import os
 import subprocess
 
-from imgdisp import *
-import Tkinter as tk
+_TKINTER_AVAILABLE = True
+try:
+    from imgdisp import *
+    import Tkinter as tk
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 import oops
 
@@ -140,6 +144,8 @@ def _callback_b1press_mosaic(x, y, metadata):
                       '--image-full-path', path])
     
 def display_body_mosaic_metadata(metadata, title=None):
+    assert _TKINTER_AVAILABLE
+
     metadata = metadata.copy() # Don't mutate the one given to us
 
     metadata['latitude'] = bodies_generate_latitudes(lat_resolution=

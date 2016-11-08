@@ -14,10 +14,14 @@ import os
 import numpy as np
 import polymath
 
-from imgdisp import *
-import Tkinter as tk
-import ttk
-
+_TKINTER_AVAILABLE = True
+try:
+    from imgdisp import *
+    import Tkinter as tk
+    import ttk
+except ImportError:
+    _TKINTER_AVAILABLE = False
+    
 import cspice
 import oops
 
@@ -111,6 +115,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                         latlon_type='centric', lon_direction='east',
                         canvas_size=None,
                         interpolate_missing_stripes=False):
+    assert _TKINTER_AVAILABLE
+
     metadata = metadata.copy() # Don't mutate the one given to us
     
     offset = metadata['offset']

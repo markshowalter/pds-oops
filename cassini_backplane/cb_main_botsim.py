@@ -19,6 +19,12 @@ import sys
 import time
 import traceback
 
+_TKINTER_AVAILABLE = True
+try:
+    import Tkinter as tk
+except ImportError:
+    _TKINTER_AVAILABLE = False
+
 import oops.inst.cassini.iss as iss
 import oops
 
@@ -334,6 +340,7 @@ if arguments.profile and arguments.max_subprocesses == 0:
     pr.enable()
 
 if arguments.display_offset_results:
+    assert _TKINTER_AVAILABLE
     root = tk.Tk()
     root.withdraw()
 

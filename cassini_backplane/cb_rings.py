@@ -37,10 +37,6 @@ import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
 from PIL import Image, ImageDraw, ImageFont
 
-from imgdisp import *
-import Tkinter as tk
-import ttk
-
 import polymath
 import oops
 import cspice

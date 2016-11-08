@@ -22,9 +22,7 @@ import numpy as np
 import numpy.ma as ma
 import matplotlib.pyplot as plt
 import scipy.interpolate as interp
-import Tkinter as tk
 
-from imgdisp import *
 import oops
 
 from cb_config import *

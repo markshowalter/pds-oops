@@ -23,10 +23,16 @@ import polymath
 import scipy.ndimage.filters as filt
 from PIL import Image, ImageDraw, ImageFont
 
+_TKINTER_AVAILABLE = True
+try:
+    import Tkinter as tk
+    from imgdisp import *
+except ImportError:
+    _TKINTER_AVAILABLE = False
+
 import oops
 from polymath import *
 from psfmodel.gaussian import GaussianPSF
-from imgdisp import *
 from starcat import (UCAC4StarCatalog,
                      SCLASS_TO_B_MINUS_V, SCLASS_TO_SURFACE_TEMP)
 from starcat.starcatalog import (Star, SCLASS_TO_SURFACE_TEMP, 
@@ -366,11 +372,12 @@ def stars_create_model(obs, star_list, offset=None, ignore_conflicts=False,
               u_int-psf_size_half_u:u_int+psf_size_half_u+1] += psf
 
     if DEBUG_STARS_MODEL_IMGDISP:
+        assert _TKINTER_AVAILABLE
         imdisp = ImageDisp([model],
                            canvas_size=(1024,1024),
                            allow_enlarge=True, enlarge_limit=10,
                            auto_update=True)
-        Tkinter.mainloop()
+        tk.mainloop()
         
     return model
 
@@ -1375,12 +1382,13 @@ def stars_find_offset(obs, ra_dec_predicted,
                                                        obs, data=calib_data,
                                                        extend_fov=extend_fov)
                 if rings_radial_model is not None:
+                    assert _TKINTER_AVAILABLE
                     imdisp = ImageDisp([calib_data, rings_radial_model, 
                                         calib_data-rings_radial_model],
                                        canvas_size=(512,512),
                                        allow_enlarge=True, enlarge_limit=10,
                                        auto_update=True)
-                    Tkinter.mainloop()
+                    tk.mainloop()
     
                     filtered_data = pad_image(calib_data-rings_radial_model, 
                                               extend_fov)
@@ -1411,11 +1419,12 @@ def stars_find_offset(obs, ra_dec_predicted,
                 filtered_data[mask] = 0.
 
             if DEBUG_STARS_FILTER_IMGDISP:
+                assert _TKINTER_AVAILABLE
                 imdisp = ImageDisp([filtered_data],
                                    canvas_size=(512,512),
                                    allow_enlarge=True, enlarge_limit=10,
                                    auto_update=True)
-                Tkinter.mainloop()
+                tk.mainloop()
 
         offset = None
         good_stars = 0

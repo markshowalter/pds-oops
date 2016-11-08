@@ -15,6 +15,12 @@ import sys
 import time
 import traceback
 
+_TKINTER_AVAILABLE = True
+try:
+    import Tkinter as tk
+except ImportError:
+    _TKINTER_AVAILABLE = False
+
 import oops.inst.cassini.iss as iss
 import oops
 
@@ -159,11 +165,11 @@ if len(command_list) == 0:
 #    command_line_str = 'W1511726740_1 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727641_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727503_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
-#    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
+    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
 #    command_line_str = 'N1669812089_1 --image-console-level debug --force-offset'
-    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --redo-non-spice-error --no-allow-stars'
+#    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --redo-non-spice-error --no-allow-stars'
     
     command_list = command_line_str.split()
 
@@ -601,6 +607,7 @@ if arguments.profile and arguments.max_subprocesses == 0:
     pr.enable()
 
 if arguments.display_offset_results:
+    assert _TKINTER_AVAILABLE
     root = tk.Tk()
     root.withdraw()
 

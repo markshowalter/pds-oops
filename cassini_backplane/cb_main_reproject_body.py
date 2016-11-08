@@ -4,7 +4,11 @@
 # The main top-level driver for reprojecting a body.
 ###############################################################################
 
-import Tkinter as tk
+_TKINTER_AVAILABLE = True
+try:
+    import Tkinter as tk
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 from cb_logging import *
 import logging
@@ -203,6 +207,7 @@ if arguments.profile:
     pr.enable()
 
 if arguments.display_reprojection:
+    assert _TKINTER_AVAILABLE
     root = tk.Tk()
     root.withdraw()
 

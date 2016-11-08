@@ -16,7 +16,12 @@ import numpy.ma as ma
 import scipy.fftpack as fftpack
 import matplotlib.pyplot as plt
 from imgdisp import ImageDisp
-import Tkinter
+
+_TKINTER_AVAILABLE = True
+try:
+    import Tkinter as tk
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 from cb_util_image import *
 
@@ -81,11 +86,12 @@ def _correlate2d(image, model, normalize=False, retile=False):
     assert image.shape == model.shape
 
     if DEBUG_CORRELATE_IMGDISP:
+        assert _TKINTER_AVAILABLE
         imdisp = ImageDisp([image,model], 
                            canvas_size=(512,512),
                            allow_enlarge=True, enlarge_limit=10,
                            auto_update=True)
-        Tkinter.mainloop()
+        tk.mainloop()
     
     # Padding to a power of 2 makes FFT _much_ faster
     newimage, _ = _pad_to_power_of_2(image)
@@ -131,12 +137,12 @@ def _correlate_2d_masked(image, model, search_size_min, search_size_max,
     else:
         search_size_max_u, search_size_max_v = search_size_max
 
-    toplevel = Tkinter.Tk()
-    imdisp = ImageDisp([model.data,model.mask], parent=toplevel,
-                       canvas_size=(512,512),
-                       allow_enlarge=True, enlarge_limit=10,
-                       auto_update=True)
-    Tkinter.mainloop()
+#    toplevel = tk.Tk()
+#    imdisp = ImageDisp([model.data,model.mask], parent=toplevel,
+#                       canvas_size=(512,512),
+#                       allow_enlarge=True, enlarge_limit=10,
+#                       auto_update=True)
+#    tk.mainloop()
 
     ret = np.zeros((search_size_max_v*2+1, search_size_max_u*2+1))
     
@@ -157,12 +163,12 @@ def _correlate_2d_masked(image, model, search_size_min, search_size_max,
             print corr
             ret[v_offset+search_size_max_v,
                 u_offset+search_size_max_u] = corr
-#            toplevel = Tkinter.Tk()
+#            toplevel = tk.Tk()
 #            imdisp = ImageDisp([image,sub_model], parent=toplevel,
 #                               canvas_size=(512,512),
 #                               allow_enlarge=True, enlarge_limit=10,
 #                               auto_update=True)
-#            Tkinter.mainloop()
+#            tk.mainloop()
     
     return ret
 
@@ -268,12 +274,13 @@ def _find_correlated_offset(corr, search_size_min, search_size_max,
             plt.show()
         
         if DEBUG_CORRELATE_IMGDISP > 1:
-            toplevel = Tkinter.Tk()
+            assert _TKINTER_AVAILABLE
+            toplevel = tk.Tk()
             imdisp = ImageDisp([slice], parent=toplevel,
                                canvas_size=(512,512),
                                allow_enlarge=True, enlarge_limit=10,
                                auto_update=True)
-            Tkinter.mainloop()
+            tk.mainloop()
             
         if len(peak[0]) != 1:
             logger.debug('Peak # %d - No unique peak found - aborting',
