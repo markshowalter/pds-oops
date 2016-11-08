@@ -1352,6 +1352,27 @@ def master_find_offset(obs,
     
     return metadata
 
+def _scale_image(img, blackpoint, whitepoint, gamma):
+    """Scale a 2-D image based on blackpoint, whitepoint, and gamma.
+    
+    Inputs:
+    
+    img                The 2-D image.
+    blackpoint         Any element below the blackpoint will be black.
+    whitepoint         Any element above the whitepoint will be white.
+    gamma              Non-linear stretch (1.0 = linear stretch).
+    """ 
+    if whitepoint < blackpoint:
+        whitepoint = blackpoint
+        
+    if whitepoint == blackpoint:
+        whitepoint += 0.00001
+    
+    greyscale_img = np.floor((np.maximum(img-blackpoint, 0)/
+                              (whitepoint-blackpoint))**gamma*256)
+    greyscale_img = np.clip(greyscale_img, 0, 255) # Clip black and white
+    return greyscale_img
+
 def offset_create_overlay_image(obs, metadata,
                                 blackpoint=None, whitepoint=None,
                                 whitepoint_ignore_frac=1., 
@@ -1388,10 +1409,7 @@ def offset_create_overlay_image(obs, metadata,
     if gamma is None:
         gamma = 0.5
         
-    greyscale_img = ImageDisp.scale_image(img,
-                                          blackpoint,
-                                          whitepoint,
-                                          gamma)
+    greyscale_img = _scale_image(img, blackpoint, whitepoint, gamma)
 
     stars_metadata = metadata['stars_metadata']
     titan_metadata = metadata['titan_metadata']
@@ -1416,10 +1434,8 @@ def offset_create_overlay_image(obs, metadata,
                     stars_bp = np.min(stars_data)
                 if stars_whitepoint is None:
                     stars_wp = np.max(stars_data)
-                stars_data[:,:] = ImageDisp.scale_image(stars_data,
-                                                        stars_bp,
-                                                        stars_wp,
-                                                        stars_gamma)
+                stars_data[:,:] = _scale_image(stars_data, stars_bp, stars_wp,
+                                               stars_gamma)
         
     mode = 'RGB'
     combined_data = np.zeros(greyscale_img.shape + (3,), dtype=np.uint8)
