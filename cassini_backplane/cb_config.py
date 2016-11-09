@@ -39,11 +39,14 @@ CB_RESULTS_ROOT = os.environ['CB_RESULTS_ROOT']
 CISSCAL_CALIB_ROOT = os.getenv('CISSCAL_CALIB_PATH')
 
 # Contains filter transmission and PSF data
-CASSINI_CALIB_ROOT  = os.getenv('CASSINI_CALIB_PATH')
+CASSINI_CALIB_ROOT = os.getenv('CASSINI_CALIB_PATH')
 
 # The UCAC4 star catalog.
 STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG']
 
+# The URL for files in the PDS Ring-Moon Systems Node
+PDS_RINGS_VOLUMES_ROOT = 'http://pds-rings.seti.org/volumes/COISS_2xxx/'
+PDS_RINGS_CALIB_ROOT = 'http://pds-rings.seti.org/derived/COISS_2xxx/'
 
 ####################################
 # EXECUTABLES AND PYTHON PROGRAMS ##

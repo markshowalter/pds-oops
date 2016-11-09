@@ -11,14 +11,18 @@
 #    file_yield_image_filenames
 #    file_clean_name
 #    file_read_iss_file
+#    file_img_to_short_img_path
 #    file_img_to_log_path
 #    file_img_to_offset_path
 #    file_offset_to_img_path
+#    file_img_to_overlay_path
 #    file_read_offset_metadata
 #    file_read_offset_metadata_path
 #    file_write_offset_metadata
+#    file_write_offset_metadata_path
 #    file_img_to_png_path
 #    file_write_png_from_image
+#    file_write_png_path
 #    file_img_to_predicted_path
 #    file_read_predicted_metadata
 #    file_write_predicted_metadata
@@ -85,10 +89,10 @@ def _validate_image_name(name):
 
 def file_add_selection_arguments(parser):
     parser.add_argument(
-        '--first-image-num', type=int, default='1', metavar='IMAGE_NUM',
+        '--first-image-num', type=int, default=1, metavar='IMAGE_NUM',
         help='The starting image number')
     parser.add_argument(
-        '--last-image-num', type=int, default='9999999999', metavar='IMAGE_NUM',
+        '--last-image-num', type=int, default=9999999999, metavar='IMAGE_NUM',
         help='The ending image number')
     nacwac_group = parser.add_mutually_exclusive_group()
     nacwac_group.add_argument(
@@ -102,7 +106,13 @@ def file_add_selection_arguments(parser):
         help='Specific image names to process')
     parser.add_argument(
         '--volume', action='append',
-        help='An entire volume')
+        help='An entire volume or volume/range')
+    parser.add_argument(
+        '--first-volume-num', type=int, default=2001, metavar='VOL_NUM',
+        help='The starting volume number')
+    parser.add_argument(
+        '--last-volume-num', type=int, default=2999, metavar='VOL_NUM',
+        help='The ending volume number')
     parser.add_argument(
         '--image-full-path', action='append',
         help='The full path for an image')
@@ -134,6 +144,9 @@ def file_log_arguments(arguments, log):
     log('*** Image #s %010d - %010d',
         arguments.first_image_num,
         arguments.last_image_num)
+    log('*** Volume #s %04d - %04d',
+        arguments.first_volume_num,
+        arguments.last_volume_num)
     log('*** NAC only:                %s', arguments.nac_only)
     log('*** WAC only:                %s', arguments.wac_only)
     log('*** Already has offset file: %s', arguments.has_offset_file)
@@ -146,14 +159,14 @@ def file_log_arguments(arguments, log):
         for filename in arguments.image_name[0]:
             log('        %s', filename)
     if arguments.volume is not None and arguments.volume != []:
-        log('*** Images restricted to volume:')
+        log('*** Images restricted to volumes:')
         for filename in arguments.volume:
             log('        %s', filename)
     if arguments.image_pds_csv:
         log('*** Images restricted to those from PDS CSV %s',
             arguments.image_pds_csv)
 
-def file_yield_image_filenames_from_arguments(arguments):
+def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
     if arguments.image_full_path:
         for image_path in arguments.image_full_path:
             yield image_path
@@ -192,27 +205,48 @@ def file_yield_image_filenames_from_arguments(arguments):
 
     first_image_number = arguments.first_image_num
     last_image_number = arguments.last_image_num
-    volume = arguments.volume
+    first_volume_number = arguments.first_volume_num
+    last_volume_number = arguments.last_volume_num
+    volumes = arguments.volume
     
     if len(restrict_image_list):
         first_image_number = min([int(x[1:11]) for x in restrict_image_list])
         last_image_number = max([int(x[1:11]) for x in restrict_image_list])
         
-    for image_path in file_yield_image_filenames(
-                first_image_number, 
-                last_image_number,
-                volume,
-                restrict_camera,
-                restrict_image_list,
-                force_has_offset_file=arguments.has_offset_file,
-                force_has_no_offset_file=arguments.has_no_offset_file,
-                force_has_png_file=arguments.has_png_file,
-                force_has_no_png_file=arguments.has_no_png_file,
-                selection_expr=arguments.selection_expr):
-        yield image_path
-
+    if not use_index_files:
+        for image_path in file_yield_image_filenames(
+                    first_image_number, 
+                    last_image_number,
+                    first_volume_number,
+                    last_image_number,
+                    volumes,
+                    restrict_camera,
+                    restrict_image_list,
+                    force_has_offset_file=arguments.has_offset_file,
+                    force_has_no_offset_file=arguments.has_no_offset_file,
+                    force_has_png_file=arguments.has_png_file,
+                    force_has_no_png_file=arguments.has_no_png_file,
+                    selection_expr=arguments.selection_expr):
+            yield image_path
+    else:
+        for image_path in file_yield_image_filenames_index(
+                    first_image_number, 
+                    last_image_number,
+                    first_volume_number,
+                    last_volume_number,
+                    volumes,
+                    restrict_camera,
+                    restrict_image_list,
+                    force_has_offset_file=arguments.has_offset_file,
+                    force_has_no_offset_file=arguments.has_no_offset_file,
+                    force_has_png_file=arguments.has_png_file,
+                    force_has_no_png_file=arguments.has_no_png_file,
+                    selection_expr=arguments.selection_expr):
+            yield image_path
+        
 def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
-                               volume=None, 
+                               vol_start_num=2001, vol_end_num=2999,
+                               volumes=None, 
                                camera='NW', restrict_list=None,
                                force_has_offset_file=False,
                                force_has_no_offset_file=False,
@@ -239,12 +273,17 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
     if not os.path.isdir(search_root):
         return
     for search_dir in sorted(os.listdir(search_root)):
+        if not search_dir.startswith('COISS_') or len(search_dir) != 10:
+            continue
+        vol_num = int(search_dir[6:])
+        if not vol_start_num <= vol_num <= vol_end_num:
+            continue
         search_fulldir = file_clean_join(search_root, search_dir)
         coiss_fulldir = file_clean_join(image_root, search_dir)
-        if volume:
+        if volumes:
             found_vol_spec = False
             good_vol_spec = False
-            for vol in volume:
+            for vol in volumes:
                 if vol.find('/') != -1:
                     continue
                 found_vol_spec = True
@@ -262,10 +301,10 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
         for range_dir in sorted(os.listdir(search_fulldir)):
             if len(range_dir) != 21 or range_dir[10] != '_':
                 continue
-            if volume:
+            if volumes:
                 found_full_spec = False
                 good_full_spec = False
-                for vol in volume:
+                for vol in volumes:
                     if vol.find('/') == -1:
                         continue
                     found_full_spec = True
@@ -291,8 +330,7 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                 img_name = img_name.replace(search_suffix, suffix)
                 img_num = int(img_name[1:11])
                 if img_num > img_end_num:
-                    done = True
-                    break
+                    return
                 if img_num < img_start_num:
                     continue
                 if img_name[0] not in camera:
@@ -326,10 +364,91 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     if metadata is None or not eval(selection_expr):
                         continue
                 yield img_path
-            if done:
-                break
-        if done:
-            break
+
+def file_yield_image_filenames_index(img_start_num=0, img_end_num=9999999999,
+                                     vol_start_num=2001, vol_end_num=2999,
+                                     volumes=None, 
+                                     camera='NW', restrict_list=None,
+                                     force_has_offset_file=False,
+                                     force_has_no_offset_file=False,
+                                     force_has_png_file=False,
+                                     force_has_no_png_file=False,
+                                     selection_expr=None,
+                                     image_root='',
+                                     suffix='_CALIB.IMG'):
+    assert not force_has_offset_file
+    assert not force_has_no_offset_file
+    assert not force_has_png_file
+    assert not force_has_no_png_file
+    assert selection_expr is None
+    
+    search_root = COISS_2XXX_DERIVED_ROOT
+    search_suffix = '.IMG'
+    
+    done = False
+    if not os.path.isdir(search_root):
+        return
+
+    for vol_num in xrange(vol_start_num, vol_end_num+1):
+        vol_name = 'COISS_%04d' % vol_num
+        index_file = os.path.join(COISS_2XXX_DERIVED_ROOT, 
+                                  vol_name+'-index.tab')
+        if not os.path.exists(index_file):
+            return
+        coiss_fulldir = file_clean_join(image_root, vol_name)
+        if volumes:
+            found_vol_spec = False
+            good_vol_spec = False
+            for vol in volumes:
+                if vol.find('/') != -1:
+                    continue
+                found_vol_spec = True
+                if vol_name == vol:
+                    good_vol_spec = True
+                    break
+            if found_vol_spec and not good_vol_spec:
+                continue
+        coiss_fulldir = file_clean_join(coiss_fulldir, 'data')
+        with open(index_file, 'r') as index_fp:
+            csvreader = csv.reader(index_fp)
+            for row in csvreader:
+                img_name = row[0].strip('" ')
+                range_dir = row[1].strip('" ')
+                range_dir, index_name = os.path.split(range_dir)
+                data, range_dir = os.path.split(range_dir)
+                assert data == 'data'
+                assert img_name == index_name
+                index_volume = row[2].strip('" ')
+                assert index_volume == vol_name
+                if len(range_dir) != 21 or range_dir[10] != '_':
+                    continue
+                if volumes:
+                    found_full_spec = False
+                    good_full_spec = False
+                    for vol in volumes:
+                        if vol.find('/') == -1:
+                            continue
+                        found_full_spec = True
+                        if vol_name+'/'+range_dir == vol:
+                            good_full_spec = True
+                            break
+                    if found_full_spec and not good_full_spec:
+                        continue
+                if not img_name.endswith(search_suffix):
+                    continue
+                img_name = img_name.replace(search_suffix, suffix)
+                img_num = int(img_name[1:11])
+                if img_num > img_end_num:
+                    return
+                if img_num < img_start_num:
+                    continue
+                if img_name[0] not in camera:
+                    continue
+                if restrict_list and img_name[:13] not in restrict_list:
+                    continue
+                img_path = file_clean_join(image_root, vol_name, 'data',
+                                           range_dir, img_name)
+                yield img_path
 
 def file_clean_name(path, keep_bootstrap=False):
     _, filename = os.path.split(path)
@@ -339,10 +458,12 @@ def file_clean_name(path, keep_bootstrap=False):
         filename = filename.replace('-BOOTSTRAP', '')
     return filename
 
-def file_read_iss_file(path):
+def file_read_iss_file(path, orig_path=None):
     obs = iss.from_file(path, fast_distortion=True)
-    obs.full_path = path
-    _, obs.filename = os.path.split(path) 
+    if orig_path is None:
+        orig_path = path
+    obs.full_path = orig_path
+    _, obs.filename = os.path.split(orig_path) 
     return obs
 
 
@@ -355,6 +476,18 @@ def file_read_iss_file(path):
 ###############################################################################
 
 
+# IMAGE FILES
+
+def file_img_to_short_img_path(img_path):
+    rdir, filename = os.path.split(img_path)
+    rdir, dir1 = os.path.split(rdir)
+    rdir, dir2 = os.path.split(rdir)
+    assert dir2 == 'data'
+    rdir, dir3 = os.path.split(rdir)
+    return dir3+'/'+dir2+'/'+dir1+'/'+filename
+
+# RESULTS FILES
+    
 def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
                   include_image_filename=True):
     """Results path is of the form:
@@ -370,7 +503,12 @@ def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
     filename = filename.replace('.IMG', '')
     filename = filename.replace('_CALIB', '')
 
-    assert os.path.exists(root)
+    if make_dirs and not os.path.exists(root):
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
+        
     root = file_clean_join(root, file_type)
     if make_dirs and not os.path.exists(root):
         try: # Necessary for multi-process race conditions
@@ -398,8 +536,9 @@ def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
 
 ### LOG FILES
 
-def file_img_to_log_path(img_path, log_type, bootstrap=False, make_dirs=True):
-    fn = _results_path(img_path, 'logs', make_dirs=make_dirs)
+def file_img_to_log_path(img_path, log_type, root=CB_RESULTS_ROOT, 
+                         bootstrap=False, make_dirs=True):
+    fn = _results_path(img_path, 'logs', root=root, make_dirs=make_dirs)
     fn += '-'+log_type
     if bootstrap:
         fn += '-BOOTSTRAP'
@@ -411,8 +550,9 @@ def file_img_to_log_path(img_path, log_type, bootstrap=False, make_dirs=True):
 
 ### OFFSETS AND OVERLAYS
 
-def file_img_to_offset_path(img_path, bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'offsets', make_dirs=make_dirs)
+def file_img_to_offset_path(img_path, root=CB_RESULTS_ROOT, 
+                            bootstrap=False, make_dirs=False):
+    fn = _results_path(img_path, 'offsets', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OFFSET.dat'
@@ -432,8 +572,9 @@ def file_offset_to_img_path(offset_path):
         
     return img_path
 
-def _file_img_to_overlay_path(img_path, bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'overlays', make_dirs=make_dirs)
+def file_img_to_overlay_path(img_path, root=CB_RESULTS_ROOT, 
+                             bootstrap=False, make_dirs=False):
+    fn = _results_path(img_path, 'overlays', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OVERLAY.dat'
@@ -510,7 +651,7 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
 
     if overlay:
         bootstrap = offset_path.find('-BOOTSTRAP') != -1
-        overlay_path = _file_img_to_overlay_path(
+        overlay_path = file_img_to_overlay_path(
                                  file_offset_to_img_path(offset_path),
                                  make_dirs=False, bootstrap=bootstrap)
         overlay_fp = open(overlay_path, 'rb')
@@ -527,14 +668,28 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
 
     return metadata
 
-def file_write_offset_metadata(img_path, metadata, overlay=True):
+def file_write_offset_metadata(img_path, metadata, root=CB_RESULTS_ROOT,
+                               overlay=True):
     """Write offset file for img_path."""
-    logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata')
 
     bootstrap = False
     if 'bootstrapped' in metadata:
         bootstrap = metadata['bootstrapped']
-    offset_path = file_img_to_offset_path(img_path, bootstrap=bootstrap, make_dirs=True)
+    offset_path = file_img_to_offset_path(img_path, root=root,
+                                          bootstrap=bootstrap, make_dirs=True)
+    overlay_path = None
+    if overlay:
+        overlay_path = file_img_to_overlay_path(img_path, root=root,
+                                                bootstrap=bootstrap,
+                                                make_dirs=True)
+    return file_write_offset_metadata_path(offset_path, metadata, 
+                                           overlay_path=overlay_path,
+                                           overlay=overlay)
+
+def file_write_offset_metadata_path(offset_path, metadata, overlay_path=None,
+                                    overlay=True):
+    """Write offset file to offset_path."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_offset_metadata_path')
     logger.debug('Writing offset file %s', offset_path)
     
     metadata = copy.deepcopy(metadata)
@@ -581,8 +736,6 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
     offset_fp.close()
 
     if overlay:
-        overlay_path = _file_img_to_overlay_path(img_path, bootstrap=bootstrap,
-                                                 make_dirs=True)
         overlay_fp = open(overlay_path, 'wb')
         overlay_fp.write(msgpack.packb(metadata_overlay, 
                                        default=msgpack_numpy.encode))    
@@ -593,18 +746,24 @@ def file_write_offset_metadata(img_path, metadata, overlay=True):
 
 ### PNG
 
-def file_img_to_png_path(img_path, bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'png', make_dirs=make_dirs)
+def file_img_to_png_path(img_path, root=CB_RESULTS_ROOT, 
+                         bootstrap=False, make_dirs=False):
+    fn = _results_path(img_path, 'png', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '.png'
     return fn
 
-def file_write_png_from_image(img_path, image, bootstrap=False):
-    fn = file_img_to_png_path(img_path, bootstrap=bootstrap,
-                              make_dirs=True)
+def file_write_png_from_image(img_path, image, root=CB_RESULTS_ROOT, 
+                              bootstrap=False):
+    png_path = file_img_to_png_path(img_path, root=root, 
+                                    bootstrap=bootstrap,
+                                    make_dirs=True)
+    file_write_png_path(png_path, image)
+
+def file_write_png_path(png_path, image):
     im = Image.fromarray(image)
-    im.save(fn)
+    im.save(png_path)
 
 
 ### PREDICTED KERNEL METADATA

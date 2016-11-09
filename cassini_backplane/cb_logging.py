@@ -134,6 +134,7 @@ def log_add_file_handler(filename, level=logging.DEBUG):
 def log_remove_file_handler(fh):
     root_logger = logging.getLogger('cb')
     if fh is not None:
+        fh.close()
         root_logger.removeHandler(fh)
 
 
@@ -165,18 +166,23 @@ def log_min_level(level1, level2):
     return LOGGING_SUPERCRITICAL
 
 
+_MAIN_LOGGER = None
+_MAIN_LOG_FILE_HANDLER = None
+
 def log_setup_main_logging(module_name, 
                            main_logfile_level, main_console_level, 
                            main_logfile,
                            image_logfile_level, 
                            image_console_level):
+    global _MAIN_LOGGER, _MAIN_LOG_FILE_HANDLER
+    
     # Set up main loop logging
     main_logfile_level = log_decode_level(main_logfile_level)
     main_console_level = log_decode_level(main_console_level)
     
     # Note the main loop logger is not part of the cb.* name hierarchy.
-    main_logger = logging.getLogger(module_name)
-    main_logger.setLevel(log_min_level(main_logfile_level,
+    _MAIN_LOGGER = logging.getLogger(module_name)
+    _MAIN_LOGGER.setLevel(log_min_level(main_logfile_level,
                                        main_console_level))
     
     main_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '+
@@ -205,16 +211,16 @@ def log_setup_main_logging(module_name,
             main_log_path = os.path.join(main_log_path, 
                                          main_log_datetime+'.log')
         
-        main_log_file_handler = logging.FileHandler(main_log_path)
-        main_log_file_handler.setLevel(main_logfile_level)
-        main_log_file_handler.setFormatter(main_formatter)
-        main_logger.addHandler(main_log_file_handler)
+        _MAIN_LOG_FILE_HANDLER = logging.FileHandler(main_log_path)
+        _MAIN_LOG_FILE_HANDLER.setLevel(main_logfile_level)
+        _MAIN_LOG_FILE_HANDLER.setFormatter(main_formatter)
+        _MAIN_LOGGER.addHandler(_MAIN_LOG_FILE_HANDLER)
     
     # Always create a console logger so we don't get a 'no handler' error
     main_log_console_handler = logging.StreamHandler()
     main_log_console_handler.setLevel(main_console_level)
     main_log_console_handler.setFormatter(main_formatter)
-    main_logger.addHandler(main_log_console_handler)
+    _MAIN_LOGGER.addHandler(main_log_console_handler)
 
     image_logger = None
     if (image_logfile_level is not None and
@@ -233,4 +239,10 @@ def log_setup_main_logging(module_name,
         log_remove_console_handler()
         log_add_console_handler(image_console_level)
 
-    return main_logger, image_logger
+    return _MAIN_LOGGER, image_logger
+
+def log_close_main_logging(module_name):
+    main_logger = logging.getLogger(module_name)
+    if _MAIN_LOG_FILE_HANDLER is not None:
+        _MAIN_LOG_FILE_HANDLER.close()
+        _MAIN_LOGGER.removeHandler(_MAIN_LOG_FILE_HANDLER)

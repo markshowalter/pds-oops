@@ -9,11 +9,20 @@ import logging
 
 import argparse
 import cProfile, pstats, StringIO
+import datetime
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
+import urllib2
+
+_BOTO3_AVAILABLE = True
+try:
+    import boto3
+except ImportError:
+    _BOTO3_AVAILABLE = False
 
 _TKINTER_AVAILABLE = True
 try:
@@ -165,11 +174,12 @@ if len(command_list) == 0:
 #    command_line_str = 'W1511726740_1 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727641_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 #    command_line_str = 'N1511727503_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
-    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
+#    command_line_str = 'N1511727079_2 --image-console-level debug --force-offset --no-allow-stars --display-offset-results'
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
-#    command_line_str = 'N1669812089_1 --image-console-level debug --force-offset'
-#    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --redo-non-spice-error --no-allow-stars'
+#    command_line_str = 'N1669812089_1 --max-subprocesses 1 --retrieve-from-pds --results-in-s3 --main-console-level debug --image-console-level debug --force-offset'
+#    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --force-offset --no-allow-stars --retrieve-from-pds'
+    command_line_str = '--volume COISS_2098 --last-image-num 1814435582 --main-console-level info --image-console-level none --aws --max-subprocesses 2'
     
     command_list = command_line_str.split()
 
@@ -180,6 +190,32 @@ parser = argparse.ArgumentParser(
 
 ###XXXX####
 # --image-logfile is incompatible with --max-subprocesses > 0
+
+
+###########################
+### Arguments about AWS ###
+###########################
+parser.add_argument(
+    '--retrieve-from-pds', action='store_true',
+    help='''Retrieve the image file from pds-rings.seti.org instead of 
+            from the local disk''')
+parser.add_argument(
+    '--saturn-kernels-only', action='store_true',
+    help='''Only load Saturn CSPICE kernels''')
+parser.add_argument(
+    '--results-in-s3', action='store_true',
+    help='''Store all results in the Amazon S3 cloud''')
+parser.add_argument(
+    '--no-update-indexes', action='store_true',
+    help='''Don\'t update the index files from the PDS''')
+parser.add_argument(
+    '--aws', action='store_true',
+    help='''Set for running on AWS EC2; implies --retrieve-from-pds 
+            --results-in-s3 --saturn-kernels-only --no-overlay-file
+            --no-update-indexes''')
+parser.add_argument(
+    '--aws-results-bucket', default='seti-cb-results',
+    help='The Amazon S3 bucket to store results files in')
 
 ###############################
 ### Arguments about logging ###
@@ -295,6 +331,9 @@ parser.add_argument(
     '--overlay-show-star-streaks', action='store_true', default=False,
     help='Show star streaks in the overlay and PNG files')
 parser.add_argument(
+    '--no-overlay-file', action='store_true', default=False,
+    help='Don\'t generate an overlay file')
+parser.add_argument(
     '--png-blackpoint', type=float, default=None,
     help='Set the blackpoint for the PNG file')
 parser.add_argument(
@@ -320,6 +359,16 @@ file_add_selection_arguments(parser)
 
 arguments = parser.parse_args(command_list)
 
+RESULTS_DIR = CB_RESULTS_ROOT
+if arguments.aws:
+    arguments.retrieve_from_pds = True
+    arguments.results_in_s3 = True
+    arguments.saturn_kernels_only = True
+    arguments.no_overlay_file = True
+    arguments.no_update_indexes = True
+if arguments.results_in_s3:
+    RESULTS_DIR = ''
+
 
 ###############################################################################
 #
@@ -335,6 +384,15 @@ def collect_cmd_line(image_path):
     ret += ['--image-logfile-level', arguments.image_logfile_level]
     ret += ['--image-console-level', arguments.image_console_level]
     ret += ['--force-offset']
+    ret += ['--no-update-indexes']
+    if arguments.retrieve_from_pds:
+        ret += ['--retrieve-from-pds']
+    if arguments.saturn_kernels_only:
+        ret += ['--saturn-kernels-only']
+    if arguments.results_in_s3:
+        ret += ['--results-in-s3', '--aws-results-bucket', arguments.aws_results_bucket]
+    if arguments.no_overlay_file:
+        ret += ['--no-overlay-file']
     if arguments.profile:
         ret += ['--profile']
     if not arguments.allow_stars:
@@ -349,6 +407,20 @@ def collect_cmd_line(image_path):
         ret += ['--use-predicted-kernels']
     if arguments.overlay_show_star_streaks:
         ret += ['--overlay-show-star-streaks']
+    if arguments.png_blackpoint:
+        ret += ['--png-blackpoint', str(arguments.png_blackpoint)]
+    if arguments.png_whitepoint:
+        ret += ['--png-whitepoint', str(arguments.png_whitepoint)]
+    if arguments.png_gamma:
+        ret += ['--png-gamma', str(arguments.png_gamma)]
+    if arguments.png_label_font:
+        ret += ['--png-label-font', arguments.png_label_font]
+    if arguments.stars_label_font:
+        ret += ['--stars-label-font', arguments.stars_label_font]
+    if arguments.rings_label_font:
+        ret += ['--rings-label-font', arguments.rings_label_font]
+    if arguments.bodies_label_font:
+        ret += ['--bodies-label-font', arguments.bodies_label_font]
     ret += ['--image-full-path', image_path]
     
     return ret
@@ -365,15 +437,18 @@ def run_and_maybe_wait(args, image_path, bootstrapped):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 bootstrapped = SUBPROCESS_LIST[i][2]
-                if bootstrapped:
-                    bootstrap_pref = 'force'
-                else:
-                    bootstrap_pref = 'no'
-                metadata = file_read_offset_metadata(
-                                             old_image_path,
-                                             bootstrap_pref=bootstrap_pref)
                 filename = file_clean_name(old_image_path)
-                results = filename + ' - ' + offset_result_str(metadata)
+                if arguments.results_in_s3:
+                    results = filename + ' - Job completed'
+                else:
+                    if bootstrapped:
+                        bootstrap_pref = 'force'
+                    else:
+                        bootstrap_pref = 'no'
+                    metadata = file_read_offset_metadata(
+                                                 old_image_path,
+                                                 bootstrap_pref=bootstrap_pref)
+                    results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 break
@@ -411,6 +486,12 @@ def wait_for_all():
 #
 ###############################################################################
 
+def copy_file_to_s3(src, dest):
+    main_logger.debug('Copying S3 %s to %s:%s', src, 
+                      arguments.aws_results_bucket, dest)
+    s3 = boto3.client('s3')
+    s3.upload_file(src, arguments.aws_results_bucket, dest)
+    
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
                              botsim_offset=None, cartographic_data=None,
@@ -419,41 +500,45 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         bootstrap_pref = 'force'
     else:
         bootstrap_pref = 'no'
-    file_exists = os.path.exists(file_img_to_offset_path(image_path))
-    if file_exists:
-        if not force_offset:
-            if redo_offset_error or redo_offset_nonspice_error:
-                offset_metadata = file_read_offset_metadata(
-                                            image_path, overlay=False,
-                                            bootstrap_pref=bootstrap_pref)
-                if 'error' not in offset_metadata:
-                    main_logger.debug(
-                        'Skipping %s - offset file exists and metadata OK', 
-                        image_path)
-                    return False
-                if redo_offset_error: 
-                    main_logger.debug(
-                        'Processing %s - offset file indicates error', image_path)
-                else:
-                    assert redo_offset_nonspice_error
-                    error = offset_metadata['error']
-                    if error == '':
-                        error = offset_metadata['error_traceback'].split('\n')[-2]
-                    if error.startswith('SPICE(NOFRAMECONNECT)'):
+        
+    if not arguments.results_in_s3:
+        file_exists = os.path.exists(file_img_to_offset_path(image_path))
+        if file_exists:
+            if not force_offset:
+                if redo_offset_error or redo_offset_nonspice_error:
+                    offset_metadata = file_read_offset_metadata(
+                                                image_path, overlay=False,
+                                                bootstrap_pref=bootstrap_pref)
+                    if 'error' not in offset_metadata:
                         main_logger.debug(
-                            'Skipping %s - offset file indicates SPICE error', image_path)
+                            'Skipping %s - offset file exists and metadata OK', 
+                            image_path)
                         return False
-                    main_logger.debug(
-                        'Processing %s - offset file indicates non-SPICE error', image_path)
+                    if redo_offset_error: 
+                        main_logger.debug(
+                            'Processing %s - offset file indicates error', image_path)
+                    else:
+                        assert redo_offset_nonspice_error
+                        error = offset_metadata['error']
+                        if error == '':
+                            error = offset_metadata['error_traceback'].split('\n')[-2]
+                        if error.startswith('SPICE(NOFRAMECONNECT)'):
+                            main_logger.debug(
+                                'Skipping %s - offset file indicates SPICE error', image_path)
+                            return False
+                        main_logger.debug(
+                            'Processing %s - offset file indicates non-SPICE error', image_path)
+                else:
+                    main_logger.debug('Skipping %s - offset file exists', 
+                                      image_path)
+                    return False
             else:
-                main_logger.debug('Skipping %s - offset file exists', 
-                                  image_path)
-                return False
+                main_logger.debug(
+                  'Processing %s - offset file exists but redoing offsets', image_path)
         else:
-            main_logger.debug(
-              'Processing %s - offset file exists but redoing offsets', image_path)
+            main_logger.debug('Processing %s - no previous offset file', image_path)
     else:
-        main_logger.debug('Processing %s - no previous offset file', image_path)
+        main_logger.debug('Processing %s - Using S3 storage', image_path)
 
     if arguments.max_subprocesses:
         run_and_maybe_wait([PYTHON_EXE, CBMAIN_OFFSET_PY] + 
@@ -461,27 +546,64 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                            bootstrapped) 
         return True
 
+    image_path_local = image_path
+    
+    if arguments.retrieve_from_pds:
+        short_path = file_img_to_short_img_path(image_path)
+        if short_path.index('_CALIB') == -1:
+            short_path = short_path.replace('.IMG', '_CALIB.IMG')
+        url = PDS_RINGS_CALIB_ROOT + short_path
+        try:
+            local_fd, image_path_local = tempfile.mkstemp(suffix='.IMG', prefix='ISS_')
+            main_logger.debug('Retrieving %s to %s', url, image_path_local)
+            url_fp = urllib2.urlopen(url)
+            os.write(local_fd, url_fp.read())
+            url_fp.close()
+            os.close(local_fd)
+        except urllib2.HTTPError, e:
+            main_logger.error('Failed to retrieve %s: %s', url, e)
+            try:
+                os.remove(image_path_local)
+            except:
+                pass
+            return False
+        except urllib2.URLError, e:
+            main_logger.error('Failed to retrieve %s: %s', url, e)
+            try:
+                os.remove(image_path_local)
+            except:
+                pass
+            return False
+        
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
         else:
-            image_log_path = file_img_to_log_path(image_path, 'OFFSET', 
-                                                  bootstrap=bootstrapped)
-        
-        if os.path.exists(image_log_path):
-            os.remove(image_log_path) # XXX Need option to not do this
-            
+            image_log_path = file_img_to_log_path(
+                                      image_path, 'OFFSET', 
+                                      bootstrap=bootstrapped,
+                                      root=RESULTS_DIR,
+                                      make_dirs=not arguments.results_in_s3)
+        image_log_path_local = image_log_path
+        if arguments.results_in_s3:
+            local_fd, image_log_path_local = tempfile.mkstemp(
+                                                  suffix='_imglog.txt', prefix='CB_')
+            os.close(local_fd)
+        else:
+            if os.path.exists(image_log_path_local):
+                os.remove(image_log_path_local) # XXX Need option to not do this
+
         image_log_filehandler = cb_logging.log_add_file_handler(
-                                        image_log_path, image_logfile_level)
+                                        image_log_path_local, image_logfile_level)
     else:
         image_log_filehandler = None
 
     image_logger = logging.getLogger('cb')
     
     image_logger.info('Command line: %s', ' '.join(command_list))
-    
-    try:   
-        obs = file_read_iss_file(image_path)
+
+    try:
+        obs = file_read_iss_file(image_path_local, orig_path=image_path)
     except:
         main_logger.exception('File reading failed - %s', image_path)
         image_logger.exception('File reading failed - %s', image_path)
@@ -491,7 +613,29 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.retrieve_from_pds:
+            try:
+                os.remove(image_path_local)
+            except:
+                pass
+        if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            copy_file_to_s3(image_log_path_local, image_log_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
+            try:
+                os.remove(image_log_path_local)
+            except:
+                pass
         return True
+    
+    if arguments.retrieve_from_pds:
+        try:
+            os.remove(image_path_local)
+        except:
+            pass
 
     if arguments.profile and arguments.is_subprocess:
         # Per-image profiling
@@ -522,7 +666,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['error'] = str(sys.exc_value)
         metadata['error_traceback'] = err
         file_write_offset_metadata(image_path, metadata)
-        cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
@@ -532,24 +675,60 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             ps.print_callers()
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            copy_file_to_s3(image_log_path_local, image_log_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
+            try:
+                os.remove(image_log_path_local)
+            except:
+                pass
         return True
+
+    offset_path = file_img_to_offset_path(
+                              image_path, 
+                              bootstrap=bootstrapped,
+                              root=RESULTS_DIR,
+                              make_dirs=not arguments.results_in_s3)
+    offset_path_local = offset_path
+    if arguments.results_in_s3:
+        local_fd, offset_path_local = tempfile.mkstemp(suffix='.OFF', 
+                                                       prefix='CB_')
+        os.close(local_fd)
+    overlay_path_local = None
+    if not arguments.no_overlay_file:
+        overlay_path = file_img_to_overlay_path(
+                                    image_path, 
+                                    bootstrap=bootstrapped,
+                                    root=RESULTS_DIR,
+                                    make_dirs=not arguments.results_in_s3)
+        overlay_path_local = overlay_path
+        if arguments.results_in_s3:
+            local_fd, overlay_path_local = tempfile.mkstemp(suffix='.OVR', prefix='CB_')
+            os.close(local_fd)
     
     try:
-        file_write_offset_metadata(image_path, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata,
+                                        overlay=not arguments.no_overlay_file,
+                                        overlay_path=overlay_path_local)
     except:
         main_logger.exception('Offset file writing failed - %s', image_path)
         image_logger.exception('Offset file writing failed - %s', image_path)
         metadata = {}
         err = 'Offset file writing failed:\n' + traceback.format_exc() 
-        metadata['bootstrapped'] = bootstrapped 
+        metadata['bootstrapped'] = bootstrapped
         metadata['error'] = str(sys.exc_value)
         metadata['error_traceback'] = err
         try:
-            file_write_offset_metadata(image_path, metadata)
+            # It seems weird to try again, but it might work with less metadata
+            file_write_offset_metadata_path(offset_path_local, metadata,
+                                            overlay=False)
         except:
             main_logger.exception(
                   'Error offset file writing failed - %s', image_path)
-        cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
@@ -559,7 +738,33 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             ps.print_callers()
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            copy_file_to_s3(image_log_path_local, image_log_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
+            if not arguments.no_overlay_file:
+                try:
+                    os.remove(overlay_path_local)
+                except:
+                    pass
+            try:
+                os.remove(image_log_path_local)
+            except:
+                pass
         return True
+
+    png_path = file_img_to_png_path(
+                            image_path, 
+                            bootstrap=bootstrapped,
+                            root=RESULTS_DIR,
+                            make_dirs=not arguments.results_in_s3)
+    png_path_local = png_path
+    if arguments.results_in_s3:
+        local_fd, png_path_local = tempfile.mkstemp(suffix='.PNG', prefix='CB_')
+        os.close(local_fd)
 
     png_image = offset_create_overlay_image(
                         obs, metadata,
@@ -567,18 +772,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         whitepoint=arguments.png_whitepoint,
                         gamma=arguments.png_gamma,
                         font=png_label_font)
-    file_write_png_from_image(image_path, png_image,
-                              bootstrap=metadata['bootstrapped'])
+    file_write_png_path(png_path_local, png_image)
     
     if arguments.display_offset_results:
         display_offset_data(obs, metadata, canvas_size=None)
 
-    if bootstrapped:
-        bootstrap_pref = 'force'
-    else:
-        bootstrap_pref = 'no'
-    metadata = file_read_offset_metadata(image_path, 
-                                         bootstrap_pref=bootstrap_pref)
     filename = file_clean_name(image_path)
     results = filename + ' - ' + offset_result_str(metadata)
     main_logger.info(results)
@@ -593,6 +791,28 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_logger.info('Profile results:\n%s', s.getvalue())
 
     cb_logging.log_remove_file_handler(image_log_filehandler)
+
+    if arguments.results_in_s3:
+        copy_file_to_s3(offset_path_local, offset_path)
+        copy_file_to_s3(image_log_path_local, image_log_path)
+        copy_file_to_s3(png_path_local, png_path)
+        try:
+            os.remove(offset_path_local)
+        except:
+            pass
+        if not arguments.no_overlay_file:
+            try:
+                os.remove(overlay_path_local)
+            except:
+                pass
+        try:
+            os.remove(image_log_path_local)
+        except:
+            pass
+        try:
+            os.remove(png_path_local)
+        except:
+            pass
 
     return True
 
@@ -611,12 +831,28 @@ if arguments.display_offset_results:
     root = tk.Tk()
     root.withdraw()
 
+if arguments.results_in_s3:
+    assert _BOTO3_AVAILABLE
+    
 if arguments.use_predicted_kernels:
-    iss.initialize(ck='predicted')
+    iss.initialize(ck='predicted', saturn_only=True)
+else:
+    iss.initialize(ck='reconstructed', saturn_only=True)
+
+main_log_path = arguments.main_logfile
+main_log_path_local = main_log_path
+if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
+    local_fd, main_log_path_local = tempfile.mkstemp(suffix='_mainlog.txt', 
+                                                     prefix='CB_')
+    os.close(local_fd)
+    main_log_datetime = datetime.datetime.now().isoformat()[:-7]
+    main_log_datetime = main_log_datetime.replace(':','-')
+    main_log_path = 'logs/cb_main_offset/'+main_log_datetime
+    main_log_path += '-'+str(os.getpid())+'.log'
 
 main_logger, image_logger = log_setup_main_logging(
                'cb_main_offset', arguments.main_logfile_level, 
-               arguments.main_console_level, arguments.main_logfile,
+               arguments.main_console_level, main_log_path_local,
                arguments.image_logfile_level, arguments.image_console_level)
 
 image_logfile_level = log_decode_level(arguments.image_logfile_level)
@@ -708,12 +944,38 @@ if arguments.body_cartographic_data:
             main_logger.error('No mosaic file %s', mosaic_path)
             sys.exit(-1)
         cartographic_data[body_name] = mosaic_metadata
+
+if arguments.retrieve_from_pds and not arguments.no_update_indexes:
+    main_logger.info('Downloading PDS index files')
+    index_no = 2001
+    while True:
+        index_file = os.path.join(COISS_2XXX_DERIVED_ROOT,
+                                  'COISS_%04d-index.tab' % index_no)
+        if not os.path.exists(index_file):
+            url = PDS_RINGS_VOLUMES_ROOT + (
+                            'COISS_%04d/index/index.tab' % index_no)
+            main_logger.debug('Trying %s', url)
+            try:
+                url_fp = urllib2.urlopen(url)
+                index_fp = open(index_file, 'w')
+                index_fp.write(url_fp.read())
+                index_fp.close()
+                url_fp.close()
+            except urllib2.HTTPError, e:
+                main_logger.info('Failed to retrieve %s: %s', url, e)
+                break
+            except urllib2.URLError, e:
+                main_logger.info('Failed to retrieve %s: %s', url, e)
+                break
+        index_no += 1
         
 main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
-for image_path in file_yield_image_filenames_from_arguments(arguments):
+for image_path in file_yield_image_filenames_from_arguments(
+                                                arguments,
+                                                arguments.retrieve_from_pds):
     bootstrapped = len(cartographic_data) > 0
     if process_offset_one_image(
                     image_path,
@@ -744,3 +1006,8 @@ if arguments.profile and arguments.max_subprocesses == 0:
     ps.print_stats()
     ps.print_callers()
     main_logger.info('Profile results:\n%s', s.getvalue())
+
+log_close_main_logging('cb_main_offset')
+
+if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
+    copy_file_to_s3(main_log_path_local, main_log_path)
