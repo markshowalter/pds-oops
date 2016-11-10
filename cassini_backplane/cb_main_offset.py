@@ -178,8 +178,8 @@ if len(command_list) == 0:
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
 #    command_line_str = 'N1669812089_1 --max-subprocesses 1 --retrieve-from-pds --results-in-s3 --main-console-level debug --image-console-level debug --force-offset'
-#    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --force-offset --no-allow-stars --retrieve-from-pds'
-    command_line_str = '--volume COISS_2098 --last-image-num 1814435582 --main-console-level info --image-console-level none --aws --max-subprocesses 2'
+    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'
+#    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
     
     command_list = command_line_str.split()
 
@@ -466,15 +466,18 @@ def wait_for_all():
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 bootstrapped = SUBPROCESS_LIST[i][2]
-                if bootstrapped:
-                    bootstrap_pref = 'force'
-                else:
-                    bootstrap_pref = 'no'
-                metadata = file_read_offset_metadata(
-                                             old_image_path,
-                                             bootstrap_pref=bootstrap_pref)
                 filename = file_clean_name(old_image_path)
-                results = filename + ' - ' + offset_result_str(metadata)
+                if arguments.results_in_s3:
+                    results = filename + ' - Job completed'
+                else:
+                    if bootstrapped:
+                        bootstrap_pref = 'force'
+                    else:
+                        bootstrap_pref = 'no'
+                    metadata = file_read_offset_metadata(
+                                                 old_image_path,
+                                                 bootstrap_pref=bootstrap_pref)
+                    results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 break
@@ -575,6 +578,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                 pass
             return False
         
+    image_log_path_local = None
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
@@ -620,13 +624,14 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                 pass
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            copy_file_to_s3(image_log_path_local, image_log_path)
+            if image_log_path_local is not None:
+                copy_file_to_s3(image_log_path_local, image_log_path)
+                try:
+                    os.remove(image_log_path_local)
+                except:
+                    pass
             try:
                 os.remove(offset_path_local)
-            except:
-                pass
-            try:
-                os.remove(image_log_path_local)
             except:
                 pass
         return True
@@ -677,13 +682,14 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            copy_file_to_s3(image_log_path_local, image_log_path)
+            if image_log_path_local is not None:
+                copy_file_to_s3(image_log_path_local, image_log_path)
+                try:
+                    os.remove(image_log_path_local)
+                except:
+                    pass
             try:
                 os.remove(offset_path_local)
-            except:
-                pass
-            try:
-                os.remove(image_log_path_local)
             except:
                 pass
         return True
@@ -740,7 +746,12 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            copy_file_to_s3(image_log_path_local, image_log_path)
+            if image_log_path_local is not None:
+                copy_file_to_s3(image_log_path_local, image_log_path)
+                try:
+                    os.remove(image_log_path_local)
+                except:
+                    pass
             try:
                 os.remove(offset_path_local)
             except:
@@ -750,10 +761,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     os.remove(overlay_path_local)
                 except:
                     pass
-            try:
-                os.remove(image_log_path_local)
-            except:
-                pass
         return True
 
     png_path = file_img_to_png_path(
@@ -794,7 +801,12 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
 
     if arguments.results_in_s3:
         copy_file_to_s3(offset_path_local, offset_path)
-        copy_file_to_s3(image_log_path_local, image_log_path)
+        if image_log_path_local is not None:
+            copy_file_to_s3(image_log_path_local, image_log_path)
+            try:
+                os.remove(image_log_path_local)
+            except:
+                pass
         copy_file_to_s3(png_path_local, png_path)
         try:
             os.remove(offset_path_local)
@@ -805,10 +817,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                 os.remove(overlay_path_local)
             except:
                 pass
-        try:
-            os.remove(image_log_path_local)
-        except:
-            pass
         try:
             os.remove(png_path_local)
         except:

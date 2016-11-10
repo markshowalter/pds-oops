@@ -96,6 +96,7 @@ def uncompress_saturated_overlay(overlay):
     ret *= 255
     return ret
 
+
 #==============================================================================
 # 
 # FILTERS
@@ -187,6 +188,221 @@ def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
         sub = filt.gaussian_filter(sub, gaussian_blur)
 
     return data - sub
+
+
+#==============================================================================
+# 
+# DRAWING ROUTINES
+#
+#==============================================================================
+
+def draw_line(img, x0, y0, x1, y1, color, thickness=1):
+    """Draw a line using Bresenham's algorithm with the given thickness.
+    
+    The line is drawn by drawing each point as a line perpendicular to
+    the main line.
+    
+    Input:
+
+        img        The 2-D (or higher) image to draw on.
+        x0, y0     The starting point.
+        x1, y1     The ending point.
+        color      The scalar (or higher) color to draw.
+        thickness  The thickness (total width) of the line.
+    """
+    x0 = int(x0)
+    x1 = int(x1)
+    y0 = int(y0)
+    y1 = int(y1)
+
+    if thickness == 1:
+        # Do the simple version
+        dx = abs(x1-x0)
+        dy = abs(y1-y0) 
+        if x0 < x1:
+            sx = 1
+        else:
+            sx = -1
+        if y0 < y1:
+            sy = 1
+        else:
+            sy = -1
+        err = dx-dy
+     
+        while True:
+            img[y0, x0] = color
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2*err
+            if e2 > -dy: 
+                err = err - dy
+                x0 = x0 + sx
+            if e2 < dx: 
+                err = err + dx
+                y0 = y0 + sy 
+        return
+    
+    # Find the perpendicular angle
+    angle = np.arctan2(y1-y0, x1-x0)
+    x_offset = np.round(np.cos(angle))
+    y_offset = np.round(np.sin(angle))
+    perp_angle = angle + np.pi/2
+    perp_x1 = np.round(thickness/2.*np.cos(perp_angle))
+    perp_x0 = -perp_x1
+    perp_y1 = np.round(thickness/2.*np.sin(perp_angle))
+    perp_y0 = -perp_y1
+    if perp_x0 == perp_x1 and perp_y0 == perp_y1:
+        draw_line(img, color, x0, y0, x1, y1)
+        return
+
+    # Compute the perpendicular offsets using one pass of Bresenham's
+    perp_offsets_x = []
+    perp_offsets_y = []
+        
+    dx = abs(perp_x1-perp_x0)
+    dy = abs(perp_y1-perp_y0)
+    if perp_x0 < perp_x1:
+        sx = 1
+    else:
+        sx = -1
+    if perp_y0 < perp_y1:
+        sy = 1
+    else:
+        sy = -1
+    err = dx-dy
+ 
+    while True:
+        # There's a better way to do this, but it's patented by IBM!
+        # So just do something brute force instead
+        perp_offsets_x.append(perp_x0)
+        perp_offsets_y.append(perp_y0)
+        perp_offsets_x.append(perp_x0+x_offset)
+        perp_offsets_y.append(perp_y0)
+        perp_offsets_x.append(perp_x0)
+        perp_offsets_y.append(perp_y0+y_offset)
+        perp_offsets_x.append(perp_x0+x_offset)
+        perp_offsets_y.append(perp_y0+y_offset)
+        if perp_x0 == perp_x1 and perp_y0 == perp_y1:
+            break
+        e2 = 2*err
+        if e2 > -dy: 
+            err = err - dy
+            perp_x0 = perp_x0 + sx
+        if e2 < dx: 
+            err = err + dx
+            perp_y0 = perp_y0 + sy 
+
+    # Now draw the final line applying the offsets
+    dx = abs(x1-x0)
+    dy = abs(y1-y0) 
+    if x0 < x1:
+        sx = 1
+    else:
+        sx = -1
+    if y0 < y1:
+        sy = 1
+    else:
+        sy = -1
+    err = dx-dy
+ 
+    while True:
+        for i in xrange(len(perp_offsets_x)):
+            img[y0+perp_offsets_y[i], x0+perp_offsets_x[i]] = color
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2*err
+        if e2 > -dy: 
+            err = err - dy
+            x0 = x0 + sx
+        if e2 < dx: 
+            err = err + dx
+            y0 = y0 + sy 
+    
+def draw_rect(img, xctr, yctr, xhalfwidth, yhalfwidth, color, thickness=1):
+    """Draw a rectangle with the given line thickness.
+    
+    Input:
+    
+        img        The 2-D (or higher) image to draw on.
+        xctr, yctr The center of the rectangle.
+        xhalfwidth The width of the rectangle on each side of the center.
+        yhalfwidth This is the inner border of the rectangle.
+        color      The scalar (or higher) color to draw.
+        thickness  The thickness (total width) of the line.
+    """
+    
+    # Top
+    img[yctr-yhalfwidth-thickness+1:yctr-yhalfwidth+1,
+        xctr-xhalfwidth-thickness+1:xctr+xhalfwidth+thickness] = color
+    # Bottom
+    img[yctr+yhalfwidth:yctr+yhalfwidth+thickness,
+        xctr-xhalfwidth-thickness+1:xctr+xhalfwidth+thickness] = color
+    # Left
+    img[yctr-yhalfwidth-thickness+1:yctr+yhalfwidth+thickness,
+        xctr-xhalfwidth-thickness+1:xctr-xhalfwidth+1] = color
+    # Right
+    img[yctr-yhalfwidth-thickness+1:yctr+yhalfwidth+thickness,
+        xctr+xhalfwidth:xctr+xhalfwidth+thickness] = color
+
+def draw_circle(img, x0, y0, r, color, thickness=1):
+    """Draw a circle using Bresenham's algorithm with the given thickness.
+    
+    Input:
+
+        img        The 2-D (or higher) image to draw on.
+        x0, y0     The middle of the circle.
+        r          The radius of the circle.
+        color      The scalar (or higher) color to draw.
+        thickness  The thickness (total width) of the circle.
+    """
+
+    def _draw_circle(img, x0, y0, r, color, bigpixel):
+        x = -r
+        y = 0
+        err = 2-2*r
+        if bigpixel:
+            off_list = [-1, 0, 1]
+        else:
+            off_list = [0]
+            
+        while x < 0:
+            for xoff in off_list:
+                for yoff in off_list:
+                    if (0 <= y0+y+yoff < img.shape[0] and
+                        0 <= x0-x+xoff < img.shape[1]):
+                        img[y0+y+yoff,x0-x+xoff] = color
+                    if (0 <= y0-x+yoff < img.shape[0] and
+                        0 <= x0-y+xoff < img.shape[1]):
+                        img[y0-x+yoff,x0-y+xoff] = color
+                    if (0 <= y0-y+yoff < img.shape[0] and
+                        0 <= x0+x+xoff < img.shape[1]):
+                        img[y0-y+yoff,x0+x+xoff] = color
+                    if (0 <= y0+x+yoff < img.shape[0] and
+                        0 <= x0+y+xoff < img.shape[1]):
+                        img[y0+x+yoff,x0+y+xoff] = color
+            r = err
+            if r <= y:
+                y = y+1
+                err = err+y*2+1
+            if r > x or err > y:
+                x = x+1
+                err = err+x*2+1
+
+    x0 = int(x0)
+    y0 = int(y0)
+    r = int(r)
+    
+    if thickness == 1:
+        _draw_circle(img, x0, y0, r, color, False)
+        return
+    
+    if thickness <= 3:
+        _draw_circle(img, x0, y0, r, color, True)
+        return
+    
+    # This is not perfect, but it's simple
+    for r_offset in np.arange(-(thickness-2)/2., (thickness-2)/2.+0.5, 0.5):
+        _draw_circle(img, x0, y0, r+r_offset, color, True)
 
 #==============================================================================
 # 
