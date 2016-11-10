@@ -886,9 +886,10 @@ def _stars_mark_conflicts(obs, star, offset, rings_can_conflict, stars_config):
         ring_radius = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         ring_longitude = (obs.ext_bp.ring_longitude('saturn:ring').vals.
                           astype('float'))
-        rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
-        long = ring_longitude[star.v+obs.extend_fov[1], 
-                              star.u+obs.extend_fov[0]]
+        rad = ring_radius[int(star.v+obs.extend_fov[1]), 
+                          int(star.u+obs.extend_fov[0])]
+        long = ring_longitude[int(star.v+obs.extend_fov[1]), 
+                              int(star.u+obs.extend_fov[0])]
     
         # XXX We might want to improve this to support the known position of the
         # F ring core.
