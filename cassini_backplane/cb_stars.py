@@ -350,8 +350,8 @@ def stars_create_model(obs, star_list, offset=None, ignore_conflicts=False,
         u_frac = u_idx-u_int
         v_frac = v_idx-v_int
         
-        psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
-        psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+        psf_size_half_u = int(psf_size + np.round(abs(star.move_u))) // 2
+        psf_size_half_v = int(psf_size + np.round(abs(star.move_v))) // 2
 
         move_gran = max(abs(star.move_u)/max_move_steps,
                         abs(star.move_v)/max_move_steps)
@@ -445,8 +445,8 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             u_frac = u_idx-u_int
             v_frac = v_idx-v_int
                 
-            psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
-            psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+            psf_size_half_u = int(psf_size + np.round(abs(star.move_u))) // 2
+            psf_size_half_v = int(psf_size + np.round(abs(star.move_v))) // 2
     
             move_gran = max(abs(star.move_u)/max_move_steps,
                             abs(star.move_v)/max_move_steps)
@@ -491,7 +491,7 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             if star.integrated_dn == 0:
                 width = 3
             else:
-                width = star.photometry_box_size // 2 + 1
+                width = int(star.photometry_box_size // 2) + 1
             thickness = 1
             if star.photometry_confidence > stars_config['min_confidence']:
                 thickness = 3
@@ -690,8 +690,8 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
 
     star.photometry_box_size = boxsize
 
-    psf_size_half_u = (boxsize + np.round(abs(star.move_u))) // 2
-    psf_size_half_v = (boxsize + np.round(abs(star.move_v))) // 2
+    psf_size_half_u = int(boxsize + np.round(abs(star.move_u))) // 2
+    psf_size_half_v = int(boxsize + np.round(abs(star.move_v))) // 2
 
     # Don't process stars that are off the edge of the real (not extended)
     # data.
@@ -844,8 +844,8 @@ def _stars_mark_conflicts(obs, star, offset, rings_can_conflict, stars_config):
 
     # Check for off the edge
     psf_size = stars_config['min_psf_size']
-    psf_size_half_u = (psf_size + np.round(abs(star.move_u))) // 2
-    psf_size_half_v = (psf_size + np.round(abs(star.move_v))) // 2
+    psf_size_half_u = int(psf_size + np.round(abs(star.move_u))) // 2
+    psf_size_half_v = int(psf_size + np.round(abs(star.move_v))) // 2
     
     if (star.u+offset[0] < psf_size_half_u or 
         star.u+offset[0] >= obs.data.shape[1]-psf_size_half_u or
@@ -886,9 +886,10 @@ def _stars_mark_conflicts(obs, star, offset, rings_can_conflict, stars_config):
         ring_radius = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         ring_longitude = (obs.ext_bp.ring_longitude('saturn:ring').vals.
                           astype('float'))
-        rad = ring_radius[star.v+obs.extend_fov[1], star.u+obs.extend_fov[0]]
-        long = ring_longitude[star.v+obs.extend_fov[1], 
-                              star.u+obs.extend_fov[0]]
+        rad = ring_radius[int(star.v+obs.extend_fov[1]), 
+                          int(star.u+obs.extend_fov[0])]
+        long = ring_longitude[int(star.v+obs.extend_fov[1]), 
+                              int(star.u+obs.extend_fov[0])]
     
         # XXX We might want to improve this to support the known position of the
         # F ring core.
@@ -1212,9 +1213,9 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
             return (offset[0], offset[1])
         u = star.u + offset[0]
         v = star.v + offset[1]
-        psf_size_u = psf_size + np.round(abs(star.move_u))
+        psf_size_u = int(psf_size + np.round(abs(star.move_u)))
         psf_size_u = (psf_size_u // 2) * 2 + 1
-        psf_size_v = psf_size + np.round(abs(star.move_v))
+        psf_size_v = int(psf_size + np.round(abs(star.move_v)))
         psf_size_v = (psf_size_v // 2) * 2 + 1
         gausspsf = GaussianPSF(sigma=PSF_SIGMA[obs_detector(obs)],
                                movement=(star.move_v,star.move_u))

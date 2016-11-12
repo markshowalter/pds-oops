@@ -190,9 +190,9 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
     # Don't ever label bodies above or below their extent
     body_v_size_text = max(body_v_size, 5)
     if body_v > body_v_size_text:
-        dist_from_center[:body_v-body_v_size_text+1,:] = 1e38
+        dist_from_center[:int(body_v-body_v_size_text+1),:] = 1e38
     if body_v <= obs.ext_data.shape[0]-body_v_size_text:
-        dist_from_center[body_v+body_v_size_text:,:] = 1e38
+        dist_from_center[int(body_v+body_v_size_text):,:] = 1e38
 
     # Don't do anything too close to the edges (and text
     # has height)
@@ -280,7 +280,7 @@ def _bodies_make_label(obs, body_name, model, label_avoid_mask, extend_fov,
         # We never found anything good - go ahead and place it directly in the
         # center and ignore that it might overlap with other labels
         u = body_u+3
-        v = body_v-text_size[1]//2
+        v = body_v-int(text_size[1]//2)
         text = ' <-'+text_name
         
     if u is not None:
@@ -457,10 +457,10 @@ def bodies_create_model(obs, body_name, inventory,
             metadata['end_time'] = time.time()
             return None, metadata, None
         
-    u_min = inventory['u_min_unclipped']
-    u_max = inventory['u_max_unclipped']
-    v_min = inventory['v_min_unclipped']
-    v_max = inventory['v_max_unclipped']
+    u_min = int(inventory['u_min_unclipped'])
+    u_max = int(inventory['u_max_unclipped'])
+    v_min = int(inventory['v_min_unclipped'])
+    v_max = int(inventory['v_max_unclipped'])
 
     logger.debug('Original bounding box U %d to %d V %d to %d',
                  u_min, u_max, v_min, v_max)
@@ -487,8 +487,8 @@ def bodies_create_model(obs, body_name, inventory,
             metadata['too_bumpy'] = False
 
     # For curvature later
-    u_center = (u_min+u_max)/2
-    v_center = (v_min+v_max)/2
+    u_center = int((u_min+u_max)/2)
+    v_center = int((v_min+v_max)/2)
     width = u_max-u_min+1
     height = v_max-v_min+1
     curvature_threshold_frac = bodies_config['curvature_threshold_frac']
