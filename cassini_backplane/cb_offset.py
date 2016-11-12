@@ -180,6 +180,9 @@ def master_find_offset(obs,
 
           Data about the offset process:
           
+            'status'           'ok' if the process went to completion (whether
+                               or not an offset was found). Other values are
+                               set by external drivers.
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
             'confidence'       The confidence 0-1 of the final offset.
@@ -324,6 +327,7 @@ def master_find_offset(obs,
     
     # Initialize the metadata to at least have something for each key
     metadata = {}
+    metadata['status'] = 'ok'
     # Image
     metadata['full_path'] = obs.full_path
     metadata['camera'] = obs.detector
@@ -1610,14 +1614,30 @@ def offset_result_str(metadata):
         ret += 'No offset file written'
         return ret
 
+    # Fix up the metadata for old files - eventually this should
+    # be removed! XXX
     if 'error' in metadata:
+        metadata['status'] = 'error'
+        metadata['status_detail1'] = metadata['error']
+        metadata['status_detail2'] = metadata['error_traceback']
+    elif 'status' not in metadata:
+        metadata['status'] = 'ok'
+
+    status = metadata['status']
+    if status == 'error':
         ret += 'ERROR: '
-        error = metadata['error']
+        error = metadata['status_detail1']
         if error.startswith('SPICE(NOFRAMECONNECT)'):
             ret += 'SPICE KERNEL MISSING DATA AT ' + error[34:53]
         else:
             ret += error 
         return ret
+    
+    if status == 'skipped':
+        ret += 'SKIPPED: '+metadata['status_detail1']
+        return ret
+        
+    assert status == 'ok'
     
     offset = metadata['offset']
     if offset is None:

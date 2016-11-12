@@ -163,8 +163,11 @@ total_offset = 0
 total_has_offset_result = 0
 total_spice_error = 0
 total_other_error = 0
+total_skipped = 0
 other_error_db = {}
 other_error_file_db = {}
+skipped_db = {}
+skipped_file_db = {}
 total_bad_but_botsim_candidate = 0
 total_botsim_candidate = 0
 total_botsim_winner_excess_diff = 0
@@ -234,19 +237,39 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
     if metadata is not None:
         total_offset += 1
         
+        # Fix up the metadata for old files - eventually this should
+        # be removed! XXX
         if 'error' in metadata:
-            error = metadata['error']
+            metadata['status'] = 'error'
+            metadata['status_detail1'] = metadata['error']
+            metadata['status_detail2'] = metadata['error_traceback']
+        elif 'status' not in metadata:
+            metadata['status'] = 'ok'
+
+        status = metadata['status']
+        if status == 'error':            
+            error = metadata['status_detail1']
             if error == '':
-                error = metadata['error_traceback'].split('\n')[-2]
+                error = metadata['status_detail2'].split('\n')[-2]
             if error.startswith('SPICE(NOFRAMECONNECT)'):
                 total_spice_error += 1
             else:
                 total_other_error += 1
                 if error not in other_error_db:
                     other_error_db[error] = 0
+               1
                     other_error_file_db[error] = filename
                 other_error_db[error] += 1
+        elif status == 'skipped':
+            reason = metadata['status_detail1']
+            total_skipped += 1
+            if reason not in skipped_db:
+                skipped_db[reason] = 0
+                skipped_file_db[reason] = filename
+            skipped_db[reason] += 1
         else:
+            if status != 'ok':
+                print 'BAD STATUS', status, filename
             earliest_date = min(metadata['start_time'], earliest_date)
             latest_date = max(metadata['end_time'], latest_date)
             total_time = metadata['end_time']-metadata['start_time']
@@ -496,10 +519,22 @@ if total_offset:
         for error in sorted(other_error_db.keys()):
             print '  %6d (%6.2f%%): %s (%s)' % (
                 other_error_db[error],
-                float(total_other_error)/total_other_error*100,
+                float(other_error_db[error])/total_other_error*100,
                 error, 
                 other_error_file_db[error])
+    print 'Skipped:                            %6d (%6.2f%%)' % (
+                total_skipped, 
+                float(total_skipped)/total_offset*100)
+    if total_skipped:
+        for reason in sorted(skipped_db.keys()):
+            print '  %6d (%6.2f%%): %s (%s)' % (
+                skipped_db[reason],
+                float(skipped_db[reason])/total_skipped*100,
+                reason, 
+                skipped_file_db[reason])
+    print 'Total remaining:                    %6d' % total_has_offset_result
     print sep
+
 
     print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
                 total_good_offset, 

@@ -364,7 +364,9 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     if metadata is None or not eval(selection_expr):
                         continue
                 yield img_path
-
+        if done:
+            break
+        
 def file_yield_image_filenames_index(img_start_num=0, img_end_num=9999999999,
                                      vol_start_num=2001, vol_end_num=2999,
                                      volumes=None, 

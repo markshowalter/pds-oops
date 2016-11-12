@@ -608,9 +608,10 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         main_logger.exception('File reading failed - %s', image_path)
         image_logger.exception('File reading failed - %s', image_path)
         metadata = {}
-        err = 'File reading failed:\n' + traceback.format_exc() 
-        metadata['error'] = str(sys.exc_value)
-        metadata['error_traceback'] = err
+        err = 'File reading failed:\n' + traceback.format_exc()
+        metadata['status'] = 'error'
+        metadata['status_detail1'] = str(sys.exc_value)
+        metadata['status_detail2'] = err
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.retrieve_from_pds:
@@ -637,6 +638,29 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         except:
             pass
 
+    if obs.dict['SHUTTER_STATE_ID'] == 'DISABLED':
+        main_logger.info('Skipping because shutter disabled - %s', image_path)
+        image_logger.info('Skipping because shutter disabled - %s', 
+                          image_path)
+        metadata = {}
+        metadata['status'] = 'skipped'
+        metadata['status_detail1'] = 'Shutter disabled'
+        metadata['status_detail2'] = 'Shutter disabled'
+        file_write_offset_metadata(image_path, metadata)
+        cb_logging.log_remove_file_handler(image_log_filehandler)
+        if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            copy_file_to_s3(image_log_path_local, image_log_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
+            try:
+                os.remove(image_log_path_local)
+            except:
+                pass
+        return True
+
     if arguments.profile and arguments.is_subprocess:
         # Per-image profiling
         image_pr = cProfile.Profile()
@@ -662,9 +686,10 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_logger.exception('Offset finding failed - %s', image_path)
         metadata = {}
         err = 'Offset finding failed:\n' + traceback.format_exc()
-        metadata['bootstrapped'] = bootstrapped 
-        metadata['error'] = str(sys.exc_value)
-        metadata['error_traceback'] = err
+        metadata['bootstrapped'] = bootstrapped
+        metadata['status'] = 'error' 
+        metadata['status_detail1'] = str(sys.exc_value)
+        metadata['status_detail2'] = err
         file_write_offset_metadata(image_path, metadata)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
@@ -720,8 +745,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata = {}
         err = 'Offset file writing failed:\n' + traceback.format_exc() 
         metadata['bootstrapped'] = bootstrapped
-        metadata['error'] = str(sys.exc_value)
-        metadata['error_traceback'] = err
+        metadata['status'] = 'error'
+        metadata['status_detail1'] = str(sys.exc_value)
+        metadata['status_detail2'] = err
         try:
             # It seems weird to try again, but it might work with less metadata
             file_write_offset_metadata_path(offset_path_local, metadata,

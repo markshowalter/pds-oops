@@ -166,7 +166,7 @@ STARS_DEFAULT_CONFIG = {
     #      are wrong thanks to SPICE inaccuracies.
     # NEW: This is currently set high because we have access to the
     #      predicted kernels.
-    'max_smear': 10, # XXX
+    'max_smear': 500,
     
     # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',
