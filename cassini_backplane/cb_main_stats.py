@@ -175,7 +175,12 @@ total_botsim_potential_excess_diff = 0
 botsim_potential_excess_diff_x_list = []
 botsim_potential_excess_diff_y_list = []
 total_good_offset = 0
-total_good_offset_list = []
+total_good_offset_list = {('NAC',256): [],
+                          ('NAC',512): [],
+                          ('NAC',1024): [],
+                          ('WAC',256): [],
+                          ('WAC',512): [],
+                          ('WAC',1024): []}
 total_good_star_offset = 0
 total_good_model_nobs_offset = 0
 total_good_model_bs_offset = 0
@@ -257,7 +262,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 total_other_error += 1
                 if error not in other_error_db:
                     other_error_db[error] = 0
-               1
                     other_error_file_db[error] = filename
                 other_error_db[error] += 1
         elif status == 'skipped':
@@ -328,7 +332,9 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     
             if offset is not None:
                 total_good_offset += 1
-                total_good_offset_list.append(tuple(offset))
+                total_good_offset_list[metadata['camera'],
+                                       metadata['image_shape'][0]].append(
+                                                              tuple(offset))
                 max_offset = MAX_POINTING_ERROR[(tuple(metadata['image_shape']),
                                                  metadata['camera'])]
                 if (abs(offset[0]) > max_offset[0] or
@@ -539,14 +545,21 @@ if total_offset:
     print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
                 total_good_offset, 
                 float(total_good_offset)/total_has_offset_result*100)
-    off_list = [x[0] for x in total_good_offset_list]
-    print '  X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
-                        np.min(off_list), np.max(off_list), 
-                        np.mean(off_list), np.std(off_list))
-    off_list = [x[1] for x in total_good_offset_list]
-    print '  Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
-                        np.min(off_list), np.max(off_list), 
-                        np.mean(off_list), np.std(off_list))
+    for offset_list_camera, offset_list_size in sorted(total_good_offset_list):
+        offset_list = total_good_offset_list[(offset_list_camera,
+                                              offset_list_size)]
+        if len(offset_list) == 0:
+            continue
+        off_list = [x[0] for x in offset_list]
+        print '  %s %4d X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                            offset_list_camera, offset_list_size, 
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list))
+        off_list = [x[1] for x in offset_list]
+        print '  %s %4d Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                            offset_list_camera, offset_list_size,
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list))
     print '  Good star   offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_star_offset, 
                 float(total_good_star_offset)/total_good_offset*100,

@@ -218,7 +218,7 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                     first_image_number, 
                     last_image_number,
                     first_volume_number,
-                    last_image_number,
+                    last_volume_number,
                     volumes,
                     restrict_camera,
                     restrict_image_list,

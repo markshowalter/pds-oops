@@ -27,7 +27,7 @@ from cb_util_misc import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--has-offset-file --main-console-level debug'
+    command_line_str = '--has-offset-file'
 
     command_list = command_line_str.split()
 
@@ -104,7 +104,17 @@ def check_add_one_image(image_path):
         main_logger.debug('%s - No offset file', image_filename)
         return
 
+    # Fix up the metadata for old files - eventually this should
+    # be removed! XXX
     if 'error' in metadata:
+        metadata['status'] = 'error'
+        metadata['status_detail1'] = metadata['error']
+        metadata['status_detail2'] = metadata['error_traceback']
+    elif 'status' not in metadata:
+        metadata['status'] = 'ok'
+
+    status = metadata['status']
+    if status == 'error' or status == 'skipped':
         main_logger.debug('%s - Skipping due to offset file error', 
                           image_filename)
         return

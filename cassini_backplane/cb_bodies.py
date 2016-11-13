@@ -698,7 +698,8 @@ def bodies_create_model(obs, body_name, inventory,
         logger.debug('Making actual model')
     
         if bodies_config['use_lambert']:
-            restr_model = restr_bp.lambert_law(body_name).mvals.astype('float')
+            restr_model = restr_bp.lambert_law(body_name).mvals
+            restr_model = restr_model.filled(0.).astype('float')
             # Make a slight glow even past the terminator
             restr_model = restr_model+0.01
             restr_model[restr_body_mask_inv] = 0.

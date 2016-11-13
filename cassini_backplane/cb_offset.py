@@ -308,7 +308,6 @@ def master_find_offset(obs,
     bodies_model_list = []
     rings_model = None
     rings_overlay_text = None
-    titan_model = None
     titan_body_metadata = None
     final_model = None
     
@@ -1053,6 +1052,13 @@ def master_find_offset(obs,
                                         int(np.round(model_offset[1])))
                     peak = new_peak
                     metadata['secondary_corr_ok'] = True
+                    if (abs(model_offset[0]) > extend_fov[0] or 
+                        abs(model_offset[1]) > extend_fov[1]):
+                        logger.info('Resulting offset is beyond maximum '+
+                                    'allowable offset - aborting')
+                        model_offset = None
+                        model_offset_int = None
+                        metadata['secondary_corr_ok'] = False
                 
         if model_offset is None:
             logger.info('Resulting model offset N/A')
@@ -1075,6 +1081,9 @@ def master_find_offset(obs,
                 logger.info('Final shifted model has too little coverage '+
                             '- reducing confidence')
                 model_confidence *= float(model_count) / cov_threshold
+        if model_confidence < offset_config['lowest_confidence']:
+            logger.info('Resulting confidence is absurdly low - aborting')
+            model_offset = None
     
         if model_offset is not None:
             break

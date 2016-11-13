@@ -1242,12 +1242,21 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
     dv_mean = np.mean(delta_v_list)
     
     logger.info('Mean dU,dV %7.2f %7.2f', du_mean, dv_mean)
-    
+
+    max_error = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
+
     if stars_config['allow_fractional_offsets']:
-        return (offset[0]+du_mean, offset[1]+dv_mean)
+        ret = (offset[0]+du_mean, offset[1]+dv_mean)
+    else:
+        ret = (int(np.round(offset[0]+du_mean)),
+               int(np.round(offset[1]+dv_mean)))
+        
+    if abs(ret[0]) > max_error[0] or abs(ret[1]) > max_error[1]:
+        logger.info('Resulting star offset is beyond maximum allowable '+
+                    'offset - aborting')
+        ret = None
     
-    return (int(np.round(offset[0]+du_mean)),
-            int(np.round(offset[1]+dv_mean)))
+    return ret
 
 def stars_find_offset(obs, ra_dec_predicted,
                       extend_fov=(0,0), stars_config=None):
@@ -1271,6 +1280,7 @@ def stars_find_offset(obs, ra_dec_predicted,
             'full_star_list'    The list of Stars in the FOV.
             'num_stars',        The number of Stars in the FOV.
             'num_good_stars'    The number of Stars that photometrically match.
+            'smear'             The amount of star smear (in pixels).
             'rings_subtracted'  True if the rings were subtracted from the
                                 image.
             'start_time'        The time (s) when stars_find_offset was called.
@@ -1319,11 +1329,13 @@ def stars_find_offset(obs, ra_dec_predicted,
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
+    metadata['smear'] = 0.
     metadata['rings_subtracted'] = False
 
     if len(star_list) > 0:
         first_star = star_list[0]
         smear_amt = np.sqrt(first_star.move_u**2+first_star.move_v**2)
+        metadata['smear'] = smear_amt
         if smear_amt > stars_config['max_smear']:
             logger.debug(
              'FAILED to find a valid offset - star smear is too great')
