@@ -178,7 +178,7 @@ if len(command_list) == 0:
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
 #    command_line_str = 'N1669812089_1 --max-subprocesses 1 --retrieve-from-pds --results-in-s3 --main-console-level debug --image-console-level debug --force-offset'
-    command_line_str = 'N1488162882_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'
+    command_line_str = 'W1507076645_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'#--no-wac-offset'
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
     
     command_list = command_line_str.split()
@@ -323,6 +323,9 @@ parser.add_argument(
 parser.add_argument(
     '--use-predicted-kernels', action='store_true', default=False,
     help='Use predicted CK kernels')
+parser.add_argument(
+    '--no-wac-offset', action='store_true', default=False,
+    help='Don\'t use the computed offset between NAC and WAC frames')
 
 #######################################################
 ### Arguments about overlay and PNG file generation ###
@@ -868,10 +871,11 @@ if arguments.display_offset_results:
 if arguments.results_in_s3:
     assert _BOTO3_AVAILABLE
     
+kernel_type = 'reconstructed'
 if arguments.use_predicted_kernels:
-    iss.initialize(ck='predicted', saturn_only=True)
-else:
-    iss.initialize(ck='reconstructed', saturn_only=True)
+    kernel_type = 'predicted'
+iss.initialize(ck=kernel_type, planets=(6,),
+               offset_wac=not arguments.no_wac_offset)
 
 main_log_path = arguments.main_logfile
 main_log_path_local = main_log_path
