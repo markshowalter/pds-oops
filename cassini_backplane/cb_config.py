@@ -69,7 +69,7 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_SOURCE_ROOT, 'utilities',
 
 # The maximum pointing error we allow in the (V,U) directions.
 MAX_POINTING_ERROR_NAC =   (110,75)  # Pixels
-MAX_POINTING_ERROR_WAC =   (15,15)
+MAX_POINTING_ERROR_WAC =   (11,15)
 MAX_POINTING_ERROR_LORRI = (40,40)
 MAX_POINTING_ERROR = {((1024,1024), 'NAC'):   MAX_POINTING_ERROR_NAC,
                       ((1024,1024), 'WAC'):   MAX_POINTING_ERROR_WAC,
@@ -166,7 +166,7 @@ STARS_DEFAULT_CONFIG = {
     #      are wrong thanks to SPICE inaccuracies.
     # NEW: This is currently set high because we have access to the
     #      predicted kernels.
-    'max_smear': 500,
+    'max_smear': 100,
     
     # The default star class when none is available in the star catalog.
     'default_star_class': 'G0',
@@ -394,6 +394,9 @@ OFFSET_DEFAULT_CONFIG = {
     
     # The number of pixels to search in U,V during secondary correlation.
     'secondary_corr_search_size': (15,15),  
+    
+    # The lowest confidence to allow for models
+    'lowest_confidence': 0.05,
     
     # If the stars-based and bodies/rings-based correlations differ by at
     # least this number of pixels, then we need to choose between the stars
