@@ -19,6 +19,7 @@ import oops
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
+from cb_rings import *
 from cb_titan import *
 from cb_util_file import *
 
@@ -202,6 +203,7 @@ total_rings_only_no_offset_bad_curvature = 0
 total_rings_only_no_offset_bad_emission = 0
 total_rings_only_no_offset_bad_features = 0
 total_rings_only_no_offset_ok = 0
+total_rings_only_no_offset_dring = 0
 total_rings_only_no_offset_fring = 0
 total_bad_offset_no_rings_or_bodies = 0
 no_rings_single_body_db = {}
@@ -346,7 +348,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     rings_metadata is None or
                     (rings_metadata is not None and 
                      (('max_radius' in rings_metadata and
-                       (rings_metadata['max_radius'] < RINGS_MIN_RADIUS or
+                       (rings_metadata['max_radius'] < RINGS_MIN_RADIUS_D or
                         rings_metadata['min_radius'] > RINGS_MAX_RADIUS_F)) or
                       ('max_radius' not in rings_metadata and
                        not rings_metadata['curvature_ok'] and
@@ -390,9 +392,14 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                         rings_metadata['fiducial_features_ok']):
                         total_rings_only_no_offset_ok += 1
                     if ('max_radius' in rings_metadata and
-                        rings_metadata['max_radius'] >= RINGS_MAX_RADIUS and
-                        rings_metadata['min_radius'] <= RINGS_MAX_RADIUS_F):
+                        rings_metadata['max_radius'] > RINGS_F_RING_CORE and
+                        (RINGS_MAX_RADIUS < rings_metadata['min_radius'] < 
+                         RINGS_F_RING_CORE)):
                         total_rings_only_no_offset_fring += 1
+                    if ('max_radius' in rings_metadata and
+                        (RINGS_MIN_RADIUS_D < rings_metadata['max_radius'] < 
+                         RINGS_MIN_RADIUS)):
+                        total_rings_only_no_offset_dring += 1
                 elif has_rings and len(metadata['large_bodies']) == 1:
                     # HAS RINGS and HAS SINGLE BODY
                     body_db_to_update = with_rings_single_body_db
@@ -628,7 +635,7 @@ if total_offset:
     dump_body_info(no_rings_single_body_db)
     print '    Multiple bodies, closest:'
     dump_body_info(no_rings_multi_body_db)
-    print '  Has rings (main or F)'
+    print '  Has rings (D-F)'
     print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_rings_entirely_no_offset, 
                 float(total_rings_entirely_no_offset)/total_bad_offset*100,
@@ -675,6 +682,10 @@ if total_offset:
             print '      F ring only:           %6d (%6.2f%%)' % (
                         total_rings_only_no_offset_fring, 
                         float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
+        if total_rings_only_no_offset_dring:
+            print '      D ring only:           %6d (%6.2f%%)' % (
+                        total_rings_only_no_offset_dring, 
+                        float(total_rings_only_no_offset_dring)/total_rings_only_no_offset*100)
     print '    Single body only:'
     dump_body_info(with_rings_single_body_db)
     print '    Multiple bodies, closest:'

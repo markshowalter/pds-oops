@@ -164,6 +164,27 @@ class UCAC4Star(Star):
         
         return ret
 
+# For some bizarre reason Vega isn't in UCAC4 but we really need it for
+# Cassini! Thus we create a fake Vega and return it when the RA/DEC range
+# should include it.
+_FAKE_VEGA = UCAC4Star()
+_FAKE_VEGA.ra = (18./24+36./24/60+56.33635/24/60/60)*360 * RPD
+_FAKE_VEGA.ra_sigma = 0.
+_FAKE_VEGA.dec = (38./360+47./360/60+1.2802/360/60/60)*360 * RPD
+_FAKE_VEGA.dec_sigma = 0.
+_FAKE_VEGA.vmag = 0.03
+_FAKE_VEGA.vmag_sigma = 0.
+_FAKE_VEGA.pm_ra = 200.94*MAS_TO_RAD*YEAR_TO_SEC
+_FAKE_VEGA.pm_ra_sigma = 0.
+_FAKE_VEGA.pm_dec = 286.23*MAS_TO_RAD*YEAR_TO_SEC
+_FAKE_VEGA.pm_dec_sigma = 0.
+_FAKE_VEGA.unique_number = 999999999
+_FAKE_VEGA.johnson_mag_b = 0.03
+_FAKE_VEGA.johnson_mag_v = 0.03
+_FAKE_VEGA.spectral_class = 'A0'
+_FAKE_VEGA.temperature = StarCatalog.temperature_from_sclass(
+                                                _FAKE_VEGA.spectral_class)
+
 #        TODO
 #        self.cat_match = None
 #        self.num_img_total = None
@@ -252,7 +273,7 @@ class UCAC4StarCatalog(StarCatalog):
         else:
             self.dirname = dir
         self.debug_level = 0
-        
+    
     def _find_stars(self, ra_min, ra_max, dec_min, dec_max, **kwargs):
         """Yield the results for all zones in the DEC range.
         
@@ -288,7 +309,12 @@ class UCAC4StarCatalog(StarCatalog):
                                                       dec_min, dec_max,
                                                       **kwargs):
                     yield star
-    
+
+        # If we should've found Vega, return our fake version
+        if (ra_min <= _FAKE_VEGA.ra <= ra_max and
+            dec_min <= _FAKE_VEGA.dec <= dec_max):
+            yield _FAKE_VEGA
+            
     def _find_stars_one_file(self, znum, fp, ra_min, ra_max, dec_min, dec_max,
                              **kwargs):
         """Yield the results for a single zone."""

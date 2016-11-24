@@ -1259,6 +1259,7 @@ def _stars_refine_offset(obs, calib_data, star_list, offset,
     return ret
 
 def stars_find_offset(obs, ra_dec_predicted,
+                      stars_only=False,
                       extend_fov=(0,0), stars_config=None):
     """Find the image offset based on stars.
 
@@ -1268,6 +1269,9 @@ def stars_find_offset(obs, ra_dec_predicted,
                            navigation information from the more-precise
                            predicted kernels. This is used to make accurate
                            star streaks.
+        stars_only         True if there is nothing except stars in the FOV.
+                           In this case we will allow navigation with only
+                           a single star and no photometry, if necessary.
         extend_fov         The amount beyond the image in the (U,V) dimension
                            to model stars to find an offset.
         stars_config        Configuration parameters. None uses the default.
@@ -1295,7 +1299,11 @@ def stars_find_offset(obs, ra_dec_predicted,
     min_stars, min_stars_conf = stars_config['min_stars_low_confidence']
     min_stars_hc, min_stars_hc_conf = stars_config['min_stars_high_confidence']
     perform_photometry = stars_config['perform_photometry']
-
+    try_without_photometry = stars_config['try_without_photometry']
+    
+    if stars_only:
+        try_without_photometry = True
+        
     radec_movement = None
     
     if ra_dec_predicted is not None:
@@ -1314,7 +1322,6 @@ def stars_find_offset(obs, ra_dec_predicted,
         obs.calib_dn_ext_data = obs.ext_data
         filtered_data = obs.calib_dn_ext_data
             
-
     # Get the Star list and initialize our new fields
     star_list = stars_list_for_obs(obs, radec_movement,
                                    extend_fov=obs.extend_fov,
@@ -1340,6 +1347,62 @@ def stars_find_offset(obs, ra_dec_predicted,
             logger.debug(
              'FAILED to find a valid offset - star smear is too great')
             return metadata
+
+    if obs.calib_dn_ext_data is None:
+        # For star use only, need data in DN for photometry
+        obs.calib_dn_ext_data = calibrate_iof_image_as_dn(
+                                                  obs, data=obs.ext_data)
+        filtered_data = obs.calib_dn_ext_data
+        
+        if False:
+            calib_data = unpad_image(obs.calib_dn_ext_data, extend_fov)
+            rings_radial_model = rings_create_model_from_image(
+                                                   obs, data=calib_data,
+                                                   extend_fov=extend_fov)
+            if rings_radial_model is not None:
+                assert _TKINTER_AVAILABLE
+                imdisp = ImageDisp([calib_data, rings_radial_model, 
+                                    calib_data-rings_radial_model],
+                                   canvas_size=(512,512),
+                                   allow_enlarge=True, enlarge_limit=10,
+                                   auto_update=True)
+                tk.mainloop()
+    
+                filtered_data = pad_image(calib_data-rings_radial_model, 
+                                          extend_fov)
+                obs.data[:,:] = calib_data-rings_radial_model
+                obs.ext_data[:,:] = filtered_data
+                rings_can_conflict = False
+                
+        # Filter that calibrated data.
+        # 1) Subtract the local background (median)
+        # 2) Eliminate anything that is < 0
+        # 3) Eliminate any portions of the image that are near a pixel
+        #    that is brighter than the maximum star DN
+        #    Note that since a star's photons are spread out over the PSF,
+        #    you have to have a really bright single pixel to be brighter
+        #    than the entire integrated DN of the brightest star in the
+        #    FOV.
+        filtered_data = filter_sub_median(obs.calib_dn_ext_data, 
+                                          median_boxsize=11)
+    
+        filtered_data[filtered_data < 0.] = 0.
+    
+        # If we trust the DN values, then we can eliminate any pixels that
+        # are way too bright.            
+#         if _trust_star_dn(obs):
+#             max_dn = star_list[0].dn # Star list is sorted by DN            
+#             mask = filtered_data > max_dn*2
+#             mask = filt.maximum_filter(mask, 11)
+#             filtered_data[mask] = 0.
+    
+        if DEBUG_STARS_FILTER_IMGDISP:
+            assert _TKINTER_AVAILABLE
+            imdisp = ImageDisp([filtered_data],
+                               canvas_size=(512,512),
+                               allow_enlarge=True, enlarge_limit=10,
+                               auto_update=True)
+            tk.mainloop()
 
     # A list of offsets that we have already tried so we don't waste time
     # trying them a second time.
@@ -1370,7 +1433,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         if star_count < min_stars:
             # There's no point in continuing if there aren't enough stars
             logger.debug('FAILED to find a valid offset - too few total stars')
-            return metadata
+            break
     
         if first_good_star.dn < min_dn:
             # There's no point in continuing if the brightest star is below the
@@ -1378,66 +1441,6 @@ def stars_find_offset(obs, ra_dec_predicted,
             logger.debug(
                  'FAILED to find a valid offset - brightest star is too dim')
             return metadata
-    
-        if obs.calib_dn_ext_data is None:
-            # First pass - don't do these things earlier outside the loop
-            # because we'd just be wasting time if there were never enough
-            # stars.
-            
-            # For star use only, need data in DN for photometry
-            obs.calib_dn_ext_data = calibrate_iof_image_as_dn(
-                                                      obs, data=obs.ext_data)
-            filtered_data = obs.calib_dn_ext_data
-            
-            if False:
-                calib_data = unpad_image(obs.calib_dn_ext_data, extend_fov)
-                rings_radial_model = rings_create_model_from_image(
-                                                       obs, data=calib_data,
-                                                       extend_fov=extend_fov)
-                if rings_radial_model is not None:
-                    assert _TKINTER_AVAILABLE
-                    imdisp = ImageDisp([calib_data, rings_radial_model, 
-                                        calib_data-rings_radial_model],
-                                       canvas_size=(512,512),
-                                       allow_enlarge=True, enlarge_limit=10,
-                                       auto_update=True)
-                    tk.mainloop()
-    
-                    filtered_data = pad_image(calib_data-rings_radial_model, 
-                                              extend_fov)
-                    obs.data[:,:] = calib_data-rings_radial_model
-                    obs.ext_data[:,:] = filtered_data
-                    rings_can_conflict = False
-                    
-            # Filter that calibrated data.
-            # 1) Subtract the local background (median)
-            # 2) Eliminate anything that is < 0
-            # 3) Eliminate any portions of the image that are near a pixel
-            #    that is brighter than the maximum star DN
-            #    Note that since a star's photons are spread out over the PSF,
-            #    you have to have a really bright single pixel to be brighter
-            #    than the entire integrated DN of the brightest star in the
-            #    FOV.
-            filtered_data = filter_sub_median(obs.calib_dn_ext_data, 
-                                              median_boxsize=11)
- 
-            filtered_data[filtered_data < 0.] = 0.
-
-            # If we trust the DN values, then we can eliminate any pixels that
-            # are way too bright.            
-            if _trust_star_dn(obs):
-                max_dn = star_list[0].dn # Star list is sorted by DN            
-                mask = filtered_data > max_dn*2
-                mask = filt.maximum_filter(mask, 11)
-                filtered_data[mask] = 0.
-
-            if DEBUG_STARS_FILTER_IMGDISP:
-                assert _TKINTER_AVAILABLE
-                imdisp = ImageDisp([filtered_data],
-                                   canvas_size=(512,512),
-                                   allow_enlarge=True, enlarge_limit=10,
-                                   auto_update=True)
-                tk.mainloop()
 
         offset = None
         good_stars = 0
@@ -1566,7 +1569,28 @@ def stars_find_offset(obs, ra_dec_predicted,
         offset = None
         good_stars = 0
         logger.info('FAILED to find a valid offset')
-        if perform_photometry and stars_config['try_without_photometry']:
+        
+        if (stars_only or (perform_photometry and try_without_photometry)):
+            for star in star_list:
+                star.photometry_confidence = 0.
+                star.is_dim_enough = True
+                star.is_bright_enough = False
+                if star.dn >= min_dn:
+                    star.is_bright_enough = True
+
+        if stars_only:
+            logger.info('Trying again with only one star required')
+            ret = _stars_find_offset(obs, filtered_data, star_list,
+                                     1, 1.,
+                                     1, [], 4, 
+                                     True, rings_can_conflict,
+                                     radec_movement, stars_config) 
+            (offset, good_stars, corr,
+             keep_searching, no_peaks) = ret
+            if no_peaks:
+                offset = None
+            
+        if offset is None and perform_photometry and try_without_photometry:
             logger.info('Trying again with photometry disabled')
             ret = _stars_find_offset(obs, filtered_data, star_list,
                                      min_stars, 1.,

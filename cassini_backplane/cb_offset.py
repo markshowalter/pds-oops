@@ -159,6 +159,7 @@ def master_find_offset(obs,
             'image_shape'      A tuple indicating the shape (in pixels) of the
                                image.
             'midtime'          The midtime of the observation.
+            'scet_midtime'     The SCET midtime of the observation.
             'texp'             The exposure duration of the observation.
             'ra_dec_corner_orig'
                                A tuple (ra_min, ra_max, dec_min, dec_max)
@@ -334,6 +335,9 @@ def master_find_offset(obs,
     metadata['filter2'] = obs.filter2
     metadata['image_shape'] = tuple(obs.data.shape)
     metadata['midtime'] = obs.midtime
+    scet_start = float(obs.dict['SPACECRAFT_CLOCK_START_COUNT'])
+    scet_end = float(obs.dict['SPACECRAFT_CLOCK_STOP_COUNT'])
+    metadata['scet_midtime'] = (scet_start+scet_end)/2
     metadata['texp'] = obs.texp
     metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
                                            obs, extend_fov=extend_fov)
@@ -418,17 +422,23 @@ def master_find_offset(obs,
     large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
     large_bodies_by_range.sort(key=lambda x: x[1]['range'])
 
-    logger.info('Large body inventory by increasing range: %s', [x[0] for x in large_bodies_by_range])
+    logger.info('Large body inventory by increasing range: %s',
+                 [x[0] for x in large_bodies_by_range])
 
     # Now find the ring radii and distance for the main rings
     # We use this in various places below
     rings_radii = obs.ext_bp.ring_radius('saturn:ring')
-    rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS)
-    rings_radii = rings_radii.mask_where(rings_radii > RINGS_MAX_RADIUS)
-    rings_radii = rings_radii.mvals
+    main_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS)
+    main_rings_radii = main_rings_radii.mask_where(rings_radii > 
+                                                   RINGS_MAX_RADIUS)
+    main_rings_radii = main_rings_radii.mvals
+    df_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS_D)
+    df_rings_radii = df_rings_radii.mask_where(rings_radii > 
+                                               RINGS_MAX_RADIUS_F)
+    df_rings_radii = df_rings_radii.mvals
 
     rings_dist = obs.ext_bp.distance('saturn:ring')
-    rings_dist = rings_dist.mask_where(rings_radii.mask).mvals
+    rings_dist = rings_dist.mask_where(main_rings_radii.mask).mvals
     min_rings_dist = np.min(rings_dist)
 
     # See if the main rings take up the entire image AND are in front of
@@ -437,7 +447,9 @@ def master_find_offset(obs,
     # are sometimes transparent and we want to be able to handle things like
     # Pan and Daphnis embedded in the rings.
     entirely_rings = False
-    if not np.any(rings_radii.mask): # All radii valid
+    has_df_rings = False
+    if not np.any(main_rings_radii.mask): # All radii valid
+        has_df_rings = True
         found_front_body = False
         if len(large_bodies_by_range) > 0:
             inv = large_bodies_by_range[0][1]
@@ -447,12 +459,15 @@ def master_find_offset(obs,
             logger.debug('Image is entirely rings but %s is in front',
                          inv['name'])
         else:
-            logger.info('Image is entirely rings')
+            logger.debug('Image is entirely main rings')
             entirely_rings = True
             metadata['rings_only'] = True
     else:
-        logger.debug('Image is not entirely rings')
-
+        logger.debug('Image is not entirely main rings')
+        if not np.all(df_rings_radii.mask): # At least some radii valid
+            logger.debug('... but image has at least some rings between D and F')
+            has_df_rings = True
+        
     front_body_name = None
     if len(large_bodies_by_range) > 0:
         body_name, inv = large_bodies_by_range[0]
@@ -517,7 +532,10 @@ def master_find_offset(obs,
     if (not entirely_body and
         allow_stars and (not botsim_offset or create_overlay) and
         not force_bootstrap_candidate):
+        stars_only = (len(large_bodies_by_range) == 0 and
+                      not has_df_rings)
         stars_metadata = stars_find_offset(obs, metadata['ra_dec_center_pred'],
+                                           stars_only=stars_only,
                                            extend_fov=extend_fov,
                                            stars_config=stars_config)
         metadata['stars_metadata'] = stars_metadata

@@ -46,6 +46,7 @@ def get_shadow_dirs(sub_solar_lon, sub_obs_lon, sub_solar_lat, sub_obs_lat):
         sub_solar_lat += oops.PI
     lat_shadow_dir = sub_solar_lat < sub_obs_lat
 
+    return False, False # XXX
     return lon_shadow_dir, lat_shadow_dir
 
 
@@ -58,7 +59,17 @@ def check_add_one_image(image_path):
     if metadata is None:
         return
 
+    # Fix up the metadata for old files - eventually this should
+    # be removed! XXX
     if 'error' in metadata:
+        metadata['status'] = 'error'
+        metadata['status_detail1'] = metadata['error']
+        metadata['status_detail2'] = metadata['error_traceback']
+    elif 'status' not in metadata:
+        metadata['status'] = 'ok'
+
+    status = metadata['status']
+    if status == 'error' or status == 'skipped':
         return
     
     if metadata['offset'] is None or metadata['offset_winner'] == 'BOTSIM':

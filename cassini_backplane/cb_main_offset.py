@@ -53,7 +53,9 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset N1496877261_8 --image-console-level debug --profile'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
 
-#    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
+    command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star
+
+#     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else
 #     command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results --stars-label-font courbd.ttf,30 --png-label-font courbd.ttf,30' # Star smear with Mimas
 
@@ -178,7 +180,7 @@ if len(command_list) == 0:
 
 #     command_line_str = '--force-offset --image-console-level debug --body-cartographic-data RHEA=t:/cdaps-results/mosaics/RHEA/RHEA__0.500_0.500_centric_east__180.00_-30.00_T_T_ALL_0003-MOSAIC.dat --image-full-path t:/external/cassini/derived/COISS_2xxx/COISS_2017/data/1511715235_1511729063/N1511716650_2_CALIB.IMG --no-allow-stars'
 #    command_line_str = 'N1669812089_1 --max-subprocesses 1 --retrieve-from-pds --results-in-s3 --main-console-level debug --image-console-level debug --force-offset'
-    command_line_str = 'W1507076645_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'#--no-wac-offset'
+#     command_line_str = 'W1507076645_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'#--no-wac-offset'
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
     
     command_list = command_line_str.split()
@@ -274,6 +276,10 @@ parser.add_argument(
     '--redo-non-spice-error', action='store_true', default=False,
     help='''Force offset computation if the offset file exists and 
             indicates a fatal error other than missing SPICE data''')
+parser.add_argument(
+    '--redo-spice-error', action='store_true', default=False,
+    help='''Force offset computation if the offset file exists and 
+            indicates a fatal error from missing SPICE data''')
 parser.add_argument(
     '--display-offset-results', action='store_true', default=False,
     help='Graphically display the results of the offset process')
@@ -511,7 +517,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         file_exists = os.path.exists(file_img_to_offset_path(image_path))
         if file_exists:
             if not force_offset:
-                if redo_offset_error or redo_offset_nonspice_error:
+                if (redo_offset_error or redo_offset_nonspice_error or
+                    redo_offset_spice_error):
                     offset_metadata = file_read_offset_metadata(
                                                 image_path, overlay=False,
                                                 bootstrap_pref=bootstrap_pref)
@@ -524,16 +531,26 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         main_logger.debug(
                             'Processing %s - offset file indicates error', image_path)
                     else:
-                        assert redo_offset_nonspice_error
+                        assert redo_offset_nonspice_error or redo_offset_spice_error
                         error = offset_metadata['error']
                         if error == '':
                             error = offset_metadata['error_traceback'].split('\n')[-2]
                         if error.startswith('SPICE(NOFRAMECONNECT)'):
-                            main_logger.debug(
-                                'Skipping %s - offset file indicates SPICE error', image_path)
-                            return False
-                        main_logger.debug(
-                            'Processing %s - offset file indicates non-SPICE error', image_path)
+                            if redo_offset_spice_error:
+                                main_logger.debug(
+                                    'Processing %s - offset file indicates SPICE error', image_path)
+                            else:
+                                main_logger.debug(
+                                    'Skipping %s - offset file indicates SPICE error', image_path)
+                                return False
+                        else:
+                            if redo_offset_spice_error:
+                                main_logger.debug(
+                                    'Skipping %s - offset file indicates non-SPICE error', image_path)
+                                return False
+                            else:
+                                main_logger.debug(
+                                    'Processing %s - offset file indicates non-SPICE error', image_path)
                 else:
                     main_logger.debug('Skipping %s - offset file exists', 
                                       image_path)
@@ -898,6 +915,7 @@ image_logfile_level = log_decode_level(arguments.image_logfile_level)
 force_offset = arguments.force_offset
 redo_offset_error = arguments.redo_error
 redo_offset_nonspice_error = arguments.redo_non_spice_error
+redo_offset_spice_error = arguments.redo_spice_error
 
 botsim_offset = None
 
