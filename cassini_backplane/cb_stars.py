@@ -1583,7 +1583,7 @@ def stars_find_offset(obs, ra_dec_predicted,
             ret = _stars_find_offset(obs, filtered_data, star_list,
                                      1, 1.,
                                      1, [], 4, 
-                                     True, rings_can_conflict,
+                                     perform_photometry, rings_can_conflict,
                                      radec_movement, stars_config) 
             (offset, good_stars, corr,
              keep_searching, no_peaks) = ret
@@ -1602,6 +1602,22 @@ def stars_find_offset(obs, ra_dec_predicted,
             if no_peaks:
                 offset = None
             used_photometry = False
+
+        if (offset is None and stars_only and
+            perform_photometry and try_without_photometry):
+            logger.info('Trying again with only one star required AND '+
+                        'photometry disabled')
+            ret = _stars_find_offset(obs, filtered_data, star_list,
+                                     1, 1.,
+                                     1, [], 4, 
+                                     False, rings_can_conflict,
+                                     radec_movement, stars_config) 
+            (offset, good_stars, corr,
+             keep_searching, no_peaks) = ret
+            if no_peaks:
+                offset = None
+            used_photometry = False
+
     else:
         best_offset = None
         best_star_list = None
