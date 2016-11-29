@@ -41,8 +41,8 @@ CISSCAL_CALIB_ROOT = os.getenv('CISSCAL_CALIB_PATH')
 # Contains filter transmission and PSF data
 CASSINI_CALIB_ROOT = os.getenv('CASSINI_CALIB_PATH')
 
-# The UCAC4 star catalog.
-STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG']
+# The star catalog root (must contain UCAC4 and YBSC)
+STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG_ROOT']
 
 # The URL for files in the PDS Ring-Moon Systems Node
 PDS_RINGS_VOLUMES_ROOT = 'http://pds-rings.seti.org/volumes/COISS_2xxx/'
@@ -246,7 +246,8 @@ BODIES_DEFAULT_CONFIG = {
     # What resolution is so small that the surface features make the moon
     # non-circular when viewing the limb?
     'surface_bumpiness':
-        {'PAN': 7., #30.,
+        {'SATURN': 90., # This is really a measure of atmospheric haze
+         'PAN': 7., #30.,
          'DAPHNIS': 3., #9.,
          'ATLAS': 10., #41.,
          'PROMETHEUS': 75., #140.,

@@ -488,7 +488,7 @@ def master_find_offset(obs,
         set_obs_corner_bp(obs)    
         corner_body_mask = (
             obs.ext_corner_bp.where_intercepted(front_body_name).
-                vals)
+                mvals.filled(0))
         if np.all(corner_body_mask):
             inv = large_body_dict[front_body_name]
             if np.any(rings_dist < inv['range']):

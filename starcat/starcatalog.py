@@ -8,6 +8,7 @@ import numpy as np
 DPR = 180/np.pi
 RPD = np.pi/180
 AS_TO_DEG = 1/3600.
+AS_TO_RAD = AS_TO_DEG * RPD
 MAS_TO_DEG = AS_TO_DEG / 1000.
 MAS_TO_RAD = MAS_TO_DEG * RPD
 YEAR_TO_SEC = 1/365.25/86400.

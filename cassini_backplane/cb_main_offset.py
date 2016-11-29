@@ -53,7 +53,28 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset N1496877261_8 --image-console-level debug --profile'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
 
-    command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star
+#     command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega
+#     command_line_str = 'N1470361604_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega CLR
+#     command_line_str = 'N1470361637_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega GRN
+#     command_line_str = 'N1470361670_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega UV3
+#     command_line_str = 'N1470361703_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega BL2
+#     command_line_str = 'N1470361736_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega MT2
+
+#     command_line_str = 'N1470497510_1 --force-offset --image-console-level debug --display-offset-results' # Thinks Saturn fills the frame? XXX
+#     command_line_str = 'N1485868397_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Fomalhaut UV3
+    command_line_str = 'N1492103550_3 --force-offset --image-console-level debug --display-offset-results' # Single bright star - EpsOri GRN
+#     command_line_str = 'N1492103583_3 --force-offset --image-console-level debug --display-offset-results' # Single bright star - EpsOri RED
+#     command_line_str = 'N1503229507_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpSco CLR
+#     command_line_str = 'N1508714071_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpLyr UV3
+#     command_line_str = 'N1514820484_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - TheTau CB3
+#     command_line_str = 'N1514839259_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - TheTau IR4
+#     command_line_str = 'N1521513816_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - BetOri GRN
+#     command_line_str = 'N1521514002_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - BetOri MT3
+#     command_line_str = 'N1521514663_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - BetOri CB3
+#     command_line_str = 'N1548433221_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - TheTau RED,IR1
+#     command_line_str = 'N1548521082_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - KapCet GRN
+#     command_line_str = 'N1569375917_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - TheTau IR1
+#     command_line_str = 'N1578052095_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpSco CLR
 
 #     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else

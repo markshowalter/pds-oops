@@ -33,7 +33,7 @@ except ImportError:
 import oops
 from polymath import *
 from psfmodel.gaussian import GaussianPSF
-from starcat import (UCAC4StarCatalog,
+from starcat import (UCAC4StarCatalog, YBSCStarCatalog,
                      SCLASS_TO_B_MINUS_V, SCLASS_TO_SURFACE_TEMP)
 from starcat.starcatalog import (Star, SCLASS_TO_SURFACE_TEMP, 
                                  SCLASS_TO_B_MINUS_V)
@@ -50,7 +50,10 @@ _LOGGING_NAME = 'cb.' + __name__
 DEBUG_STARS_FILTER_IMGDISP = False
 DEBUG_STARS_MODEL_IMGDISP = False
 
-STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
+STAR_CATALOG_UCAC4 = UCAC4StarCatalog(os.path.join(STAR_CATALOG_ROOT,
+                                                   'UCAC4'))
+STAR_CATALOG_YBSC = YBSCStarCatalog(os.path.join(STAR_CATALOG_ROOT,
+                                                 'YBSC'))
 
     
 #===============================================================================
@@ -59,6 +62,16 @@ STAR_CATALOG = UCAC4StarCatalog(STAR_CATALOG_ROOT)
 # 
 #===============================================================================
 
+def _clean_sclass(star):
+    sclass = star.spectral_class
+    if sclass is None:
+        sclass = 'XX'
+    else:
+        if sclass[0] == 'g':
+            sclass = sclass[1:]
+    sclass = sclass[0:2]
+    return sclass
+    
 def _aberrate_star(obs, star):
     """Update the RA,DEC position of a star with stellar aberration."""
     event = oops.Event(obs.midtime, (polymath.Vector3.ZERO,
@@ -105,14 +118,32 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
     min_dn = stars_config[('min_detectable_dn', obs_detector(obs))]
     
     # Get a list of all reasonable stars with the given magnitude range.
+
+    orig_star_list = []
     
-    orig_star_list = [x for x in 
-              STAR_CATALOG.find_stars(allow_double=True,
-                                      allow_galaxy=False,
-                                      ra_min=ra_min, ra_max=ra_max,
-                                      dec_min=dec_min, dec_max=dec_max,
-                                      vmag_min=mag_min, vmag_max=mag_max,
-                                      **kwargs)]
+    if mag_min < 8: # YBSC maximum is 7.96
+        orig_star_list = list( 
+              STAR_CATALOG_YBSC.find_stars(allow_double=True,
+                                           ra_min=ra_min, ra_max=ra_max,
+                                           dec_min=dec_min, dec_max=dec_max,
+                                           vmag_min=mag_min, vmag_max=mag_max,
+                                           **kwargs))
+        for star in orig_star_list:
+            star.johnson_mag_v = star.vmag
+            if star.b_v is None:
+                star.johnson_mag_b = star.johnson_mag_v
+            else:
+                star.johnson_mag_b = star.vmag + star.b_v
+    
+    ucac_star_list = list(
+              STAR_CATALOG_UCAC4.find_stars(allow_double=True,
+                                            allow_galaxy=False,
+                                            ra_min=ra_min, ra_max=ra_max,
+                                            dec_min=dec_min, dec_max=dec_max,
+                                            vmag_min=mag_min, vmag_max=mag_max,
+                                            **kwargs))
+
+    orig_star_list += ucac_star_list
 
     # Fake the temperature if it's not known, and eliminate stars we just
     # don't want to deal with.
@@ -144,10 +175,10 @@ def _stars_list_for_obs(obs, ra_min, ra_max, dec_min, dec_max,
             if star.dn < min_dn:
                 discard_dn += 1
                 continue
-        if star.spectral_class[0] == 'M':
-            # M stars are too dim and too red to be seen
-            discard_class += 1
-            continue
+#         if star.spectral_class[0] == 'M':
+#             # M stars are too dim and too red to be seen
+#             discard_class += 1
+#             continue
         _aberrate_star(obs, star)
         star_list.append(star)
 
@@ -272,6 +303,28 @@ def stars_list_for_obs(obs, radec_movement,
         
         logger.debug('Got %d stars, total %d', len(star_list),
                      len(full_star_list))
+
+        # Remove duplicate stars
+        if len(full_star_list) > 1:
+            new_full_star_list = []
+            for i in xrange(len(full_star_list)):
+                good_star = True
+                for j in xrange(len(full_star_list)):
+                    if i == j:
+                        continue
+                    if (abs(full_star_list[i].u-full_star_list[j].u) < 1 and
+                        abs(full_star_list[i].v-full_star_list[j].v) < 1 and
+                        full_star_list[i].vmag > full_star_list[j].vmag):
+                        good_star = False
+                        break
+                if good_star:
+                    new_full_star_list.append(full_star_list[i])
+            
+            if len(full_star_list) != len(new_full_star_list):
+                logger.debug('After removing duplicates, total %d',
+                             len(new_full_star_list))
+                
+            full_star_list = new_full_star_list
         
         if len(full_star_list) >= max_stars:
             break
@@ -291,8 +344,7 @@ def stars_list_for_obs(obs, radec_movement,
                     star.dn, star.vmag,
                     0 if star.johnson_mag_b is None else star.johnson_mag_b,
                     0 if star.johnson_mag_v is None else star.johnson_mag_v,
-                    'XX' if star.spectral_class is None else
-                            star.spectral_class,
+                    _clean_sclass(star),
                     0 if star.temperature is None else star.temperature)
         
     return full_star_list
@@ -522,9 +574,15 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
             not width <= v_idx < overlay.shape[0]-width):
             continue
 
-        star_str1 = '%09d' % (star.unique_number)
-        star_str2 = '%.3f %s' % (star.vmag,
-            'XX' if star.spectral_class is None else star.spectral_class)
+        star_str1 = None
+        try:
+            star_str1 = star.name[:10]
+        except AttributeError:
+            pass
+        
+        if star_str1 is None or star_str1 == '':
+            star_str1 = '%09d' % (star.unique_number)
+        star_str2 = '%.3f %s' % (star.vmag, _clean_sclass(star))
         text_size = text_draw.textsize(star_str1, font=font)
 
         locations = []
@@ -790,7 +848,7 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
             star.integrated_dn = 0.
             star.photometry_confidence = 0.
             logger.debug('Star %9d %2s UV %4d %4d IGNORED %s',
-                         star.unique_number, star.spectral_class,
+                         star.unique_number, _clean_sclass(star),
                          u, v, star.conflicts)
             continue
         ret = _stars_perform_photometry(obs, calib_data, star,
@@ -814,10 +872,10 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
                 
         star.integrated_dn = integrated_dn
         star.photometry_confidence = confidence
-        
+
         logger.debug(
             'Star %9d %2s UV %4d %4d PRED %7.2f MEAS %7.2f CONF %4.2f',
-            star.unique_number, star.spectral_class,
+            star.unique_number, _clean_sclass(star),
             u, v, star.dn, star.integrated_dn, star.photometry_confidence)
 
     good_stars = 0
@@ -1639,6 +1697,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         corr = best_corr
         star_list = saved_star_list
 
+    if offset is not None:
         logger.info('Trial final offset U,V %d,%d / Good stars %d / Corr %f',
                      offset[0], offset[1], good_stars, corr)
 
@@ -1648,16 +1707,22 @@ def stars_find_offset(obs, ra_dec_predicted,
     if offset is None:
         confidence = 0.
     else:
-        confidence = ((good_stars-min_stars) * 
-                        (float(min_stars_hc_conf)-min_stars_conf)/
-                        (float(min_stars_hc-min_stars)) +
-                      min_stars_conf)
+        if good_stars < min_stars:
+            confidence = 0.3 * good_stars / min_stars
+            # Give a boost if the star is really bright
+            if star_list[0].vmag < 3:
+                confidence += 0.2
+        else:
+            confidence = ((good_stars-min_stars) * 
+                            (float(min_stars_hc_conf)-min_stars_conf)/
+                            (float(min_stars_hc-min_stars)) +
+                          min_stars_conf)
         if len(star_list) > 0:
             movement = np.sqrt(star_list[0].move_u**2 + star_list[0].move_v**2)
             if movement > 1:
                 confidence /= (movement-1)/4+1
         if not used_photometry:
-            confidence *= 0.1
+            confidence *= 0.5
         confidence = np.clip(confidence, 0., 1.)
         
     metadata['offset'] = offset
@@ -1692,8 +1757,7 @@ def stars_find_offset(obs, ra_dec_predicted,
                     star.u+offset_x, abs(star.move_u), 
                     star.v+offset_y, abs(star.move_v),
                     star.dn, star.vmag,
-                    'XX' if star.spectral_class is None else
-                            star.spectral_class,
+                    _clean_sclass(star),
                     0 if star.temperature is None else star.temperature,
                     star.dn, star.integrated_dn, star.photometry_confidence,
                     str(star.conflicts))
