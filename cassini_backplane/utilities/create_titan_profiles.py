@@ -21,6 +21,14 @@ from cb_util_file import *
 from cb_util_image import *
 from cb_util_misc import *
 
+# OFFSET_PLOTS = False
+# OFFSET_PLOTS = 'shift'
+OFFSET_PLOTS = 'final'
+
+titan_config = TITAN_DEFAULT_CONFIG
+
+iss.initialize()
+
 TITAN_FILENAMES_CSV = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', 
                                    'titan-file-list.csv')
 
@@ -123,6 +131,8 @@ def process_image(filename, force=False, recompute=False):
                         titan_inv['resolution'][1])/2
     titan_radius = titan_inv['outer_radius'] 
     titan_radius_pix = int(titan_radius / titan_resolution)
+    titan_size_u = titan_inv['u_pixel_size']
+    titan_size_v = titan_inv['v_pixel_size']
 
     # Backplanes
     set_obs_bp(obs)
@@ -167,22 +177,25 @@ def process_image(filename, force=False, recompute=False):
     print 'RES', titan_resolution, 'RADIUS PIX', titan_radius_pix,
     print 'SUN ANGLE', sun_angle * oops.DPR
 
+    cluster_gap_threshold = titan_config['cluster_gap_threshold']
+    cluster_max_pixels = titan_config['cluster_max_pixels']
+    max_error_u, max_error_v = MAX_POINTING_ERROR[(obs.data.shape, 
+                                                   obs.detector)]
+    offset_limit = int(np.ceil(np.sqrt(max_error_u**2+max_error_v**2)))+1
+    
 #    plt.imshow(bp_incidence.mvals)
 #    plt.show()
     
     bp_emission = bp.emission_angle('TITAN+ATMOSPHERE')
     
-    cluster_gap_threshold = 10
-    cluster_max_pixels = 10
-    wac_offset_limit = 10
-    offset_limit = int(np.ceil(wac_offset_limit*np.sqrt(2)))+1
-    
     best_offset, best_rms = titan_find_symmetry_offset(
-                obs, sun_angle,
+                obs, (0,0), sun_angle,
                 2.5*oops.RPD, oops.HALFPI, 5*oops.RPD,
                 5.*oops.RPD, oops.PI, 5*oops.RPD,
                 cluster_gap_threshold, cluster_max_pixels,
-                offset_limit)
+                offset_limit,
+                titan_size_u=titan_size_u,
+                titan_size_v=titan_size_v)
     
     if best_offset is None:
         print 'Symmetry offset finding failed'
@@ -240,21 +253,19 @@ def del_pickle_if_previously_computed(filename):
         return
     os.remove(pickle_path)
     
-def add_profile_to_list(filename, reinterp=False):
-    _, filespec = os.path.split(filename)
-    filespec = filespec.replace('_CALIB.IMG', '')
+def add_profile_to_list(filename, reinterp=False, verbose=False):
+    filespec = file_clean_name(filename)
     
     pickle_path = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan', filespec+'.pickle')
 
     if not os.path.exists(pickle_path):
         return
     
-#    print '>>> Reading profile for', filename
-
     fp = open(pickle_path, 'rb')
     phase_angle = pickle.load(fp)
     if type(phase_angle) == type(''):
-#        print 'Error:', phase_angle
+        if verbose:
+            print 'Error:', filespec, phase_angle
         fp.close()
         return
     filter = pickle.load(fp)
@@ -265,10 +276,10 @@ def add_profile_to_list(filename, reinterp=False):
     best_offset = pickle.load(fp)
     profile_x = pickle.load(fp)
     profile_y = pickle.load(fp)
-    try:
-        profile = pickle.load(fp)
-    except:
-        reinterp = True
+#     try:
+    profile = pickle.load(fp)
+#     except:
+#         reinterp = True
     fp.close()
 
     if reinterp:
@@ -289,9 +300,19 @@ def add_profile_to_list(filename, reinterp=False):
         pickle.dump(profile, fp)
         fp.close()
 
-    if profile[10] > 0.1:
-#        print 'HIGH I/F VALUE', filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
+    if phase_angle > oops.HALFPI:
+        profile = profile[::-1]
+        
+    if profile[100] > 0.1:
+        print 'HIGH I/F VALUE', filespec, filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
         return
+    if profile[100] < -0.05:
+        print 'LOW I/F VALUE', filespec, filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
+        return
+    if abs(best_offset[0]) > 8 or abs(best_offset[1]) > 8:
+        print 'BAD OFFSET', filespec, filter, phase_angle*oops.DPR, best_offset, sun_angle*oops.DPR, filename
+        return
+
 #        profile -= np.min(profile[100:-100])
 #        profile = np.clip(profile, 0, 1e38)
 #        plt.plot(profile)
@@ -306,85 +327,133 @@ def add_profile_to_list(filename, reinterp=False):
 #        return
 
     OFFSET_LIST.append(best_offset)    
-    PROFILE_LIST.append((filter, phase_angle, profile))
+    PROFILE_LIST.append((filespec, filter, phase_angle, titan_resolution, profile))
 
 def make_shifted_profile(bin, filter, phase_angle):
     if len(bin) == 0:
         return None
-    if len(bin) == 1:
-        return bin[0]
     
-    master = bin[0]
+    bin.sort(key=lambda x: x[2])
+    
+    master_filespec, master_filter, master_phase_angle, master_resolution, master_profile = bin[0]
+
+    print '>> SHIFTING PROFILES', filter, phase_angle*oops.DPR    
+    print 'Master', master_filespec
+    
     offsets = []
     offsets.append(0)
-    for slave in bin[1:]:
-        offset = find_shift_1d(master, slave, 200)
-        print 'Found offset', offset
+    for slave_data in bin[1:]:
+        slave_filespec, slave_filter, slave_phase_angle, slave_resolution, slave_profile = slave_data
+        offset = find_shift_1d(master_profile, slave_profile, MAX_PROFILE_OFFSET)
+        print 'Found offset', slave_filespec, offset,
+        if abs(offset) == MAX_PROFILE_OFFSET:
+            print 'XXXXX BAD OFFSET'
+        else:
+            print
         offsets.append(offset)
-#        plt.plot(master, '-', color='green')
-#        plt.plot(slave, '-', color='red')
-#        plt.plot(shift_1d(slave, offset), '-', color='black')
-#        plt.show()
     half_mean_offset = int(np.round(np.mean(offsets) / 2))
     print 'Half mean offset', half_mean_offset
-#    plt.figure()
-#    for profile in bin:
-#        plt.plot(profile)
-#    plt.show()
     profiles = []
-    profiles.append(shift_1d(master, -half_mean_offset))
-    for slave in bin[1:]:
-        profiles.append(shift_1d(slave, half_mean_offset))
+    sign = -1
+    for bin_data in bin:
+        bin_filespec, bin_filter, bin_phase_angle, bin_resolution, bin_profile = bin_data
+        profiles.append((bin_filespec, bin_filter, bin_phase_angle, bin_resolution, 
+                         shift_1d(bin_profile, sign*half_mean_offset)))
+        sign = 1
+
+    med_profile = np.median(zip(*[x[4] for x in profiles]), axis=1)
+    med_res = np.median([x[3] for x in profiles])
+    used_profiles = len(profiles)
     
-    med_res = np.mean(zip(*profiles), axis=1)
-    
-#     if filter == 'BL1' and 139 <= phase_angle*oops.DPR < 141:
+    if (OFFSET_PLOTS == 'shift'):# or
+#         filter == 'RED'):
 #         plt.figure()
-#         for profile in profiles:
-#             plt.plot(profile)
-#         plt.plot(med_res, '-', color='black', lw=2)
-#         plt.show()
+#         for num, bin_data in enumerate(bin):
+#             bin_filespec, bin_filter, bin_phase_angle, bin_profile = bin_data
+#             color = colorsys.hsv_to_rgb(float(num)/len(bin), 1, 1)
+#             plt.plot(bin_profile, color=color, 
+#                      label=('%s %5.1f' % (bin_filespec, bin_phase_angle*oops.DPR)))
+#         plt.legend()
+#         plt.title('BEFORE SHIFT: ' + filter + ' ' + str(phase_angle*oops.DPR))
+        plt.figure()
+        for num, profile_data in enumerate(profiles):
+            profile_filespec, profile_filter, profile_phase_angle, profile_resolution, profile_profile = profile_data
+            color = colorsys.hsv_to_rgb(float(num)/len(bin)*.7, 1, 1)
+            plt.plot(TITAN_X, profile_profile, color=color,
+                     label=('%s %5.1f' % (profile_filespec, profile_phase_angle*oops.DPR)))
+        plt.plot(TITAN_X, med_profile, '-', color='black', lw=4)
+        plt.legend()
+        plt.title('AFTER SHIFT: ' + filter + ' ' + str(phase_angle*oops.DPR))
+        plt.show()
     
-    return med_res
+    return med_profile, med_res, used_profiles
     
     
-def bin_profiles(plot=False):
-    for profile in PROFILE_LIST:
-        filter, phase_angle, profile = profile
-        if filter not in BY_FILTER_DB:
-            entry = [[] for x in xrange(NUM_PHASE_BINS)]
-            BY_FILTER_DB[filter] = entry
-        entry = BY_FILTER_DB[filter]
-        bin_num = int(phase_angle / PHASE_BIN_GRANULARITY)
-        entry[bin_num].append(profile)
-        
-    for filter in sorted(BY_FILTER_DB):
-        if plot:
-            plt.figure()
-        for bin_no, bin in enumerate(BY_FILTER_DB[filter]):
+def bin_profiles():
+    for bin_num in xrange(NUM_PHASE_BINS):
+        bin_phase = bin_num*PHASE_BIN_GRANULARITY
+        for profile_data in PROFILE_LIST:
+            filespec, filter, phase_angle, resolution, profile = profile_data
+            if abs(bin_phase-phase_angle) <= PHASE_BIN_WIDTH:
+                if filter not in PROFILE_BY_FILTER_DB:
+                    entry = [[] for x in xrange(NUM_PHASE_BINS)]
+                    PROFILE_BY_FILTER_DB[filter] = entry
+                    entry = [None for x in xrange(NUM_PHASE_BINS)]
+                    RESULT_BY_FILTER_DB[filter] = entry
+                    entry = [PHASE_BIN_WIDTH*2 for x in xrange(NUM_PHASE_BINS)]
+                    BIN_WIDTH_BY_FILTER_DB[filter] = entry
+                entry = PROFILE_BY_FILTER_DB[filter]
+                entry[bin_num].append(profile_data)
+    
+    # Pass two for any bins that don't have enough data in them
+    for filter in PROFILE_BY_FILTER_DB:
+        for bin_num in xrange(NUM_PHASE_BINS):
+            bin_phase = bin_num*PHASE_BIN_GRANULARITY
+            if len(PROFILE_BY_FILTER_DB[filter][bin_num]) < MIN_NUM_PROFILES:
+                print 'SECOND PASS ON', filter, bin_phase*oops.DPR,
+                print len(PROFILE_BY_FILTER_DB[filter][bin_num]),
+                for profile_data in PROFILE_LIST:
+                    filespec, filter2, phase_angle, resolution, profile = profile_data
+                    if filter != filter2:
+                        continue
+                    if PHASE_BIN_WIDTH < abs(bin_phase-phase_angle) <= 2*PHASE_BIN_WIDTH:
+                        entry = PROFILE_BY_FILTER_DB[filter]
+                        entry[bin_num].append(profile_data)
+                        entry = BIN_WIDTH_BY_FILTER_DB[filter]
+                        entry[bin_num] = 4*PHASE_BIN_WIDTH
+                print 'NEW', len(PROFILE_BY_FILTER_DB[filter][bin_num])
+                
+    for filter in sorted(PROFILE_BY_FILTER_DB):
+        if OFFSET_PLOTS == 'final':
+            plt.figure(figsize=(25,15))
+        for bin_no, bin in enumerate(PROFILE_BY_FILTER_DB[filter]):
             if len(bin) == 0:
-                BY_FILTER_DB[filter][bin_no] = None
                 continue
             phase_angle = bin_no*PHASE_BIN_GRANULARITY
-            med_res = make_shifted_profile(bin, filter, phase_angle)
-            if med_res is None:
-                BY_FILTER_DB[filter][bin_no] = None
-            else:
-                BY_FILTER_DB[filter][bin_no] = (TITAN_X, med_res, len(bin))
-            print filter, phase_angle*oops.DPR, len(bin)
-            if plot:
+            med_profile, med_res, used_profiles = make_shifted_profile(bin, filter, phase_angle)
+            if med_profile is None:
+                continue
+            bin_width = BIN_WIDTH_BY_FILTER_DB[filter][bin_no]
+            RESULT_BY_FILTER_DB[filter][bin_no] = (TITAN_X, med_profile, med_res, used_profiles,
+                                                   bin_width)
+            print filter, phase_angle*oops.DPR, med_res, used_profiles, '/', len(bin),
+            print bin_width*oops.DPR
+            if OFFSET_PLOTS == 'final':
                 color = colorsys.hsv_to_rgb(
-                         phase_angle/180, 1, 1)
-                plt.plot(TITAN_X, med_res, 
-                         label=('%.1f (%d)'%(phase_angle*oops.DPR, len(bin))), 
+                         phase_angle/oops.PI*.7, 1, 1)
+                bin_str = ''
+                if bin_width > PHASE_BIN_WIDTH*2.5:
+                    bin_str = '*'
+                plt.plot(TITAN_X, med_profile, 
+                         label=('%.1f (%s%d)'%(phase_angle*oops.DPR, bin_str, len(bin))), 
                          color=color)
 
-        if plot:
+        if OFFSET_PLOTS == 'final':
             plt.legend()
             plt.title(filter)
-
-    if plot:
-        plt.show()
+            plt.xlabel('Distance from Titan center (km)')
+            plt.ylabel('I/F')
+            plt.savefig('/home/rfrench/Dropbox-SETI/titan-by-filter/'+filter, bbox_inches='tight', dpi=300)
 
 def plot_profiles_by_phase_filter():
     num_filters = len(BY_FILTER_DB)
@@ -399,7 +468,7 @@ def plot_profiles_by_phase_filter():
                 continue
             x, med_res, num_bins = bin_contents
             color = colorsys.hsv_to_rgb(
-                     float(filter_num)/NUM_FILTERS, 1, 1)
+                     float(filter_num)/NUM_FILTERS*.7, 1, 1)
             if first_plot:
                 plt.figure()
                 first_plot = False
@@ -432,7 +501,7 @@ def plot_rescaled_filters():
                 continue
             plt.figure()
             color = colorsys.hsv_to_rgb(
-                 float(FILTER_NUMBER[filters[0]])/NUM_FILTERS, 1, 1)
+                 float(FILTER_NUMBER[filters[0]])/NUM_FILTERS*.7, 1, 1)
             plt.plot(master_x, master_y, 
                      label=('%s (%d)'%(filters[0], master_num)), 
                      color=color)
@@ -442,7 +511,7 @@ def plot_rescaled_filters():
                 scale = np.mean(master_y)/np.mean(slave_y)
                 slave_y = slave_y * scale
                 color = colorsys.hsv_to_rgb(
-                     float(FILTER_NUMBER[filter])/NUM_FILTERS, 1, 1)
+                     float(FILTER_NUMBER[filter])/NUM_FILTERS*.7, 1, 1)
                 plt.plot(slave_x, slave_y, 
                          label=('%s (%d)'%(filter, slave_num)), 
                          color=color)
@@ -539,27 +608,34 @@ if False:
     for filename in image_list[int(start_frac*len(image_list)):]:
 #         del_pickle_if_previously_computed(filename)
         try:
-            process_image(filename)
+            process_image(filename, recompute=False)
         except RuntimeError:
             print 'Missing SPICE data'
 
 PROFILE_LIST = []
-BY_FILTER_DB = {}    
-PHASE_BIN_GRANULARITY = 10. * oops.RPD
-NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))
+PROFILE_BY_FILTER_DB = {}
+RESULT_BY_FILTER_DB = {}
+BIN_WIDTH_BY_FILTER_DB = {}    
+PHASE_BIN_GRANULARITY = 5. * oops.RPD # Center-to-center bin distance
+PHASE_BIN_WIDTH = 2.5 * oops.RPD # Width on each side of a center
+MIN_NUM_PROFILES = 5
+NUM_PHASE_BINS = int(np.ceil(oops.PI / PHASE_BIN_GRANULARITY))+1
+MAX_PROFILE_OFFSET = 200
 OFFSET_LIST = []
 
 if True:
     for filename in image_list:#[:10]:
-        add_profile_to_list(filename)
-    bin_profiles(plot=False)
-
+        add_profile_to_list(filename, verbose=False)
     offset_list_x = [x[0] for x in OFFSET_LIST]
     offset_list_y = [x[1] for x in OFFSET_LIST]
     
     print 'TOTAL IMAGES', len(offset_list_x)
-    print 'MEAN OFFSET X', np.mean(offset_list_x)
-    print 'MEAN OFFSET Y', np.mean(offset_list_y)
+    print 'OFFSET X MEAN', np.mean(offset_list_x), '+/-', np.std(offset_list_x),
+    print 'MIN', np.min(offset_list_x), 'MAX', np.max(offset_list_x)
+    print 'OFFSET Y MEAN', np.mean(offset_list_y), '+/-', np.std(offset_list_y),
+    print 'MIN', np.min(offset_list_y), 'MAX', np.max(offset_list_y)
+
+    bin_profiles()
     
     #plot_profiles_by_phase_filter()
     #plot_rescaled_filters()
@@ -567,5 +643,6 @@ if True:
     pickle_file = os.path.join(CB_SUPPORT_FILES_ROOT, 'titan-profiles.pickle')
     fp = open(pickle_file, 'wb')
     pickle.dump(PHASE_BIN_GRANULARITY, fp)
-    pickle.dump(BY_FILTER_DB, fp)
+    pickle.dump(PHASE_BIN_WIDTH, fp)
+    pickle.dump(RESULT_BY_FILTER_DB, fp)
     fp.close()

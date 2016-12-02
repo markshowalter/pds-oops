@@ -68,8 +68,8 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_SOURCE_ROOT, 'utilities',
 ########################
 
 # The maximum pointing error we allow in the (V,U) directions.
-MAX_POINTING_ERROR_NAC =   (110,75)  # Pixels
-MAX_POINTING_ERROR_WAC =   (11,15)
+MAX_POINTING_ERROR_NAC =   (110,80)  # Pixels
+MAX_POINTING_ERROR_WAC =   (11,8)
 MAX_POINTING_ERROR_LORRI = (40,40)
 MAX_POINTING_ERROR = {((1024,1024), 'NAC'):   MAX_POINTING_ERROR_NAC,
                       ((1024,1024), 'WAC'):   MAX_POINTING_ERROR_WAC,
@@ -309,7 +309,7 @@ TITAN_DEFAULT_CONFIG = {
     'cluster_gap_threshold': 10,
     
     # The largest number of pixels that can make up a cluster.
-    'cluster_max_pixels': 10,
+    'cluster_max_pixels': 3,
 }
 
 RINGS_DEFAULT_CONFIG = {

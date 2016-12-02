@@ -53,6 +53,10 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset N1496877261_8 --image-console-level debug --profile'
 #    command_line_str = '--image-pds-csv t:/external/cb_support/titan-clear-151203.csv --stars-only --max-subprocesses 4'
 
+            #=============
+            #>>> STARS <<<
+            #=============
+
 #     command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega
 #     command_line_str = 'N1470361604_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega CLR
 #     command_line_str = 'N1470361637_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega GRN
@@ -62,7 +66,7 @@ if len(command_list) == 0:
 
 #     command_line_str = 'N1470497510_1 --force-offset --image-console-level debug --display-offset-results' # Thinks Saturn fills the frame? XXX
 #     command_line_str = 'N1485868397_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Fomalhaut UV3
-    command_line_str = 'N1492103550_3 --force-offset --image-console-level debug --display-offset-results' # Single bright star - EpsOri GRN
+#     command_line_str = 'N1492103550_3 --force-offset --image-console-level debug --display-offset-results' # Single bright star - EpsOri GRN
 #     command_line_str = 'N1492103583_3 --force-offset --image-console-level debug --display-offset-results' # Single bright star - EpsOri RED
 #     command_line_str = 'N1503229507_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpSco CLR
 #     command_line_str = 'N1508714071_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpLyr UV3
@@ -80,6 +84,20 @@ if len(command_list) == 0:
 #    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else
 #     command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results --stars-label-font courbd.ttf,30 --png-label-font courbd.ttf,30' # Star smear with Mimas
 
+#    command_line_str = 'N1656930617_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks through the D ring, photometry OK without ring subtraction 
+#    command_line_str = 'N1659250659_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, fails photometry 
+#    command_line_str = 'N1575647907_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, requires pred kernel 
+#    command_line_str = 'W1553000979_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, BL1, photometry OK
+#    command_line_str = 'W1620385882_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
+#    command_line_str = 'N1498395457_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
+
+#     command_line_str = 'N1459814000_1 --image-console-level debug --force-offset --display-offset-results' # Titan very small, stars require photometry
+#     command_line_str = 'N1466583494_1 --image-console-level debug --force-offset --display-offset-results' # Star offset completely wrong IRP0+MT3
+
+            #=============
+            #>>> RINGS <<<
+            #=============
+            
 #    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # Rings closeup - A ring - no features
 #    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results --rings-label-font courbd.ttf,30' # Colombo->Huygens closeup
 #    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
@@ -110,47 +128,64 @@ if len(command_list) == 0:
 #    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
 #    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
 
+            #==============
+            #>>> BODIES <<<
+            #==============
+            
 #    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Rhea and Dione overlapping
 #    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
 #    command_line_str = 'N1511728708_2 --force-offset --image-console-level debug --display-offset-results' # Rhea whole image
+
+            #=============
+            #>>> TITAN <<<
+            #=============
     
-#    command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results' # Titan a=35 CLEAR
-#    command_line_str = 'N1635365617_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 109 CLEAR
-#    command_line_str = 'N1527933271_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 163 CLEAR
+#     command_line_str = 'W1515969272_1 --force-offset --image-console-level debug --display-offset-results' # Titan a=35 CLEAR Sun=33
+#     command_line_str = 'N1635365617_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 109 CLEAR Sun=-90 + RHEA Behind
+#     command_line_str = 'N1527933271_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan phase 163 CLEAR Sun=-177
     
-#    command_line_str = 'W1561880145_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=12 VIO
-#    command_line_str = 'W1655808265_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=32 VIO
-#    command_line_str = 'W1683615178_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=45 VIO
-#    command_line_str = 'W1552216646_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=60 VIO
-#    command_line_str = 'W1748064618_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=80 VIO
-#    command_line_str = 'W1753508727_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=90 VIO
-#    command_line_str = 'W1760465018_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=110 VIO
-#    command_line_str = 'W1622977122_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=130 VIO
-#    command_line_str = 'W1717682790_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=155 VIO
+#     command_line_str = 'W1561880145_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=12 VIO
+#     command_line_str = 'W1655808265_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=32 VIO
+#     command_line_str = 'W1683615178_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=45 VIO
+#     command_line_str = 'W1552216646_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=60 VIO
+#     command_line_str = 'W1748064618_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=80 VIO
+#     command_line_str = 'W1753508727_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=90 VIO
+#     command_line_str = 'W1760465018_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=110 VIO
+#     command_line_str = 'W1622977122_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=130 VIO
+#     command_line_str = 'W1717682790_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=155 VIO
 
-#    command_line_str = 'N1624600010_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=12 RED
-#    command_line_str = 'N1580288525_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=18 RED with Saturn
-#    command_line_str = 'N1624879028_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=81 RED
-#    command_line_str = 'N1611563684_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=125 RED
-#    command_line_str = 'N1614174403_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=156 RED
+#     command_line_str = 'N1624600010_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=12 RED
+#     command_line_str = 'N1580288525_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=18 RED with Saturn
+#     command_line_str = 'N1624879028_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=81 RED
+#     command_line_str = 'N1611563684_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=125 RED
+#     command_line_str = 'N1614174403_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=156 RED
 
-#    command_line_str = 'W1537751816_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=65 CLEAR off edge
-#    command_line_str = 'N1702247210_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109, Rhea overlapping BL1 (RHEA 29,-3) (Titan 29,-5)
-#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=100, Rhea (Rhea -10,-2) (Titan -10,0)
-#    command_line_str = 'N1517095065_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=116 CLEAR (Titan 2,9)
-#    command_line_str = 'W1578213940_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge 256x256
-#    command_line_str = 'W1629878033_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge
-#    command_line_str = 'N1806009125_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=141, Rhea, Mimas BL1
+#     command_line_str = 'W1537751816_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=65 CLEAR off edge
+#     command_line_str = 'N1702247210_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109, Rhea overlapping BL1 (RHEA 29,-3) NO TITAN OFFSET XXX
+#     command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=100, Rhea (Rhea -10,-2) (Titan -10,0)
+#     command_line_str = 'N1517095065_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=116 CLEAR (Titan 2,9)
+#     command_line_str = 'W1578213940_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge 256x256
+#     command_line_str = 'W1629878033_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge
+    command_line_str = 'N1806009125_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=141, Rhea, Mimas BL1 modeloffset=102,9
 
-#    command_line_str = 'N1626123721_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 NAC version
-#    command_line_str = 'W1536376241_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 WAC version 512x12
+#     command_line_str = 'N1626123721_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 NAC version
+#     command_line_str = 'W1536376241_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 WAC version 512x12
 
-#    command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results' # Titan Stars -10,-2
+#     command_line_str = 'N1462654110_1 --image-console-level debug --force-offset --display-offset-results' # Titan very small a=69, CB3 NAC
+#     command_line_str = 'N1464500659_1 --image-console-level debug --force-offset --display-offset-results' # Titan very small a=64, IR3 NAC
+#     command_line_str = 'N1464500731_1 --image-console-level debug --force-offset --display-offset-results' # Titan very small a=64, MT3 NAC
 
-#    command_line_str = 'N1702239215_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 13,-5)
-#    command_line_str = 'N1702240651_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 14,-3)
-#    command_line_str = 'N1637959164_1 --force-offset --image-console-level debug --display-offset-results ' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
-#    command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? 
+#     command_line_str = 'N1686939958_1 --force-offset --image-console-level debug --display-offset-results' # Titan a=100 Stars -10,-2, model, Titan - second hump in profile from Tethys
+#     command_line_str = 'W1477434412_2 --force-offset --no-allow-stars --image-console-level debug --display-offset-results' # 
+
+#     command_line_str = 'N1702239215_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 13,-5)
+#     command_line_str = 'N1702240651_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=107 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 14,-3)
+#     command_line_str = 'N1637959164_1 --force-offset --image-console-level debug --display-offset-results ' # Titan a=105 CLEAR + TETHYS (TETHYS NOT VIS) (TITAN 0,5)
+#     command_line_str = 'N1635365691_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=109 CLEAR + RHEA?? BAD MODEL OFFSET XXX 
+
+            #==============
+            #>>> BOTSIM <<<
+            #==============
 
 #    command_line_str = 'W1506215893_1 N1506215893_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM 
 #    command_line_str = 'W1716174363_1 N1716174363_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
@@ -158,18 +193,14 @@ if len(command_list) == 0:
 #    command_line_str = 'W1477437523_2 N1477437523_2 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # BOTSIM
 #    command_line_str = 'W1610355001_1 N1610355001_1 --force-offset --image-console-level debug --no-allow-stars' # BOTSIM
 
-#    command_line_str = 'N1656930617_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks through the D ring, photometry OK without ring subtraction 
-#    command_line_str = 'N1659250659_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, fails photometry 
-#    command_line_str = 'N1575647907_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, requires pred kernel 
-#    command_line_str = 'W1553000979_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, BL1, photometry OK
-#    command_line_str = 'W1620385882_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
-#    command_line_str = 'N1498395457_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Medium streaks, IR2, photometry OK
 
 
 # MOSAIC TEST
 #    command_line_str = 'N1597187315_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars --body-cartographic-data ENCELADUS=T:/cdaps-results/mosaics/ENCELADUS/ENCELADUS_0.00_-30.00_F_F_BL1_0001'
 
-# BOOTSTRAPPING - ENCELADUS
+            #=================================
+            #>>> BOOTSTRAPPING - ENCELADUS <<<
+            #=================================
 
 #    command_line_str = '--force-offset --first-image-num 1487299402 --last-image-num 1487302209 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1516151439 --last-image-num 1516171418 --image-logfile-level debug --max-subprocesses 2'
@@ -185,12 +216,16 @@ if len(command_list) == 0:
 #    command_line_str = '--force-offset --first-image-num 1697700931 --last-image-num 1697717648 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1702359393 --last-image-num 1702361420 --image-logfile-level debug --max-subprocesses 2'
 
-# BOOTSRAPPING - MIMAS
+            #=============================
+            #>>> BOOTSTRAPPING - MIMAS <<<
+            #=============================
 
 #    command_line_str = '--force-offset --first-image-num 1501627117 --last-image-num 1501651303 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1521584495 --last-image-num 1521620702 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1644777693 --last-image-num 1644802455 --image-logfile-level debug --max-subprocesses 2'
 #    command_line_str = '--force-offset --first-image-num 1717565987 --last-image-num 1717571685 --image-logfile-level debug --max-subprocesses 2'
+
+#=========================
 
 #    command_line_str = 'N1511700120_1 W1511714612_1 N1511715316_2 N1511716650_2 N1511718003_2 N1511719101_2 W1511726740_1 --image-console-level debug --force-offset --no-allow-stars'
 #    command_line_str = 'N1511726828_2 N1511726954_2 N1511727079_2 N1511727217_2 N1511727361_2 N1511727503_2 N1511727641_2 N1511727774_2 N1511727899_2 N1511728035_2 N1511728175_2 N1511728315_2 N1511728440_2 N1511728581_2 N1511728708_2 N1511728833_2 N1511728958_2 N1511729097_2 N1511729338_2 N1511729463_2 N1511729588_2 --image-console-level debug --force-offset'
@@ -203,6 +238,10 @@ if len(command_list) == 0:
 #    command_line_str = 'N1669812089_1 --max-subprocesses 1 --retrieve-from-pds --results-in-s3 --main-console-level debug --image-console-level debug --force-offset'
 #     command_line_str = 'W1507076645_1 --image-console-level debug --main-console-level debug --force-offset --retrieve-from-pds'#--no-wac-offset'
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
+
+#TEMP
+#     command_line_str = 'W1539141688_1 --image-console-level debug --force-offset --display-offset-results'
+
     
     command_list = command_line_str.split()
 

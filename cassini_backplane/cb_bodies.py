@@ -699,13 +699,18 @@ def bodies_create_model(obs, body_name, inventory,
     
         if bodies_config['use_lambert']:
             restr_model = restr_bp.lambert_law(body_name).mvals
-            restr_model = restr_model.filled(0.).astype('float')
+            restr_model = restr_model.filled(0.).astype('float')                
+            if body_name == 'TITAN':
+                # Special case for Titan because of the atmospheric glow at
+                # high phase angles. The model won't be used for correlation,
+                # only for making the pretty offset PNG.
+                restr_model = restr_model+filt.maximum_filter(limb_mask, 3)
             # Make a slight glow even past the terminator
             restr_model = restr_model+0.01
             restr_model[restr_body_mask_inv] = 0.
         else:
             restr_model = restr_body_mask.astype('float')
-    
+        
         blur_amt = None
         if cartographic_data:
             for cart_body in sorted(cartographic_data.keys()):

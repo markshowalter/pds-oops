@@ -41,6 +41,7 @@ _LOGGING_NAME = 'cb.' + __name__
 
 _BASELINE_DB = None
 _PHASE_BIN_GRANULARITY = None
+_PHASE_BIN_WIDTH = None
 
 def titan_find_symmetry_offset(
            obs, trial_offset, sun_angle,
@@ -54,6 +55,9 @@ def titan_find_symmetry_offset(
     Inputs:
         obs                    The Observation.
         
+        trial_offset           A best guess of the offset - offset finding
+                               starts from here.
+                               
         sun_angle              The projected angle of the solar illumination
                                towards the center of Titan. 0 means direct
                                right-ward illumination and the angle moves
@@ -192,14 +196,44 @@ def titan_find_symmetry_offset(
             if (len(cluster1_list) > cluster_max_pixels or 
                 len(cluster2_list) > cluster_max_pixels):
                 continue
+            # Make sure the clusters are oriented in the correct direction
+            # given the known Sun angle. Sometimes bad clusters are found
+            # in the algorithm above when the intersections overlap too much.
+            # This causes symmetry finding to fail in big ways.
+            # See N1464500731_1.
+            bad = False
+            for c1 in cluster1_list:
+                for c2 in cluster2_list:
+                    y1, x1 = c1
+                    y2, x2 = c2
+                    c_angle = (np.arctan2(y2-y1, x2-x1)-oops.HALFPI) % oops.TWOPI
+#                     print c_angle*oops.DPR, sun_angle * oops.DPR
+                    if (not 
+                        (abs(c_angle-(sun_angle%oops.TWOPI)) < 15*oops.RPD or
+                         abs(c_angle-((sun_angle-oops.PI)%oops.TWOPI)) < 
+                         15*oops.RPD)):
+                        bad = True
+                        break
+                if bad:
+                    break
+            if bad:
+                continue
+                    
             ie_list.append((cluster1_list, cluster2_list))
-#            print cluster1_list
-#            print cluster2_list
-#            print
-#            plt.plot([cluster1_list[0][1],cluster2_list[0][1]],
-#                     [1024-cluster1_list[0][0],1024-cluster2_list[0][0]], '-')
+            if display_total_intersect:
+                print cluster1_list
+                print cluster2_list
+                print
+                for c1 in cluster1_list:
+                    for c2 in cluster2_list:
+                        plt.plot([c1[1],c2[1]],
+                                 [1024-c1[0],1024-c2[0]], '-')
     
-#    plt.show()
+    if display_total_intersect:
+        plt.show()
+    
+    if len(ie_list) == 0:
+        return None, None
     
     # Across Sun angle is perpendicular to main sun angle    
     a_sun_angle = sun_angle + oops.HALFPI
@@ -272,7 +306,8 @@ def titan_find_symmetry_offset(
             best_max_diff = cluster_diff
             best_max_diff_dist = along_path_dist
             
-    if titan_size_u >= offset_limit or titan_size_v >= offset_limit:    
+    if (titan_size_u is not None and 
+        (titan_size_u >= offset_limit or titan_size_v >= offset_limit)):    
         best_max_diff_dist = 0
     else:
         if (best_max_diff_dist is None or 
@@ -282,7 +317,9 @@ def titan_find_symmetry_offset(
     best_rms = 1e38
     best_offset = None
 
-    max_diff_limit = int(np.sqrt(titan_size_u**2+titan_size_v**2) / 2)
+    max_diff_limit = 0.
+    if titan_size_u is not None:
+        max_diff_limit = int(np.sqrt(titan_size_u**2+titan_size_v**2) / 2)
     
 #     print 'MAX DIFF', best_max_diff_dist, 'LIMIT', max_diff_limit
      
@@ -357,6 +394,8 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
              offset[1] + titan_center[1])
         if (not 0 <= u < data.shape[1] or
             not 0 <= v < data.shape[0]):
+            profile_x.append(along_path_dist * titan_resolution)
+            profile_y.append(0)
             continue
         
         profile_x.append(along_path_dist * titan_resolution)
@@ -368,26 +407,27 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
     return profile_x, profile_y
 
 def _find_baseline(filter, phase_angle):
-    global _BASELINE_DB, _PHASE_BIN_GRANULARITY
+    global _BASELINE_DB, _PHASE_BIN_GRANULARITY, _PHASE_BIN_WIDTH
     if _BASELINE_DB is None:
         filename = os.path.join(CB_SUPPORT_FILES_ROOT,
                                 'titan-profiles.pickle')
         fp = open(filename, 'rb')
         _PHASE_BIN_GRANULARITY = pickle.load(fp)
+        _PHASE_BIN_WIDTH = pickle.load(fp)
         _BASELINE_DB = pickle.load(fp)
         fp.close()
     
     if filter not in _BASELINE_DB:
         return None
     
-    phase_bin = int(phase_angle / _PHASE_BIN_GRANULARITY)
+    phase_bin = int(np.round(phase_angle / _PHASE_BIN_GRANULARITY))
     entry = _BASELINE_DB[filter][phase_bin]
     if entry is None:
         return None
     
-    profile_x, profile_y, num_images = entry
+    profile_x, profile_y, resolution, num_images, bin_width = entry
      
-    return profile_x, profile_y, num_images
+    return profile_x, profile_y, resolution, num_images, bin_width
 
 def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     """Navigate Titan photometrically.
@@ -413,13 +453,16 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         'offset'           The final navigated offset.
         'confidence'       The confidence level (0-1) of the navigation.
         'entirely_visible' True if Titan+atmosphere is entirely visible even if
-                           shifted by the maximum amonut.
+                           shifted by the maximum amount.
         'filter_phase_ok'  True if the filter/phase angle combination was found.
         'lambert_offset'   The offset found by correlation with a Lambert law
                            model. Only used in cases where Titan is small.
         'symmetry_offset'  The offset used to create the axis of symmetry.
         'num_images'       The number of WAC images that went into making the
                            baseline profile used for navigation.
+        'uncertainty'      The uncertainty in the result, computed from the
+                           relative resolutions of the baseline profile and
+                           this image.
         'start_time'       The time (s) when titan_navigate was called.
         'end_time'         The time (s) when titan_navigate returned.
     """
@@ -439,6 +482,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['lambert_offset'] = None
     metadata['symmetry_offset'] = None
     metadata['num_images'] = None
+    metadata['uncertainty'] = None
     set_obs_bp(obs)
     data = obs.data
 
@@ -476,8 +520,9 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     titan_radius = titan_inv['outer_radius'] 
     titan_radius_pix = int(titan_radius / titan_resolution)
 
-    logger.debug('Titan+atmosphere center U,V %d,%d / Resolution %.2f / Radius (km) %.2f / '+
-                 'Radius (pix) %d', titan_center[0], titan_center[1],
+    logger.debug('Titan+atmosphere center U,V %d,%d / Resolution %.2f / '+
+                 'Radius (km) %.2f / Radius (pix) %d', 
+                 titan_center[0], titan_center[1],
                  titan_resolution, titan_radius, titan_radius_pix)
 
     # Hierarchy of confidence that Titan is really fully visible in the image
@@ -502,13 +547,15 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
           u_max < obs.data.shape[1] and
           v_min >= 0 and
           v_max < obs.data.shape[0]):
-        logger.info('Titan+atmosphere entirely visible only without extended FOV')
+        logger.info('Titan+atmosphere entirely visible only without extended '+
+                    'FOV')
         confidence_size = 0.8
     elif (u_min2 >= 0 and 
           u_max2 < obs.data.shape[1] and
           v_min2 >= 0 and
           v_max2 < obs.data.shape[0]):
-        logger.info('Titan body entirely visible only without extended FOV')
+        logger.info('Titan body (not atmosphere) entirely visible only without'+
+                    ' extended FOV')
         confidence_size = 0.2
     else:
         logger.info('Titan body not entirely visible - aborting')
@@ -521,23 +568,32 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     phase_angle = obs.bp.center_phase_angle('TITAN+ATMOSPHERE').vals
     ret = _find_baseline(filter, phase_angle)
 
+    phase_bin = int(np.round(phase_angle / _PHASE_BIN_GRANULARITY))
     if ret is None:
         logger.info('No baseline profile for filter %s and '+
-                    'phase angle %.2f', filter, phase_angle*oops.DPR)
+                    'phase angle %.2f (bin phase %.2f)', filter, 
+                    phase_angle*oops.DPR, 
+                    phase_bin*_PHASE_BIN_GRANULARITY*oops.DPR)
         metadata['filter_phase_ok'] = False
         metadata['end_time'] = time.time()
         return metadata
     
     metadata['filter_phase_ok'] = True
 
-    baseline_x, baseline_profile, num_images = ret
+    (baseline_x, baseline_profile, baseline_resolution, 
+     num_images, bin_width) = ret
     metadata['num_images'] = num_images
+    metadata['uncertainty'] = baseline_resolution / titan_resolution
     
-    logger.info('Baseline profile for filter %s phase angle %.2f was '+
-                'constructed from %d images', filter, phase_angle*oops.DPR,
-                num_images)
+    logger.info('Baseline profile - %s/%.2f (bin %.2f) - %d images, '+
+                'bin width %.2f, resolution %.2f', filter, 
+                phase_angle*oops.DPR, 
+                phase_bin*_PHASE_BIN_GRANULARITY*oops.DPR,
+                num_images,
+                bin_width*oops.DPR, baseline_resolution)
 
     confidence_images = 0.9 - 0.7 / num_images
+    confidence_images *= _PHASE_BIN_WIDTH / bin_width
         
     # Find the projected angle of the solar illumination to the center of
     # Titan's disc.
@@ -583,15 +639,29 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     # big compared to the pointing error limits. But in other cases, we need
     # to come up with a reasonable guess of where Titan is in the image first.
     # We do this by correlating a Lambert law model of Titan with the image.
+    # There's no point in trying this if the phase angle is too large, though,
+    # because Titan doesn't look at all like a Lambert sphere in those cases.
     trial_offset = (0,0)
-    if offset_limit > titan_radius_pix/2:
-        bp_lambert = obs.bp.lambert_law('TITAN+ATMOSPHERE').mvals.astype('float')
+    if True or offset_limit > titan_radius_pix/2: # ALWAYS DO IT
+        not_intercept = np.logical_not(obs.bp.where_intercepted('TITAN').
+                                       vals.astype('float'))
+        bp_lambert = obs.bp.lambert_law('TITAN+ATMOSPHERE').mvals
+        bp_lambert = bp_lambert.filled(0.).astype('float')
+        # Make a slight glow even past the terminator
         bp_lambert = bp_lambert+0.01
+        bp_lambert[not_intercept] = 0.
+        if phase_angle > 145*oops.RPD:
+            bp_lambert = not_intercept.astype('float')
+        # We can't just use max_error_u/v here because the Lambert model isn't
+        # going to match Titan exactly because of the messy atmosphere.
+        # So we look over a much larger range (10% of the total diameter)
+        # because that's about how big the atmosphere is in comparison
+        # to the main body.
         model_offset_list = find_correlation_and_offset(
                                    obs.data,
                                    bp_lambert, search_size_min=0,
-                                   search_size_max=(max_error_u, 
-                                                    max_error_v))
+                                   search_size_max=(titan_radius_pix/5+max_error_u, 
+                                                    titan_radius_pix/5+max_error_v))
         if model_offset_list is None or len(model_offset_list) == 0:
             logger.info('Attempt to locate Titan with Lambert law model failed')
             metadata['lambert_offset'] = False
@@ -600,7 +670,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         trial_offset = model_offset_list[0][0]
         logger.info('Lambert trial offset U,V %d,%d',
                     trial_offset[0], trial_offset[1])
-        sym_offset_limit /= 4 # We know we're pretty close
+        sym_offset_limit = min(offset_limit, 
+                               int(titan_radius_pix * 0.75)) # We know we're pretty close
     # Find the location of maximum symmetry        
     offset, rms = titan_find_symmetry_offset(
                      obs, trial_offset, sun_angle,
@@ -608,8 +679,6 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
                      cluster_gap_threshold, cluster_max_pixels,
                      sym_offset_limit, mask=model_mask,
                      titan_size_u=titan_size_u, titan_size_v=titan_size_v)
-    
-#     offset = (-29,-1)
     
     if offset is None:
         logger.debug('No axis of symmetry found - aborting')
@@ -626,6 +695,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     profile_x, profile_y = titan_along_track_profile(
                      obs, offset, sun_angle, titan_center,
                      titan_radius_pix+offset_limit, titan_resolution)
+    if phase_angle > oops.HALFPI:
+        profile_y = profile_y[::-1]
 
 #     plt.plot(profile_x, profile_y)
 #     plt.show()
@@ -648,6 +719,17 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     along_track_distance = find_shift_1d(ext_baseline_profile, 
                                          profile, 
                                          offset_limit_km)
+    if False:
+        assert _TKINTER_AVAILABLE
+        plt.figure()
+        plt.plot(baseline_x, baseline_profile, '-', color='black')
+        plt.plot(ext_baseline_x, profile, '-', color='red')
+        new_titan_x = ext_baseline_x + along_track_distance
+        plt.plot(new_titan_x, profile, '-', color='green')
+        plt.show()
+
+    if phase_angle > oops.HALFPI:
+        along_track_distance = -along_track_distance
     along_track_pixel = int(np.round(along_track_distance / titan_resolution))
 
     logger.debug('Along symmetry distance %.f km, %d pixels',
@@ -658,20 +740,18 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
 
     confidence = confidence_size * confidence_images
     
-    logger.info('Final Titan offset U,V %d,%d (%.2f)', 
-                new_offset[0], new_offset[1], confidence)
+    logger.info('Final Titan offset U,V %d,%d (%.2f), uncertainty %.2f', 
+                new_offset[0], new_offset[1], confidence,
+                metadata['uncertainty'])
+    
+    if (abs(new_offset[0]) >= extend_fov[0] or 
+        abs(new_offset[1]) >= extend_fov[1]):
+        logger.info('Titan offset is beyond allowable limits - aborting')
+        new_offset = None
+        confidence = None
+        
     metadata['offset'] = new_offset
     metadata['confidence'] = confidence
-
-    if False:
-        assert _TKINTER_AVAILABLE
-        plt.figure()
-        plt.plot(baseline_x, baseline_profile, '-', color='black')
-        plt.plot(ext_baseline_x, profile, '-', color='red')
-        new_titan_x = ext_baseline_x + along_track_distance
-        new_profile = profile
-        plt.plot(new_titan_x, new_profile, '-', color='green')
-        plt.show()
 
     # We can't leave this hanging around because it confuses things...
     # especially inventory()
