@@ -570,7 +570,7 @@ def wait_for_all():
                 del SUBPROCESS_LIST[i]
                 if old_sqs_handle is not None:
                     SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                              ReceiptHandle=sqs_handle)
+                                              ReceiptHandle=old_sqs_handle)
                 break
         time.sleep(1)
 
@@ -1114,11 +1114,10 @@ if arguments.retrieve_from_pds and not arguments.no_update_indexes:
                 break
         index_no += 1
         
-main_logger.info('')
-file_log_arguments(arguments, main_logger.info)
-main_logger.info('')
-
 if arguments.use_sqs:
+    main_logger.info('')
+    main_logger.info('*** Using SQS to retrieve filenames')
+    main_logger.info('')
     SQS_QUEUE = None
     try:
         SQS_QUEUE = SQS_RESOURCE.get_queue_by_name(
@@ -1157,6 +1156,9 @@ if arguments.use_sqs:
                     SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
                                               ReceiptHandle=receipt_handle)
 else:
+    main_logger.info('')
+    file_log_arguments(arguments, main_logger.info)
+    main_logger.info('')
     for image_path in file_yield_image_filenames_from_arguments(
                                                     arguments,
                                                     arguments.retrieve_from_pds):

@@ -63,7 +63,7 @@ parser.add_argument(
     help='''The minimum number of entries we allow in the queue before 
     starting to fill again''')
 parser.add_argument(
-    '--drain_delat', type=int, default=10,
+    '--drain_delay', type=int, default=10,
     help='''The number of seconds to wait between polling for queue length''')
 parser.add_argument(
     '--aws-results-bucket', default='seti-cb-results',
@@ -160,8 +160,6 @@ SQS_QUEUE = SQS_RESOURCE.create_queue(QueueName=QUEUE_NAME,
 #                                                   'FifoQueue': 'true',
                                                   })
 SQS_QUEUE_URL = SQS_QUEUE.url
-attributes = SQS_CLIENT.get_queue_attributes(QueueUrl=SQS_QUEUE_URL, AttributeNames=['All'])
-print attributes
 
 main_log_path = arguments.main_logfile
 main_log_path_local = main_log_path
@@ -224,8 +222,6 @@ for image_path in file_yield_image_filenames_from_arguments(
                                                 arguments.retrieve_from_pds):
     feed_one_image(image_path)
     num_files_processed += 1
-
-wait_for_all()
 
 end_time = time.time()
 
