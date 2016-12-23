@@ -339,9 +339,15 @@ RINGS_DEFAULT_CONFIG = {
     # is shaded approximately this many pixels wide.
     'fiducial_ephemeris_width': 30,
      
-    # There must be at least this number of pixels of curvature present for
-    # rings to be used for correlation.
-    'curvature_threshold': 5,
+    # There must be at least this much curvature present for rings to be used 
+    # for correlation.
+    'min_curvature_low_confidence': (0.05, 0.5),
+    'min_curvature_high_confidence': (0.35, 1.0),
+    
+    # If there is at least this much curvature, then we can reduce the number
+    # of required fiducial features accordingly.
+    'curvature_to_reduce_features': oops.HALFPI, # 90 degrees visible
+    'curvature_reduced_features': 1,
     
     # The minimum ring emission angle in the image must be at least this
     # many degrees away from 90 for rings to be used for correlation.

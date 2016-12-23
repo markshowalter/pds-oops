@@ -6,18 +6,20 @@
 # Exported routines:
 #    rings_create_model
 #    rings_create_model_from_image
-#    rings_sufficient_curvature
+#    rings_curvature_amount
 #    rings_fiducial_features
+#
+#    rings_offset_radial_projection
+#
+#    rings_generate_longitudes
+#    rings_generate_radii
+#    rings_longitude_radius_to_pixels
 #
 #    rings_fring_inertial_to_corotating
 #    rings_fring_corotating_to_inertial
 #    rings_fring_radius_at_longitude
 #    rings_fring_longitude_radius
 #    rings_fring_pixels
-#
-#    rings_longitude_radius_to_pixels
-#    rings_generate_longitudes
-#    rings_generate_radii
 #
 #    rings_reproject
 #    rings_mosaic_init
@@ -35,6 +37,14 @@ import numpy.ma as ma
 import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
 from PIL import Image, ImageDraw, ImageFont
+
+_TKINTER_AVAILABLE = True
+try:
+    import matplotlib.pyplot as plt
+    import Tkinter as tk
+    import imgdisp
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 import polymath
 import oops
@@ -710,101 +720,39 @@ _RINGS_UVIS_OCCULTATION = 'UVIS_HSP_2008_231_BETCEN_I_TAU_01KM'
 
 ### Curvature ###
 
-def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
-    """Determine if the rings in an image have sufficient curvature."""
+def rings_curvature_amount(obs, extend_fov=(0,0), rings_config=None):
+    """Determine the amount of curvature the rings have."""
     
-    logger = logging.getLogger(_LOGGING_NAME+'.rings_sufficient_curvature')
+    logger = logging.getLogger(_LOGGING_NAME+'.rings_curvature_amount')
 
     if rings_config is None:
         rings_config = RINGS_DEFAULT_CONFIG
 
     set_obs_ext_bp(obs, extend_fov)
-        
+
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     if np.all(radii.mask):
-        logger.debug('No main rings in image - returning bad curvature')
-        return False
+        logger.debug('No main rings in image')
+        return None
 
-    min_radius = np.min(radii)
-    max_radius = np.max(radii)
-
-    longitudes = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float') 
-    min_longitude = np.min(longitudes)
-    max_longitude = np.max(longitudes)
-
-    logger.debug('Radii %.2f to %.2f Longitudes %.2f to %.2f',
-                 min_radius, max_radius, 
-                 min_longitude*oops.DPR, max_longitude*oops.DPR)
+    bp_gradient = obs.ext_bp.ring_gradient_angle('saturn:ring')
+    # We only care about the main rings because those are the only rings we
+    # have fiducial features for
+    bp_gradient = bp_gradient.mask_where(radii < RINGS_MIN_RADIUS)
+    bp_gradient = bp_gradient.mask_where(radii > RINGS_MAX_RADIUS)
+#     imgdisp.ImageDisp([bp_gradient.vals], canvas_size=(512,512))
+#     tk.mainloop()
+    gradient = bp_gradient.mvals.compressed().flatten()
+    diff1 = np.max(gradient % oops.TWOPI) - np.min(gradient % oops.TWOPI)
+    diff2 = (np.max((gradient+oops.PI) % oops.TWOPI) -
+             np.min((gradient+oops.PI) % oops.TWOPI))
+    diff = min(diff1, diff2)
+#     std1 = np.std(gradient % oops.TWOPI)
+#     std2 = np.std((gradient+oops.PI) % oops.TWOPI)
+#     std = min(std1, std2)
     
-    if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
-        logger.debug('No main rings in image - returning bad curvature')
-        return False
-
-    min_radius = max(min_radius, RINGS_MIN_RADIUS)
-    max_radius = min(max_radius, RINGS_MAX_RADIUS)
-    
-    # Find the approximate radius with the greatest span of longitudes
-    
-    best_len = 0
-    best_radius = None
-    best_longitudes = None
-
-    radius_step = (max_radius-min_radius) / 10.
-    longitude_step = (max_longitude-min_longitude) / 100.
-    for radius in rings_generate_radii(min_radius, max_radius, 
-                                       radius_resolution=radius_step):
-        trial_longitudes = rings_generate_longitudes(
-                                         min_longitude, max_longitude,
-                                         longitude_resolution=longitude_step)
-        trial_radius = np.empty(trial_longitudes.shape)
-        trial_radius[:] = radius
-        (new_longitudes, new_radius,
-         u_pixels, v_pixels) = _rings_restrict_longitude_radius_to_obs(
-                                         obs, trial_longitudes, trial_radius,
-                                         extend_fov=extend_fov)
-        if len(new_longitudes) > best_len:
-            best_radius = radius
-            best_longitudes = new_longitudes
-            best_len = len(new_longitudes)
-    
-    if best_len == 0:
-        logger.debug('No valid longitudes - returning bad curvature')
-        return False    
-    
-    logger.debug('Optimal radius %.2f longitude range %.2f to %.2f',
-                 best_radius, best_longitudes[0]*oops.DPR,
-                 best_longitudes[-1]*oops.DPR)
-    
-    # Now for this optimal radius, find the pixel values of the minimum
-    # and maximum available longitudes as well as a point halfway between.
-    # Then see how far it is from the line between the extrema points
-    # to the point of closest approach for the halfway point.
-    
-    line_radius = np.empty(3)
-    line_radius[:] = best_radius
-    line_longitude = np.empty(3)
-    line_longitude[0] = best_longitudes[0]
-    line_longitude[2] = best_longitudes[-1]
-    line_longitude[1] = (line_longitude[0]+line_longitude[2])/2
-    
-    u_pixels, v_pixels = rings_longitude_radius_to_pixels(
-                                      obs, line_longitude, line_radius)
-    
-    logger.debug('Linear pixels %.2f,%.2f / %.2f,%.2f / %.2f,%.2f',
-                 u_pixels[0], v_pixels[0], u_pixels[1], v_pixels[1],
-                 u_pixels[2], v_pixels[2])
-    
-    mid_pt_u = (u_pixels[0]+u_pixels[2])/2
-    mid_pt_v = (v_pixels[0]+v_pixels[2])/2
-    
-    dist = np.sqrt((mid_pt_u-u_pixels[1])**2+(mid_pt_v-v_pixels[1])**2)
-    
-    if dist < rings_config['curvature_threshold']:
-        logger.debug('Distance %.2f is too close for curvature', dist)
-        return False
-    
-    logger.debug('Distance %.2f is far enough for curvature', dist)
-    return True
+    logger.debug('Rings curvature is %.5f', diff)
+    return diff
 
 
 ### Fiducial Features ###
@@ -1757,6 +1705,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                     a number < 1.
             'fiducial_features_ok'  True if the number of fidcual features
                                     is greater than the threshold.
+            'confidence'            The confidence in how well this model will
+                                    do in correlation.
             'start_time'            The time (s) when rings_create_model
                                     was called.
             'end_time'              The time (s) when rings_create_model
@@ -1781,8 +1731,9 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['occluded_by'] = []
     metadata['num_good_fiducial_features'] = 0
     metadata['fiducial_features'] = []
-    metadata['fiducial_features_ok'] = None
     metadata['fiducial_blur'] = None
+    metadata['fiducial_features_ok'] = None
+    metadata['confidence'] = None
     metadata['start_time'] = start_time
     
     set_obs_ext_bp(obs, extend_fov)
@@ -1813,18 +1764,26 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         logger.info('Main rings present but not visible - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
-        
-    if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
-                                      rings_config=rings_config):
+
+    min_curv_lc, min_curv_lc_conf = rings_config['min_curvature_low_confidence']    
+    min_curv_hc, min_curv_hc_conf = rings_config['min_curvature_high_confidence']    
+    curvature_amt = rings_curvature_amount(obs, extend_fov=extend_fov, 
+                                           rings_config=rings_config) 
+    if curvature_amt < min_curv_lc:
         metadata['curvature_ok'] = False     
         logger.info('Too little curvature')
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata, None
+        confidence = 0.
     else:
         logger.info('Curvature OK')
-        metadata['curvature_ok'] = True     
-       
+        metadata['curvature_ok'] = True
+        confidence = ((curvature_amt-min_curv_lc) * 
+                      (float(min_curv_hc_conf)-min_curv_lc_conf)/
+                      (float(min_curv_hc-min_curv_lc)) + min_curv_lc_conf)
+        confidence = np.clip(confidence, 0., 1.)
+    
     emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
     min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
     if min_emission < rings_config['emission_threshold']:
@@ -1838,15 +1797,21 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     else:
         logger.debug('Minimum emission angle %.2f from 90 OK', min_emission)
         metadata['emission_ok'] = True
-    
+
+        required_features = rings_config['fiducial_feature_threshold']
+        if curvature_amt >= rings_config['curvature_to_reduce_features']:
+            required_features = rings_config['curvature_reduced_features']
+            logger.debug('Allowing reduced number of fiducial features due to '+
+                         'high curvature')
+        logger.debug('Requiring %d features', required_features)
+            
         num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
                                              obs, extend_fov, rings_config)
         metadata['num_good_fiducial_features'] = num_features
         metadata['fiducial_features'] = fiducial_features
         metadata['fiducial_blur'] = fiducial_blur
         
-        fiducial_features_ok = (num_features >=
-                                rings_config['fiducial_feature_threshold'])
+        fiducial_features_ok = num_features >= required_features
         metadata['fiducial_features_ok'] = fiducial_features_ok
         
         if not fiducial_features_ok:
@@ -1962,7 +1927,9 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             logger.info('Rings are entirely shadowed - returning null model')
             metadata['end_time'] = time.time()
             return None, metadata, None
-    
+
+    logger.info('Final confidence %.2f', confidence)
+    metadata['confidence'] = confidence    
     metadata['end_time'] = time.time()
     return model, metadata, model_text
 

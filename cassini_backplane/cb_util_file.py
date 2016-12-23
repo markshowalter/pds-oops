@@ -121,6 +121,9 @@ def file_add_selection_arguments(parser):
         help='''A CSV file downloaded from PDS that contains filespecs of images
     to process''')
     parser.add_argument(
+        '--image-filelist', action='append',
+        help='''A file that contains image names of images to process''')
+    parser.add_argument(
         '--has-offset-file', action='store_true', default=False,
         help='Only process images that already have an offset file')
     parser.add_argument(
@@ -163,8 +166,13 @@ def file_log_arguments(arguments, log):
         for filename in arguments.volume:
             log('        %s', filename)
     if arguments.image_pds_csv:
-        log('*** Images restricted to those from PDS CSV %s',
-            arguments.image_pds_csv)
+        log('*** Images restricted to those from PDS CSV:')
+        for filename in arguments.image_pds_csv:
+            log('        %s', filename)
+    if arguments.image_filelist:
+        log('*** Images restricted to those from file:')
+        for filename in arguments.image_filelist:
+            log('        %s', filename)
 
 def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
     if arguments.image_full_path:
@@ -196,6 +204,12 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                                                                     '')
                     _, filespec = os.path.split(filespec)
                     restrict_image_list.append(filespec)
+
+    if arguments.image_filelist:
+        for filename in arguments.image_filelist:
+            with open(filename, 'r') as fp:
+                for line in fp:
+                    restrict_image_list.append(line.strip())
     
     restrict_camera = 'NW'
     if arguments.nac_only:

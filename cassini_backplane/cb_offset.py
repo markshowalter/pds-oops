@@ -869,6 +869,8 @@ def master_find_offset(obs,
 
         model_blur_amount = None
         
+        confidence_list = []
+        
         # Deal with bodies first
                 
         for body_model, body_metadata, body_text in navigable_bodies_model_list:
@@ -884,6 +886,7 @@ def master_find_offset(obs,
                 continue
             body_model_list.append(body_model)
             used_model_str_list.append(body_name)
+            confidence_list.append(body_metadata['confidence'])
             if body_metadata['body_blur'] is not None:
                 if model_blur_amount is None:
                     model_blur_amount = body_metadata['body_blur']
@@ -933,6 +936,7 @@ def master_find_offset(obs,
             (rings_allow_blur or rings_features_blurred is None)):
             use_rings_model = True 
             used_model_str_list.append('RINGS')
+            confidence_list.append(rings_metadata['confidence'])
             if rings_features_blurred is not None:
                 logger.info('Blurring model by at least %f because of rings',
                             rings_features_blurred)
@@ -942,6 +946,11 @@ def master_find_offset(obs,
                 model_blur_amount = max(model_blur_amount,
                                         rings_features_blurred)
     
+        # Degrade the confidence as needed
+        model_confidence *= np.sqrt(np.sum(np.array(confidence_list)**2))
+        
+        logger.debug('Confidence %.2f', model_confidence)
+        
         metadata['model_contents'] = used_model_str_list
         logger.info('Model contains %s', str(used_model_str_list))
         final_model = None
@@ -1222,6 +1231,12 @@ def master_find_offset(obs,
                     offset = model_offset
                     metadata['used_objects_type'] = 'MODEL'
 
+    if (abs(offset[0]) > extend_fov[0] or 
+        abs(offset[1]) > extend_fov[1]):
+        logger.info('Final offset is beyond maximum allowable offset!')
+        offset = None
+        metadata['offset_winner'] = None 
+        
     logger.info('Summary:')
     if stars_offset is None:
         logger.info('  Final star offset     N/A')
@@ -1244,7 +1259,7 @@ def master_find_offset(obs,
 
     if botsim_offset is not None:
         logger.info('  FINAL OFFSET SET BY BOTSIM')
-        
+
     if offset is None:
         logger.info('  Final combined offset FAILED')
     else:

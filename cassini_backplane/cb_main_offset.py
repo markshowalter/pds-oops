@@ -98,27 +98,27 @@ if len(command_list) == 0:
             #>>> RINGS <<<
             #=============
             
-#    command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # Rings closeup - A ring - no features
-#    command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results --rings-label-font courbd.ttf,30' # Colombo->Huygens closeup
-#    command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Colombo->Huygens closeup
-#    command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup
-#    command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Wide angle ring with full B ring gap
+#     command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # Rings closeup - A ring - no features
+#     command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - curv 1.58
+#     command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.10881 OK
+#     command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.03632 Minimally OK
+#     command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Colombo->Huygens closeup - Curv 0.07357 OK
+#     command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.09491 OK 
+#     command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Wide angle ring with full B ring gap - Curv 2.49766 OK for reduced features
 
-#    command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature
-#    command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature
-#    command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature
-#    command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur, low features, and stars
-#    command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur and stars
-#    command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars
-#    command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars
-#    command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - too low res, but enough other features
-#    command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - star and model match
-#    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence
-#    command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # Star streaks through the rings but stars in wrong place
-#    command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model but not used due to blurring
-#    command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # Distant WAC ring
+#     command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.02914 Not OK
+#     command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.01333 Very Not OK
+#     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.00770 Very Not OK
+#     command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur, low features, and stars - Curv 0.03719 Not really OK
+#     command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur and stars - Curv 0.06712 OK
+#     command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.82310 OK
+#     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.73527 OK
+#     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - too low res, but enough other features - Curv 0.54919 OK
+#     command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - star and model match - Curv 0.31104 OK
+#     command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
+#     command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # Star streaks through the rings but stars in wrong place - Curv N/A
+#     command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model but not used due to blurring - Curv 0.22336 OK
+#     command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # Distant WAC ring - Curv 6.28 OK for reduced features
 
 #    command_line_str = 'N1495327885_1 --force-offset --image-console-level debug --display-offset-results' # Closeup with multiple gaps and ringlets
 #    command_line_str = 'N1498373872_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
@@ -127,6 +127,13 @@ if len(command_list) == 0:
 #    command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res, other features out of frame
 #    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
 #    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
+
+#     command_line_str = 'N1459733315_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Tethys and rings - curv 3.094
+#     command_line_str = 'N1454732332_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
+#     command_line_str = 'N1454738672_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
+#     command_line_str = 'N1454939333_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
+#     command_line_str = 'N1455732740_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
+
 
             #==============
             #>>> BODIES <<<
@@ -166,7 +173,7 @@ if len(command_list) == 0:
 #     command_line_str = 'N1517095065_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=116 CLEAR (Titan 2,9)
 #     command_line_str = 'W1578213940_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge 256x256
 #     command_line_str = 'W1629878033_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=126 CLEAR off edge
-    command_line_str = 'N1806009125_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=141, Rhea, Mimas BL1 modeloffset=102,9
+#     command_line_str = 'N1806009125_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=141, Rhea, Mimas BL1 modeloffset=102,9
 
 #     command_line_str = 'N1626123721_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 NAC version
 #     command_line_str = 'W1536376241_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Titan a=61, MT3 WAC version 512x12
@@ -240,7 +247,7 @@ if len(command_list) == 0:
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
 
 #TEMP
-#     command_line_str = 'W1539141688_1 --image-console-level debug --force-offset --display-offset-results'
+    command_line_str = ' N1459804399_1 --image-console-level debug --force-offset --display-offset-results'
 
     
     command_list = command_line_str.split()
@@ -259,7 +266,7 @@ parser = argparse.ArgumentParser(
 ###########################
 parser.add_argument(
     '--retrieve-from-pds', action='store_true',
-    help='''Retrieve the image file from pds-rings.seti.org instead of 
+    help='''Retrieve the image file and indexes from pds-rings.seti.org instead of 
             from the local disk''')
 parser.add_argument(
     '--saturn-kernels-only', action='store_true',
@@ -271,9 +278,15 @@ parser.add_argument(
     '--no-update-indexes', action='store_true',
     help='''Don\'t update the index files from the PDS''')
 parser.add_argument(
+    '--use-sqs', action='store_true',
+    help='''Retrieve filenames from an SQS queue; ignore all file selection arguments''')
+parser.add_argument(
+    '--sqs-queue-name', type=str, default='cdapsfeeder',
+    help='''The name of the SQS queue; defaults to "cdapsfeeder"''')
+parser.add_argument(
     '--aws', action='store_true',
     help='''Set for running on AWS EC2; implies --retrieve-from-pds 
-            --results-in-s3 --saturn-kernels-only --no-overlay-file
+            --results-in-s3  --use-sqs --saturn-kernels-only --no-overlay-file
             --no-update-indexes''')
 parser.add_argument(
     '--aws-results-bucket', default='seti-cb-results',
@@ -435,6 +448,7 @@ if arguments.aws:
     arguments.saturn_kernels_only = True
     arguments.no_overlay_file = True
     arguments.no_update_indexes = True
+    arguments.use_sqs = True
 if arguments.results_in_s3:
     RESULTS_DIR = ''
 
@@ -496,7 +510,7 @@ def collect_cmd_line(image_path):
 
 SUBPROCESS_LIST = []
 
-def run_and_maybe_wait(args, image_path, bootstrapped):
+def run_and_maybe_wait(args, image_path, bootstrapped, sqs_handle):
     said_waiting = False
     while len(SUBPROCESS_LIST) == arguments.max_subprocesses:
         if not said_waiting:
@@ -506,6 +520,7 @@ def run_and_maybe_wait(args, image_path, bootstrapped):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 bootstrapped = SUBPROCESS_LIST[i][2]
+                old_sqs_handle = SUBPROCESS_LIST[i][3]
                 filename = file_clean_name(old_image_path)
                 if arguments.results_in_s3:
                     results = filename + ' - Job completed'
@@ -520,6 +535,9 @@ def run_and_maybe_wait(args, image_path, bootstrapped):
                     results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
+                if old_sqs_handle is not None:
+                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=sqs_handle)
                 break
         if len(SUBPROCESS_LIST) == arguments.max_subprocesses:
             time.sleep(1)
@@ -527,7 +545,7 @@ def run_and_maybe_wait(args, image_path, bootstrapped):
     main_logger.debug('Spawning subprocess %s', str(args))
         
     pid = subprocess.Popen(args)
-    SUBPROCESS_LIST.append((pid, image_path, bootstrapped))
+    SUBPROCESS_LIST.append((pid, image_path, bootstrapped, sqs_handle))
 
 def wait_for_all():
     while len(SUBPROCESS_LIST) > 0:
@@ -535,6 +553,7 @@ def wait_for_all():
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 bootstrapped = SUBPROCESS_LIST[i][2]
+                old_sqs_handle = SUBPROCESS_LIST[i][3]
                 filename = file_clean_name(old_image_path)
                 if arguments.results_in_s3:
                     results = filename + ' - Job completed'
@@ -549,6 +568,9 @@ def wait_for_all():
                     results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
+                if old_sqs_handle is not None:
+                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=sqs_handle)
                 break
         time.sleep(1)
 
@@ -561,13 +583,12 @@ def wait_for_all():
 def copy_file_to_s3(src, dest):
     main_logger.debug('Copying S3 %s to %s:%s', src, 
                       arguments.aws_results_bucket, dest)
-    s3 = boto3.client('s3')
-    s3.upload_file(src, arguments.aws_results_bucket, dest)
+    S3_CLIENT.upload_file(src, arguments.aws_results_bucket, dest)
     
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
                              botsim_offset=None, cartographic_data=None,
-                             bootstrapped=False):
+                             bootstrapped=False, sqs_handle=None):
     if bootstrapped:
         bootstrap_pref = 'force'
     else:
@@ -626,7 +647,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     if arguments.max_subprocesses:
         run_and_maybe_wait([PYTHON_EXE, CBMAIN_OFFSET_PY] + 
                            collect_cmd_line(image_path), image_path,
-                           bootstrapped) 
+                           bootstrapped, sqs_handle) 
         return True
 
     image_path_local = image_path
@@ -947,6 +968,12 @@ if arguments.display_offset_results:
 
 if arguments.results_in_s3:
     assert _BOTO3_AVAILABLE
+    S3_CLIENT = boto3.client('s3')
+
+if arguments.use_sqs:
+    assert _BOTO3_AVAILABLE
+    SQS_RESOURCE = boto3.resource('sqs')
+    SQS_CLIENT = boto3.client('sqs')
     
 kernel_type = 'reconstructed'
 if arguments.use_predicted_kernels:
@@ -1061,6 +1088,8 @@ if arguments.body_cartographic_data:
             sys.exit(-1)
         cartographic_data[body_name] = mosaic_metadata
 
+bootstrapped = len(cartographic_data) > 0
+
 if arguments.retrieve_from_pds and not arguments.no_update_indexes:
     main_logger.info('Downloading PDS index files')
     index_no = 2001
@@ -1089,22 +1118,60 @@ main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
-for image_path in file_yield_image_filenames_from_arguments(
-                                                arguments,
-                                                arguments.retrieve_from_pds):
-    bootstrapped = len(cartographic_data) > 0
-    if process_offset_one_image(
-                    image_path,
-                    allow_stars=arguments.allow_stars, 
-                    allow_rings=arguments.allow_rings, 
-                    allow_moons=arguments.allow_moons, 
-                    allow_saturn=arguments.allow_saturn,
-                    botsim_offset=botsim_offset,
-                    cartographic_data=cartographic_data,
-                    bootstrapped=bootstrapped):
-        num_files_processed += 1
-    else:
-        num_files_skipped += 1
+if arguments.use_sqs:
+    SQS_QUEUE = None
+    try:
+        SQS_QUEUE = SQS_RESOURCE.get_queue_by_name(
+                                           QueueName=arguments.sqs_queue_name)
+    except:
+        main_logger.error('Failed to retrieve SQS queue "%s"',
+                          arguments.sqs_queue_name)
+    if SQS_QUEUE:
+        SQS_QUEUE_URL = SQS_QUEUE.url
+        while True:
+            messages = SQS_QUEUE.receive_messages(
+                          MaxNumberOfMessages=1,
+                          WaitTimeSeconds=10)
+            if len(messages) == 0:
+                main_logger.info('No new image names in the queue - exiting')
+                break
+            for message in messages:
+                image_path = message.body
+                receipt_handle = message.receipt_handle
+                if process_offset_one_image(
+                                image_path,
+                                allow_stars=arguments.allow_stars, 
+                                allow_rings=arguments.allow_rings, 
+                                allow_moons=arguments.allow_moons, 
+                                allow_saturn=arguments.allow_saturn,
+                                botsim_offset=botsim_offset,
+                                cartographic_data=cartographic_data,
+                                bootstrapped=bootstrapped,
+                                sqs_handle=receipt_handle):
+                    num_files_processed += 1
+                    if arguments.max_subprocesses == 0:
+                        SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                                  ReceiptHandle=receipt_handle)
+                else:
+                    num_files_skipped += 1
+                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=receipt_handle)
+else:
+    for image_path in file_yield_image_filenames_from_arguments(
+                                                    arguments,
+                                                    arguments.retrieve_from_pds):
+        if process_offset_one_image(
+                        image_path,
+                        allow_stars=arguments.allow_stars, 
+                        allow_rings=arguments.allow_rings, 
+                        allow_moons=arguments.allow_moons, 
+                        allow_saturn=arguments.allow_saturn,
+                        botsim_offset=botsim_offset,
+                        cartographic_data=cartographic_data,
+                        bootstrapped=bootstrapped):
+            num_files_processed += 1
+        else:
+            num_files_skipped += 1
 
 wait_for_all()
 

@@ -360,6 +360,8 @@ def bodies_create_model(obs, body_name, inventory,
         'phase_angle'          The phase angle at the body's center.
         'body_blur'            The amount of blur required to properly 
                                correlate low-resolution cartographic data.
+        'confidence'           The confidence in how well this model will
+                               do in correlation.
 
         'start_time'           The time (s) when bodies_create_model was called.
         'end_time'             The time (s) when bodies_create_model returned.
@@ -407,7 +409,8 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['mask_latlon_type'] = None
     metadata['mask_lon_direction'] = None
     metadata['has_bad_pixels'] = None
-    metadata['start_time'] = start_time 
+    metadata['start_time'] = start_time
+    metadata['confidence'] = None 
 
     logger.info('*** Modeling %s ***', body_name)
 
@@ -740,6 +743,7 @@ def bodies_create_model(obs, body_name, inventory,
     model_text = _bodies_make_label(obs, body_name, model, label_avoid_mask,
                                     extend_fov, bodies_config)
     
+    metadata['confidence'] = 1.
     metadata['end_time'] = time.time()
     return model, metadata, model_text
 

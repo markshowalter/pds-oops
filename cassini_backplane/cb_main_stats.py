@@ -38,6 +38,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--verbose', action='store_true',
     help='Be verbose')
+parser.add_argument(
+    '--top-bad', type=int, default=0,
+    help='Show the top N files for each bad navigation')
 
 file_add_selection_arguments(parser)
 
@@ -139,18 +142,30 @@ def dump_body_info(body_db):
             print '        No metadata:         %6d (%6.2f%%) [%s]' % (
                         no_metadata, float(no_metadata)/count*100,
                         no_metadata_filename_list[0])
+            if arguments.top_bad:
+                for filename in no_metadata_filename_list[:arguments.top_bad]:
+                    print '          %s' % filename
         if bad_size:
             print '        Bad size:            %6d (%6.2f%%) [%s]' % (
                         bad_size, float(bad_size)/count*100,
                         bad_size_filename_list[0])
+            if arguments.top_bad:
+                for filename in bad_size_filename_list[:arguments.top_bad]:
+                    print '          %s' % filename
         if bad_curvature:
             print '        Bad curvature:       %6d (%6.2f%%) [%s]' % (
                         bad_curvature, float(bad_curvature)/count*100,
                         bad_curvature_filename_list[0])
+            if arguments.top_bad:
+                for filename in bad_curvature_filename_list[:arguments.top_bad]:
+                    print '          %s' % filename
         if bad_limb:
             print '        Bad limb:            %6d (%6.2f%%) [%s]' % (
                         bad_limb, float(bad_limb)/count*100,
                         bad_limb_filename_list[0])
+            if arguments.top_bad:
+                for filename in bad_limb_filename_list[:arguments.top_bad]:
+                    print '          %s' % filename
         if ok:
             print '        All OK:              %6d (%6.2f%%) [%s]' % (
                         ok, float(ok)/count*100,
@@ -190,6 +205,7 @@ total_winner_star = 0
 total_winner_model = 0
 total_winner_titan = 0
 total_winner_botsim = 0
+compare_good_nav_list = {}
 body_only_db = {}
 total_rings_entirely = 0
 total_rings_entirely_no_offset = 0
@@ -464,16 +480,15 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     total_bad_but_botsim_candidate += 1
                     
                 if last_nac_offset is not None and offset is not None:
+                    total_botsim_potential_excess_diff += 1
+                    botsim_potential_excess_diff_x_list.append(
+                                       last_nac_offset[0]-offset[0]*10)                
+                    botsim_potential_excess_diff_y_list.append(
+                                       last_nac_offset[1]-offset[1]*10)                
                     if (abs(last_nac_offset[0]-offset[0]*10) > 10 or
                         abs(last_nac_offset[1]-offset[1]*10) > 10):
                         if winner == 'BOTSIM':
                             total_botsim_winner_excess_diff += 1
-                        else:
-                            total_botsim_potential_excess_diff += 1
-                            botsim_potential_excess_diff_x_list.append(
-                                               last_nac_offset[0]-offset[0]*10)                
-                            botsim_potential_excess_diff_y_list.append(
-                                               last_nac_offset[1]-offset[1]*10)                
             stars_offset = metadata['stars_offset']
             if stars_offset is not None:
                 total_good_star_offset += 1
@@ -488,6 +503,29 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             titan_offset = metadata['titan_offset']
             if titan_offset is not None:
                 total_good_titan_offset += 1
+
+            if stars_offset is not None:
+                if model_offset is not None:
+                    key = ('Stars vs. Model',
+                           metadata['camera'], metadata['image_shape'][0])
+                    compare_good_nav_list[key] = compare_good_nav_list.get(
+                           key, []) + [(stars_offset[0]-model_offset[0],
+                                        stars_offset[1]-model_offset[1],
+                                        filename)]
+                if titan_offset is not None:
+                    key = ('Stars vs. Titan',
+                           metadata['camera'], metadata['image_shape'][0])
+                    compare_good_nav_list[key] = compare_good_nav_list.get(
+                           key, []) + [(stars_offset[0]-titan_offset[0],
+                                        stars_offset[1]-titan_offset[1],
+                                        filename)]
+            if model_offset is not None and titan_offset is not None:
+                    key = ('Model vs. Titan',
+                           metadata['camera'], metadata['image_shape'][0])
+                    compare_good_nav_list[key] = compare_good_nav_list.get(
+                           key, []) + [(model_offset[0]-titan_offset[0],
+                                        model_offset[1]-titan_offset[1],
+                                        filename)]
         
             if winner == 'STARS':
                 total_winner_star += 1
@@ -509,7 +547,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if titan_metadata is not None:
                 total_titan_attempt += 1
                 titan_status = titan_metadata_to_status(titan_metadata)
-                titan_status_db[titan_status] = titan_status_db.get(titan_status, 0)+1
+                titan_status_db[titan_status] = titan_status_db.get(titan_status, []) + [filename]
                 
     if arguments.verbose:
         print status
@@ -552,21 +590,6 @@ if total_offset:
     print 'Good final offset: (%% of non-err)   %6d (%6.2f%%)' % (
                 total_good_offset, 
                 float(total_good_offset)/total_has_offset_result*100)
-    for offset_list_camera, offset_list_size in sorted(total_good_offset_list):
-        offset_list = total_good_offset_list[(offset_list_camera,
-                                              offset_list_size)]
-        if len(offset_list) == 0:
-            continue
-        off_list = [x[0] for x in offset_list]
-        print '  %s %4d X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
-                            offset_list_camera, offset_list_size, 
-                            np.min(off_list), np.max(off_list), 
-                            np.mean(off_list), np.std(off_list))
-        off_list = [x[1] for x in offset_list]
-        print '  %s %4d Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
-                            offset_list_camera, offset_list_size,
-                            np.min(off_list), np.max(off_list), 
-                            np.mean(off_list), np.std(off_list))
     print '  Good star   offset:  %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_good_star_offset, 
                 float(total_good_star_offset)/total_good_offset*100,
@@ -609,6 +632,55 @@ if total_offset:
                 total_winner_botsim, 
                 float(total_winner_botsim)/total_good_offset*100,
                 float(total_winner_botsim)/total_has_offset_result*100)
+    for offset_list_camera, offset_list_size in sorted(total_good_offset_list):
+        offset_list = total_good_offset_list[(offset_list_camera,
+                                              offset_list_size)]
+        if len(offset_list) == 0:
+            continue
+        print
+        off_list = [x[0] for x in offset_list]
+        print '  %s %4d X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f (%d)' % (
+                            offset_list_camera, offset_list_size, 
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list), len(off_list))
+        off_list = [x[1] for x in offset_list]
+        print '  %s %4d Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                            offset_list_camera, offset_list_size,
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list))
+
+    last_navsrc = None
+    for (offset_list_navsrc, offset_list_camera, 
+         offset_list_size) in sorted(compare_good_nav_list):
+        offset_list = compare_good_nav_list[(offset_list_navsrc,
+                                             offset_list_camera,
+                                             offset_list_size)]
+        if len(offset_list) == 0:
+            continue
+        if last_navsrc != offset_list_navsrc:
+            print
+            print '  %s' % offset_list_navsrc
+            last_navsrc = offset_list_navsrc
+        off_list = [x[0] for x in offset_list]
+        print '    %s %4d X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f (%d)' % (
+                            offset_list_camera, offset_list_size, 
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list), len(off_list))
+        if arguments.top_bad:
+            offset_list.sort(key=lambda x:-abs(x[0]))
+            file_list = [('%s %7.2f'%(x[2],x[0])) for x in offset_list[:arguments.top_bad]]
+            for file in file_list:
+                print '      %s' % file
+        off_list = [x[1] for x in offset_list]
+        print '    %s %4d Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
+                            offset_list_camera, offset_list_size,
+                            np.min(off_list), np.max(off_list), 
+                            np.mean(off_list), np.std(off_list))
+        if arguments.top_bad:
+            offset_list.sort(key=lambda x:-abs(x[1]))
+            file_list = [('%s %7.2f'%(x[2],x[1])) for x in offset_list[:arguments.top_bad]]
+            for file in file_list:
+                print '      %s' % file
     
     print sep
     total_bad_offset = total_has_offset_result-total_good_offset
@@ -699,7 +771,7 @@ if total_offset:
                 total_botsim_winner_excess_diff, 
                 float(total_botsim_winner_excess_diff)/total_botsim_candidate*100,
                 float(total_botsim_winner_excess_diff)/total_has_offset_result*100)
-    print '  Potential bad diff:  %6d (%6.2f%%, %6.2f%% of total)' % (
+    print '  Both nav OK diff:    %6d (%6.2f%%, %6.2f%% of total)' % (
                 total_botsim_potential_excess_diff, 
                 float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
                 float(total_botsim_potential_excess_diff)/total_has_offset_result*100)
@@ -734,11 +806,15 @@ if total_offset:
                 total_titan_attempt, 
                 float(total_titan_attempt)/total_has_offset_result*100)
     for titan_status in sorted(titan_status_db):
-        print '  %-26s %6d (%6.2f%%)' % (
+        print '  %-26s %6d (%6.2f%%) [%s]' % (
                            titan_status+':',
-                           titan_status_db[titan_status],
-                           float(titan_status_db[titan_status])/
-                           total_titan_attempt*100)
+                           len(titan_status_db[titan_status]),
+                           float(len(titan_status_db[titan_status]))/
+                             total_titan_attempt*100,
+                           titan_status_db[titan_status][0])
+        if arguments.top_bad:
+            for filename in titan_status_db[titan_status][:arguments.top_bad]:
+                print '    %s' % filename
     
     print sep
     total_body_only = 0
