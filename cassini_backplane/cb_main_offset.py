@@ -725,17 +725,12 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             except:
                 pass
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
                     os.remove(image_log_path_local)
                 except:
                     pass
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
         return True
     
     if arguments.retrieve_from_pds:
@@ -755,12 +750,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         file_write_offset_metadata(image_path, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
             copy_file_to_s3(image_log_path_local, image_log_path)
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
             try:
                 os.remove(image_log_path_local)
             except:
@@ -807,17 +797,12 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
                     os.remove(image_log_path_local)
                 except:
                     pass
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
         return True
 
     offset_path = file_img_to_offset_path(
