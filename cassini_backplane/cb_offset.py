@@ -1231,8 +1231,9 @@ def master_find_offset(obs,
                     offset = model_offset
                     metadata['used_objects_type'] = 'MODEL'
 
-    if (abs(offset[0]) > extend_fov[0] or 
-        abs(offset[1]) > extend_fov[1]):
+    if (offset is not None and
+        (abs(offset[0]) > extend_fov[0] or 
+         abs(offset[1]) > extend_fov[1])):
         logger.info('Final offset is beyond maximum allowable offset!')
         offset = None
         metadata['offset_winner'] = None 
