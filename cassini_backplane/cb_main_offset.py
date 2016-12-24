@@ -728,7 +728,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'error'
         metadata['status_detail1'] = str(sys.exc_value)
         metadata['status_detail2'] = err
-        file_write_offset_metadata_path(offset_path_local, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata,
+                                        overlay=False)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.retrieve_from_pds:
             try:
@@ -763,7 +764,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'skipped'
         metadata['status_detail1'] = 'Shutter disabled'
         metadata['status_detail2'] = 'Shutter disabled'
-        file_write_offset_metadata_path(offset_path_local, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata,
+                                        overlay=False)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
@@ -808,7 +810,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'error' 
         metadata['status_detail1'] = str(sys.exc_value)
         metadata['status_detail2'] = err
-        file_write_offset_metadata_path(offset_path_local, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata,
+                                        overlay=False)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
