@@ -83,11 +83,11 @@ parser.add_argument(
             to $(CB_RESULTS_ROOT)/logs/cb_main_run_aws/<datetime>.log''')
 LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
 parser.add_argument(
-    '--main-logfile-level', metavar='LEVEL', default='info', 
+    '--main-logfile-level', metavar='LEVEL', default='debug', 
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to the main loop logfile')
 parser.add_argument(
-    '--main-console-level', metavar='LEVEL', default='info',
+    '--main-console-level', metavar='LEVEL', default='debug',
     choices=LOGGING_LEVEL_CHOICES,
     help='Choose the logging level to be output to stdout for the main loop')
 

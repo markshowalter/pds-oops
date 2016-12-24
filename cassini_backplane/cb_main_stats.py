@@ -687,105 +687,107 @@ if total_offset:
     print 'No final offset:                    %6d (%6.2f%%)' % (
                 total_bad_offset, 
                 float(total_bad_offset)/total_has_offset_result*100)
-    print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bad_but_botsim_candidate, 
-                float(total_bad_but_botsim_candidate)/total_bad_offset*100,
-                float(total_bad_but_botsim_candidate)/total_has_offset_result*100)
-    print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bootstrap_cand_no_offset, 
-                float(total_bootstrap_cand_no_offset)/total_bad_offset*100,
-                float(total_bootstrap_cand_no_offset)/total_has_offset_result*100)
+    if total_bad_offset:
+        print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_bad_but_botsim_candidate, 
+                    float(total_bad_but_botsim_candidate)/total_bad_offset*100,
+                    float(total_bad_but_botsim_candidate)/total_has_offset_result*100)
+        print '  Bootstrap candidate: %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_bootstrap_cand_no_offset, 
+                    float(total_bootstrap_cand_no_offset)/total_bad_offset*100,
+                    float(total_bootstrap_cand_no_offset)/total_has_offset_result*100)
 
-    print
-    print 'Reasons:'
-    print '  No rings'
-    print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_bad_offset_no_rings_or_bodies, 
-                float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
-                float(total_bad_offset_no_rings_or_bodies)/total_has_offset_result*100)
-    print '    Single body only:'
-    dump_body_info(no_rings_single_body_db)
-    print '    Multiple bodies, closest:'
-    dump_body_info(no_rings_multi_body_db)
-    print '  Has rings (D-F)'
-    print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_rings_entirely_no_offset, 
-                float(total_rings_entirely_no_offset)/total_bad_offset*100,
-                float(total_rings_entirely_no_offset)/total_has_offset_result*100)
-    if total_rings_entirely_no_offset:
-        if total_rings_entirely_no_offset_bad_curvature:
-            print '      Bad curvature:         %6d (%6.2f%%)' % (
-                        total_rings_entirely_no_offset_bad_curvature, 
-                        float(total_rings_entirely_no_offset_bad_curvature)/total_rings_entirely_no_offset*100)
-        if total_rings_entirely_no_offset_bad_emission:
-            print '      Bad emission:          %6d (%6.2f%%)' % (
-                        total_rings_entirely_no_offset_bad_emission,
-                        float(total_rings_entirely_no_offset_bad_emission)/total_rings_entirely_no_offset*100)
-        if total_rings_entirely_no_offset_bad_features:
-            print '      Bad features:          %6d (%6.2f%%)' % (
-                        total_rings_entirely_no_offset_bad_features, 
-                        float(total_rings_entirely_no_offset_bad_features)/total_rings_entirely_no_offset*100)
-        if total_rings_entirely_no_offset_ok:
-            print '      All OK:                %6d (%6.2f%%)' % (
-                        total_rings_entirely_no_offset_ok, 
-                        float(total_rings_entirely_no_offset_ok)/total_rings_entirely_no_offset*100)
-    print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_rings_only_no_offset, 
-                float(total_rings_only_no_offset)/total_bad_offset*100,
-                float(total_rings_only_no_offset)/total_has_offset_result*100)
-    if total_rings_only_no_offset:
-        if total_rings_only_no_offset_bad_curvature:
-            print '      Bad curvature:         %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_bad_curvature, 
-                        float(total_rings_only_no_offset_bad_curvature)/total_rings_only_no_offset*100)
-        if total_rings_only_no_offset_bad_emission:
-            print '      Bad emission:          %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_bad_emission,
-                        float(total_rings_only_no_offset_bad_emission)/total_rings_only_no_offset*100)
-        if total_rings_only_no_offset_bad_features:
-            print '      Bad features:          %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_bad_features, 
-                        float(total_rings_only_no_offset_bad_features)/total_rings_only_no_offset*100)
-        if total_rings_only_no_offset_ok:
-            print '      All OK:                %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_ok, 
-                        float(total_rings_only_no_offset_ok)/total_rings_only_no_offset*100)
-        if total_rings_only_no_offset_fring:
-            print '      F ring only:           %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_fring, 
-                        float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
-        if total_rings_only_no_offset_dring:
-            print '      D ring only:           %6d (%6.2f%%)' % (
-                        total_rings_only_no_offset_dring, 
-                        float(total_rings_only_no_offset_dring)/total_rings_only_no_offset*100)
-    print '    Single body only:'
-    dump_body_info(with_rings_single_body_db)
-    print '    Multiple bodies, closest:'
-    dump_body_info(with_rings_multi_body_db)
+        print
+        print 'Reasons:'
+        print '  No rings'
+        print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_bad_offset_no_rings_or_bodies, 
+                    float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
+                    float(total_bad_offset_no_rings_or_bodies)/total_has_offset_result*100)
+        print '    Single body only:'
+        dump_body_info(no_rings_single_body_db)
+        print '    Multiple bodies, closest:'
+        dump_body_info(no_rings_multi_body_db)
+        print '  Has rings (D-F)'
+        print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_rings_entirely_no_offset, 
+                    float(total_rings_entirely_no_offset)/total_bad_offset*100,
+                    float(total_rings_entirely_no_offset)/total_has_offset_result*100)
+        if total_rings_entirely_no_offset:
+            if total_rings_entirely_no_offset_bad_curvature:
+                print '      Bad curvature:         %6d (%6.2f%%)' % (
+                            total_rings_entirely_no_offset_bad_curvature, 
+                            float(total_rings_entirely_no_offset_bad_curvature)/total_rings_entirely_no_offset*100)
+            if total_rings_entirely_no_offset_bad_emission:
+                print '      Bad emission:          %6d (%6.2f%%)' % (
+                            total_rings_entirely_no_offset_bad_emission,
+                            float(total_rings_entirely_no_offset_bad_emission)/total_rings_entirely_no_offset*100)
+            if total_rings_entirely_no_offset_bad_features:
+                print '      Bad features:          %6d (%6.2f%%)' % (
+                            total_rings_entirely_no_offset_bad_features, 
+                            float(total_rings_entirely_no_offset_bad_features)/total_rings_entirely_no_offset*100)
+            if total_rings_entirely_no_offset_ok:
+                print '      All OK:                %6d (%6.2f%%)' % (
+                            total_rings_entirely_no_offset_ok, 
+                            float(total_rings_entirely_no_offset_ok)/total_rings_entirely_no_offset*100)
+        print '    No bodies:         %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_rings_only_no_offset, 
+                    float(total_rings_only_no_offset)/total_bad_offset*100,
+                    float(total_rings_only_no_offset)/total_has_offset_result*100)
+        if total_rings_only_no_offset:
+            if total_rings_only_no_offset_bad_curvature:
+                print '      Bad curvature:         %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_bad_curvature, 
+                            float(total_rings_only_no_offset_bad_curvature)/total_rings_only_no_offset*100)
+            if total_rings_only_no_offset_bad_emission:
+                print '      Bad emission:          %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_bad_emission,
+                            float(total_rings_only_no_offset_bad_emission)/total_rings_only_no_offset*100)
+            if total_rings_only_no_offset_bad_features:
+                print '      Bad features:          %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_bad_features, 
+                            float(total_rings_only_no_offset_bad_features)/total_rings_only_no_offset*100)
+            if total_rings_only_no_offset_ok:
+                print '      All OK:                %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_ok, 
+                            float(total_rings_only_no_offset_ok)/total_rings_only_no_offset*100)
+            if total_rings_only_no_offset_fring:
+                print '      F ring only:           %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_fring, 
+                            float(total_rings_only_no_offset_fring)/total_rings_only_no_offset*100)
+            if total_rings_only_no_offset_dring:
+                print '      D ring only:           %6d (%6.2f%%)' % (
+                            total_rings_only_no_offset_dring, 
+                            float(total_rings_only_no_offset_dring)/total_rings_only_no_offset*100)
+        print '    Single body only:'
+        dump_body_info(with_rings_single_body_db)
+        print '    Multiple bodies, closest:'
+        dump_body_info(with_rings_multi_body_db)
 
-    print sep
-    print 'BOTSIM opportunity:                 %6d (%6.2f%%)' % (
-                total_botsim_candidate,
-                float(total_botsim_candidate)/total_has_offset_result*100)
-    print '  Winner bad diff:     %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_botsim_winner_excess_diff, 
-                float(total_botsim_winner_excess_diff)/total_botsim_candidate*100,
-                float(total_botsim_winner_excess_diff)/total_has_offset_result*100)
-    print '  Both nav OK diff:    %6d (%6.2f%%, %6.2f%% of total)' % (
-                total_botsim_potential_excess_diff, 
-                float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
-                float(total_botsim_potential_excess_diff)/total_has_offset_result*100)
-    if len(botsim_potential_excess_diff_x_list):
-        print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
-                                                np.min(botsim_potential_excess_diff_x_list),
-                                                np.max(botsim_potential_excess_diff_x_list),
-                                                np.mean(botsim_potential_excess_diff_x_list),
-                                                np.std(botsim_potential_excess_diff_x_list))
-        print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
-                                                np.min(botsim_potential_excess_diff_y_list),
-                                                np.max(botsim_potential_excess_diff_y_list),
-                                                np.mean(botsim_potential_excess_diff_y_list),
-                                                np.std(botsim_potential_excess_diff_y_list))
+    if total_botsim_candidate:
+        print sep
+        print 'BOTSIM opportunity:                 %6d (%6.2f%%)' % (
+                    total_botsim_candidate,
+                    float(total_botsim_candidate)/total_has_offset_result*100)
+        print '  Winner bad diff:     %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_botsim_winner_excess_diff, 
+                    float(total_botsim_winner_excess_diff)/total_botsim_candidate*100,
+                    float(total_botsim_winner_excess_diff)/total_has_offset_result*100)
+        print '  Both nav OK diff:    %6d (%6.2f%%, %6.2f%% of total)' % (
+                    total_botsim_potential_excess_diff, 
+                    float(total_botsim_potential_excess_diff)/total_botsim_candidate*100,
+                    float(total_botsim_potential_excess_diff)/total_has_offset_result*100)
+        if len(botsim_potential_excess_diff_x_list):
+            print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                    np.min(botsim_potential_excess_diff_x_list),
+                                                    np.max(botsim_potential_excess_diff_x_list),
+                                                    np.mean(botsim_potential_excess_diff_x_list),
+                                                    np.std(botsim_potential_excess_diff_x_list))
+            print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                    np.min(botsim_potential_excess_diff_y_list),
+                                                    np.max(botsim_potential_excess_diff_y_list),
+                                                    np.mean(botsim_potential_excess_diff_y_list),
+                                                    np.std(botsim_potential_excess_diff_y_list))
 
     print sep
     print 'Total bootstrap candidates:         %6d (%6.2f%%)' % (

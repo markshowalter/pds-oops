@@ -707,6 +707,17 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     
     image_logger.info('Command line: %s', ' '.join(command_list))
 
+    offset_path = file_img_to_offset_path(
+                              image_path, 
+                              bootstrap=bootstrapped,
+                              root=RESULTS_DIR,
+                              make_dirs=not arguments.results_in_s3)
+    offset_path_local = offset_path
+    if arguments.results_in_s3:
+        local_fd, offset_path_local = tempfile.mkstemp(suffix='.OFF', 
+                                                       prefix='CB_')
+        os.close(local_fd)
+
     try:
         obs = file_read_iss_file(image_path_local, orig_path=image_path)
     except:
@@ -717,7 +728,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'error'
         metadata['status_detail1'] = str(sys.exc_value)
         metadata['status_detail2'] = err
-        file_write_offset_metadata(image_path, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.retrieve_from_pds:
             try:
@@ -725,6 +736,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             except:
                 pass
         if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -747,14 +763,20 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'skipped'
         metadata['status_detail1'] = 'Shutter disabled'
         metadata['status_detail2'] = 'Shutter disabled'
-        file_write_offset_metadata(image_path, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(image_log_path_local, image_log_path)
+            copy_file_to_s3(offset_path_local, offset_path)
             try:
-                os.remove(image_log_path_local)
+                os.remove(offset_path_local)
             except:
                 pass
+            if image_log_path_local is not None:
+                copy_file_to_s3(image_log_path_local, image_log_path)
+                try:
+                    os.remove(image_log_path_local)
+                except:
+                    pass
         return True
 
     if arguments.profile and arguments.is_subprocess:
@@ -786,7 +808,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         metadata['status'] = 'error' 
         metadata['status_detail1'] = str(sys.exc_value)
         metadata['status_detail2'] = err
-        file_write_offset_metadata(image_path, metadata)
+        file_write_offset_metadata_path(offset_path_local, metadata)
         if arguments.profile and arguments.is_subprocess:
             image_pr.disable()
             s = StringIO.StringIO()
@@ -797,6 +819,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
+            copy_file_to_s3(offset_path_local, offset_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -805,16 +832,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     pass
         return True
 
-    offset_path = file_img_to_offset_path(
-                              image_path, 
-                              bootstrap=bootstrapped,
-                              root=RESULTS_DIR,
-                              make_dirs=not arguments.results_in_s3)
-    offset_path_local = offset_path
-    if arguments.results_in_s3:
-        local_fd, offset_path_local = tempfile.mkstemp(suffix='.OFF', 
-                                                       prefix='CB_')
-        os.close(local_fd)
     overlay_path_local = None
     if not arguments.no_overlay_file:
         overlay_path = file_img_to_overlay_path(
@@ -858,16 +875,16 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
                     os.remove(image_log_path_local)
                 except:
                     pass
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
             if not arguments.no_overlay_file:
                 try:
                     os.remove(overlay_path_local)
@@ -913,6 +930,10 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
 
     if arguments.results_in_s3:
         copy_file_to_s3(offset_path_local, offset_path)
+        try:
+            os.remove(offset_path_local)
+        except:
+            pass
         if image_log_path_local is not None:
             copy_file_to_s3(image_log_path_local, image_log_path)
             try:
@@ -920,10 +941,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             except:
                 pass
         copy_file_to_s3(png_path_local, png_path)
-        try:
-            os.remove(offset_path_local)
-        except:
-            pass
         if not arguments.no_overlay_file:
             try:
                 os.remove(overlay_path_local)

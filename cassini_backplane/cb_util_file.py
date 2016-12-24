@@ -670,17 +670,18 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
         overlay_path = file_img_to_overlay_path(
                                  file_offset_to_img_path(offset_path),
                                  make_dirs=False, bootstrap=bootstrap)
-        overlay_fp = open(overlay_path, 'rb')
-        metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
-                                           object_hook=msgpack_numpy.decode)
-        overlay_fp.close()
-        # Uncompress all boolean text overlay arrays
-        for field in ['stars_overlay_text', 'bodies_overlay_text',
-                      'rings_overlay_text']:
-            if field in metadata_overlay:
-                metadata_overlay[field] = _uncompress_bool(
-                                                   metadata_overlay[field])
-        metadata.update(metadata_overlay)
+        if os.path.exists(overlay_path):
+            overlay_fp = open(overlay_path, 'rb')
+            metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
+                                               object_hook=msgpack_numpy.decode)
+            overlay_fp.close()
+            # Uncompress all boolean text overlay arrays
+            for field in ['stars_overlay_text', 'bodies_overlay_text',
+                          'rings_overlay_text']:
+                if field in metadata_overlay:
+                    metadata_overlay[field] = _uncompress_bool(
+                                                       metadata_overlay[field])
+            metadata.update(metadata_overlay)
 
     return metadata
 
