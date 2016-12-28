@@ -479,7 +479,7 @@ def plot_cassini_filter_transmission():
     }
     
     assert _TKINTER_AVAILABLE
-    cassini_filter_transmission('NAC', 'CL1') # This reads all filters
+    _cassini_filter_transmission('NAC', 'CL1') # This reads all filters
     for detector in ['NAC', 'WAC']:
         fig = plt.figure()
         plt.title(detector)

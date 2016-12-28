@@ -43,7 +43,9 @@ FILTER_COLOR = {
     'GRN': (0,1,0),
     'BL1': (0,0,1),
     'VIO': (159/256.,0,1),
-    
+
+    'HAL': (0.5,0.5,0.5),
+        
     'MT2': (1,204/256.,153/256.),
     'CB2': (1,.5,0),
 
@@ -282,6 +284,13 @@ def add_profile_to_list(filename, reinterp=False, verbose=False):
 #         reinterp = True
     fp.close()
 
+    if filter == 'IRP0' or filter == 'IRP90':
+        filter = 'CLEAR'
+    if filter.endswith('0'):
+        idx = filter.find('+')
+        assert idx != -1
+        filter = filter[:idx]
+        
     if reinterp:
         print 'Interpolating', filename
         interp_func = interp.interp1d(profile_x, profile_y, bounds_error=False, 

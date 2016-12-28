@@ -239,6 +239,7 @@ latest_date = 0
 last_nac_filename = None
 last_nac_image_path = None
 last_nac_offset = None
+last_nac_metadata = None
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
     status = ''
@@ -256,6 +257,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
         last_nac_filename = filename
         last_nac_image_path = image_path
         last_nac_offset = None
+        last_nac_metadata = None
         
     if metadata is not None:
         total_offset += 1
@@ -304,6 +306,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             offset = metadata['offset']
             if filename[0] == 'N':
                 last_nac_offset = offset
+                last_nac_metadata = metadata
             winner = metadata['offset_winner']
             stars_metadata = metadata['stars_metadata']
             rings_metadata = metadata['rings_metadata']
@@ -479,7 +482,9 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 if last_nac_offset is None and offset is not None:
                     total_bad_but_botsim_candidate += 1
                     
-                if last_nac_offset is not None and offset is not None:
+                if (last_nac_offset is not None and offset is not None and
+                    last_nac_metadata['offset_winner'] != 'TITAN' and
+                    winner != 'TITAN'):
                     total_botsim_potential_excess_diff += 1
                     botsim_potential_excess_diff_x_list.append(
                                        last_nac_offset[0]-offset[0]*10)                

@@ -350,8 +350,13 @@ RINGS_DEFAULT_CONFIG = {
     'curvature_reduced_features': 1,
     
     # The minimum ring emission angle in the image must be at least this
-    # many degrees away from 90 for rings to be used for correlation.
-    'emission_threshold': 2., #5., 
+    # many degrees away from 90 for fiducial features to be used; otherwise
+    # we just use a plain model.
+    'emission_fiducial_threshold': 5., 
+    
+    # The minimum ring emission angle in the image must be at least this
+    # many degrees away from 90 to be used at all.
+    'emission_use_threshold': 2.,
     
     # Remove the shadow of Saturn from the model
     'remove_saturn_shadow': True,

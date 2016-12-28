@@ -1786,10 +1786,20 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     
     emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
     min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
-    if min_emission < rings_config['emission_threshold']:
+    if min_emission < rings_config['emission_use_threshold']:
+        logger.info('Minimum emission angle %.2f from 90 too close to ring '+
+                    'plane - not using', min_emission)
+        metadata['emission_ok'] = False
+        metadata['num_good_fiducial_features'] = 0
+        metadata['fiducial_features'] = []
+        metadata['fiducial_blur'] = None
+        metadata['fiducial_features_ok'] = False
+        metadata['end_time'] = time.time()
+        return None, metadata, None
+    elif min_emission < rings_config['emission_fiducial_threshold']:
         logger.info('Minimum emission angle %.2f from 90 too close to ring '+
                     'plane - using plain model', min_emission)
-        metadata['emission_ok'] = False
+        metadata['emission_ok'] = 'plain'
         metadata['num_good_fiducial_features'] = 0
         metadata['fiducial_features'] = []
         metadata['fiducial_blur'] = None

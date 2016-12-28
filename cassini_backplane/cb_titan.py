@@ -43,6 +43,22 @@ _BASELINE_DB = None
 _PHASE_BIN_GRANULARITY = None
 _PHASE_BIN_WIDTH = None
 
+_TITAN_FILTER_TRANSLATION = {
+    'CLEAR': ('CLEAR', 0.50),
+    'UV1':   ('VIO',   0.10),
+    'UV2':   ('VIO',   0.15),
+    'UV3':   ('VIO',   0.20),
+    'BL2':   ('BL1',   0.50),
+    'MT1':   ('RED',   0.50),
+    'CB1':   ('RED',   0.50),
+    'CB1a':  ('RED',   0.50),
+    'CB1b':  ('RED',   0.50),
+    'P0':    ('CLEAR', 0.50),
+    'P60':   ('CLEAR', 0.50),
+    'P120':  ('CLEAR', 0.50)
+}
+
+
 def titan_find_symmetry_offset(
            obs, trial_offset, sun_angle,
            min_emission_angle, max_emission_angle, incr_emission_angle,
@@ -486,8 +502,32 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     set_obs_bp(obs)
     data = obs.data
 
-    filter = simple_filter_name(obs)
+    filter1 = obs.filter1
+    filter2 = obs.filter2
+    if filter1 == 'IRP0' or filter1 == 'IRP90':
+        filter1 = 'CL1'
+    if filter2 == 'IRP0' or filter2 == 'IRP90':
+        filter2 = 'CL2'
+    confidence_filter1 = 1.
+    confidence_filter2 = 1.
+    if filter1 in _TITAN_FILTER_TRANSLATION:
+        filter1, confidence_filter1 = _TITAN_FILTER_TRANSLATION[filter1]
+    if filter2 in _TITAN_FILTER_TRANSLATION:
+        filter2, confidence_filter2 = _TITAN_FILTER_TRANSLATION[filter2]
+    confidence_filter = confidence_filter1 * confidence_filter2
+    
+    if filter1 == 'CL1' and filter2 == 'CL2':
+        filter = 'CLEAR'
+    elif filter1 == 'CL1':
+        filter = filter2
+    elif filter2 == 'CL2':
+        filter = filter1
+    else:
+        filter = filter1 + '+' + filter2
 
+    logger.info('Original filter %s, new filter %s confidence %.2f',
+                simple_filter_name(obs), filter, confidence_filter)
+    
     titan_orig_inv_list = obs.inventory(['TITAN'], return_type='full')
 
     # Create the enlarged Titan
@@ -738,7 +778,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     new_offset = (int(offset[0] - np.cos(sun_angle)*along_track_pixel),
                   int(offset[1] - np.sin(sun_angle)*along_track_pixel))
 
-    confidence = confidence_size * confidence_images
+    confidence = confidence_size * confidence_images * confidence_filter
     
     logger.info('Final Titan offset U,V %d,%d (%.2f), uncertainty %.2f', 
                 new_offset[0], new_offset[1], confidence,
