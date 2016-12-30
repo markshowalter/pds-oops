@@ -230,6 +230,7 @@ total_bootstrap_cand = 0
 total_bootstrap_cand_no_offset = 0
 bootstrap_cand_db = {}
 titan_status_db = {}
+titan_insuff_db = {}
 total_titan_attempt = 0
 time_list = []
 longest_time_filenames = []
@@ -553,6 +554,14 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 total_titan_attempt += 1
                 titan_status = titan_metadata_to_status(titan_metadata)
                 titan_status_db[titan_status] = titan_status_db.get(titan_status, []) + [filename]
+                if titan_status == 'Insufficient profile data':
+                    try:
+                        filter = titan_metadata['mapped_filter']
+                        phase = titan_metadata['mapped_phase']*oops.DPR
+                    except KeyError:
+                        filter = 'Unknown'
+                        phase = 0.
+                    titan_insuff_db[(filter, phase)] = titan_insuff_db.get((filter, phase), []) + [filename]
                 
     if arguments.verbose:
         print status
@@ -821,7 +830,20 @@ if total_offset:
                            titan_status_db[titan_status][0])
         if arguments.top_bad:
             for filename in titan_status_db[titan_status][:arguments.top_bad]:
-                print '    %s' % filename
+                print '      %s' % filename
+        if titan_status == 'Insufficient profile data':
+            for key in sorted(titan_insuff_db):
+                filter, phase = key
+                print '    %-9s %6.2f %6d (%6.2f%%) [%s]' % (
+                                   filter, phase,
+                                   len(titan_insuff_db[key]),
+                                   float(len(titan_insuff_db[key]))/
+                                     total_titan_attempt*100,
+                                   titan_insuff_db[key][0])
+                if arguments.top_bad:
+                    for filename in titan_insuff_db[key][:arguments.top_bad]:
+                        print '        %s' % filename
+            
     
     print sep
     total_body_only = 0

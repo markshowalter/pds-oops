@@ -44,18 +44,19 @@ _PHASE_BIN_GRANULARITY = None
 _PHASE_BIN_WIDTH = None
 
 _TITAN_FILTER_TRANSLATION = {
-    'CLEAR': ('CLEAR', 0.50),
-    'UV1':   ('VIO',   0.10),
-    'UV2':   ('VIO',   0.15),
-    'UV3':   ('VIO',   0.20),
-    'BL2':   ('BL1',   0.50),
-    'MT1':   ('RED',   0.50),
-    'CB1':   ('RED',   0.50),
-    'CB1a':  ('RED',   0.50),
-    'CB1b':  ('RED',   0.50),
-    'P0':    ('CLEAR', 0.50),
-    'P60':   ('CLEAR', 0.50),
-    'P120':  ('CLEAR', 0.50)
+    'CLEAR':   ('CLEAR', 0.50),
+    'UV1':     ('VIO',   0.10),
+    'UV2':     ('VIO',   0.15),
+    'UV3':     ('VIO',   0.20),
+    'BL2':     ('BL1',   0.50),
+    'MT1':     ('RED',   0.50),
+    'CB1':     ('RED',   0.50),
+    'CB1a':    ('RED',   0.50),
+    'CB1b':    ('RED',   0.50),
+    'P0':      ('CLEAR', 0.50),
+    'P60':     ('CLEAR', 0.50),
+    'P120':    ('CLEAR', 0.50),
+    'IR2+IR3': ('IR3',   0.50)
 }
 
 
@@ -404,10 +405,10 @@ def titan_along_track_profile(obs, offset, sun_angle, titan_center,
     
     for along_path_dist in xrange(-offset_limit,offset_limit+1):
         # We want to go along the Sun angle
-        u = (int(np.round(along_path_dist * np.cos(sun_angle))) + 
-             offset[0] + titan_center[0])
-        v = (int(np.round(along_path_dist * np.sin(sun_angle))) + 
-             offset[1] + titan_center[1])
+        u = int(np.round(along_path_dist * np.cos(sun_angle)) + 
+                offset[0] + titan_center[0])
+        v = int(np.round(along_path_dist * np.sin(sun_angle)) + 
+                offset[1] + titan_center[1])
         if (not 0 <= u < data.shape[1] or
             not 0 <= v < data.shape[0]):
             profile_x.append(along_path_dist * titan_resolution)
@@ -470,6 +471,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         'confidence'       The confidence level (0-1) of the navigation.
         'entirely_visible' True if Titan+atmosphere is entirely visible even if
                            shifted by the maximum amount.
+        'mapped_filter'    The WAC filter profile we're trying to use
+        'mapped_phase'     The bin phase we're trying to use
         'filter_phase_ok'  True if the filter/phase angle combination was found.
         'lambert_offset'   The offset found by correlation with a Lambert law
                            model. Only used in cases where Titan is small.
@@ -494,6 +497,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     metadata['offset'] = None
     metadata['confidence'] = 0.
     metadata['entirely_visible'] = None
+    metadata['mapped_filter'] = None
+    metadata['mapped_phase'] = None
     metadata['filter_phase_ok'] = None
     metadata['lambert_offset'] = None
     metadata['symmetry_offset'] = None
@@ -510,6 +515,10 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
         filter2 = 'CL2'
     confidence_filter1 = 1.
     confidence_filter2 = 1.
+    if filter1+'+'+filter2 in _TITAN_FILTER_TRANSLATION:
+        filter1, confidence_filter1 = _TITAN_FILTER_TRANSLATION[
+                                                    filter1+'+'+filter2]
+        filter2 = 'CL2'
     if filter1 in _TITAN_FILTER_TRANSLATION:
         filter1, confidence_filter1 = _TITAN_FILTER_TRANSLATION[filter1]
     if filter2 in _TITAN_FILTER_TRANSLATION:
@@ -525,6 +534,8 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     else:
         filter = filter1 + '+' + filter2
 
+    metadata['mapped_filter'] = filter
+    
     logger.info('Original filter %s, new filter %s confidence %.2f',
                 simple_filter_name(obs), filter, confidence_filter)
     
@@ -609,6 +620,7 @@ def titan_navigate(obs, other_model, extend_fov=(0,0), titan_config=None):
     ret = _find_baseline(filter, phase_angle)
 
     phase_bin = int(np.round(phase_angle / _PHASE_BIN_GRANULARITY))
+    metadata['mapped_phase'] = phase_bin * _PHASE_BIN_GRANULARITY
     if ret is None:
         logger.info('No baseline profile for filter %s and '+
                     'phase angle %.2f (bin phase %.2f)', filter, 

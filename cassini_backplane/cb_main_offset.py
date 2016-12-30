@@ -11,6 +11,7 @@ import argparse
 import cProfile, pstats, StringIO
 import datetime
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -269,17 +270,20 @@ parser.add_argument(
     help='''Retrieve the image file and indexes from pds-rings.seti.org instead of 
             from the local disk''')
 parser.add_argument(
+    '--no-update-indexes', action='store_true',
+    help='''Don\'t update the index files from the PDS''')
+parser.add_argument(
     '--saturn-kernels-only', action='store_true',
     help='''Only load Saturn CSPICE kernels''')
 parser.add_argument(
     '--results-in-s3', action='store_true',
     help='''Store all results in the Amazon S3 cloud''')
 parser.add_argument(
-    '--no-update-indexes', action='store_true',
-    help='''Don\'t update the index files from the PDS''')
-parser.add_argument(
     '--use-sqs', action='store_true',
     help='''Retrieve filenames from an SQS queue; ignore all file selection arguments''')
+parser.add_argument(
+    '--deduce-aws-processors', action='store_true',
+    help='''Deduce the number of available processors from the AMI Instance Type''')
 parser.add_argument(
     '--sqs-queue-name', type=str, default='cdapsfeeder',
     help='''The name of the SQS queue; defaults to "cdapsfeeder"''')
@@ -287,7 +291,7 @@ parser.add_argument(
     '--aws', action='store_true',
     help='''Set for running on AWS EC2; implies --retrieve-from-pds 
             --results-in-s3  --use-sqs --saturn-kernels-only --no-overlay-file
-            --no-update-indexes''')
+            --no-update-indexes --deduce-aws-processors''')
 parser.add_argument(
     '--aws-results-bucket', default='seti-cb-results',
     help='The Amazon S3 bucket to store results files in')
@@ -441,6 +445,62 @@ file_add_selection_arguments(parser)
 
 arguments = parser.parse_args(command_list)
 
+AWS_PROCESSORS = {
+    't2.nano': 1,
+    't2.micro': 1,
+    't2.small': 1,
+    't2.medium': 2,
+    't2.large': 2,
+    't2.xlarge': 4,
+    't2.2xlarge': 8,
+    'm4.large': 2,
+    'm4.xlarge': 4,
+    'm4.2xlarge': 8,
+    'm4.4xlarge': 16,
+    'm4.10xlarge': 40,
+    'm4.16xlarge': 64,
+    'm3.medium': 1,
+    'm3.large': 2,
+    'm3.xlarge': 4,
+    'm3.2xlarge': 8,
+    'c4.large': 2,
+    'c4.xlarge': 4,
+    'c4.2xlarge': 8,
+    'c4.4xlarge': 16,
+    'c4.8xlarge': 36,
+    'c3.large': 2,
+    'c3.xlarge': 4,
+    'c3.2xlarge': 8,
+    'c3.4xlarge': 16,
+    'c3.8xlarge': 32,
+    'x1.16xlarge': 64,      # OK but expensive
+    'x1.32xlarge': 128,     # OK but expensive
+    'r4.large': 2,          # Preferred
+    'r4.xlarge': 4,         # Preferred
+    'r4.2xlarge': 8,        # Preferred
+    'r4.4xlarge': 16,       # Preferred
+    'r4.8xlarge': 32,       # Preferred
+    'r4.16xlarge': 64,      # Preferred
+    'r3.large': 2,          # Preferred
+    'r3.xlarge': 4,         # Preferred
+    'r3.2xlarge': 8,        # Preferred
+    'r3.4xlarge': 16,       # Preferred
+    'r3.8xlarge': 32,       # Preferred
+    'i2.xlarge': 4,         # OK
+    'i2.2xlarge': 8,        # OK
+    'i2.4xlarge': 16,       # OK
+    'i2.8xlarge': 32,       # OK
+    'd2.xlarge': 4,         # OK
+    'd2.2xlarge': 8,        # OK
+    'd2.4xlarge': 16,       # OK
+    'd2.8xlarge': 36,       # OK
+    'p2.xlarge': 4,
+    'p2.8xlarge': 32,
+    'p2.16xlarge': 164,
+    'g2.2xlarge': 8,
+    'g2.8xlarge': 32
+}
+
 RESULTS_DIR = CB_RESULTS_ROOT
 if arguments.aws:
     arguments.retrieve_from_pds = True
@@ -449,8 +509,41 @@ if arguments.aws:
     arguments.no_overlay_file = True
     arguments.no_update_indexes = True
     arguments.use_sqs = True
+    arguments.deduce_aws_processors = True
 if arguments.results_in_s3:
     RESULTS_DIR = ''
+
+def read_url(url):
+    try:
+        url_fp = urllib2.urlopen(url)
+        ret = url_fp.read()
+        url_fp.close()
+        return ret
+    except urllib2.HTTPError, e:
+        return 'READ FAILURE'
+    except urllib2.URLError, e:
+        return 'READ FAILURE'
+
+HOST_FQDN = socket.getfqdn()
+ON_EC2_INSTANCE = HOST_FQDN.endswith('.compute.internal')
+if ON_EC2_INSTANCE:
+    HOST_AMI_ID = read_url('http://169.254.169.254/latest/meta-data/ami-id')
+    HOST_PUBLIC_NAME = read_url('http://169.254.169.254/latest/meta-data/public-hostname')
+    HOST_PUBLIC_IPV4 = read_url('http://169.254.169.254/latest/meta-data/public-ipv4')
+    HOST_INSTANCE_ID = read_url('http://169.254.169.254/latest/meta-data/instance-id')
+    HOST_INSTANCE_TYPE = read_url('http://169.254.169.254/latest/meta-data/instance-type')
+    HOST_ZONE = read_url('http://169.254.169.254/latest/meta-data/placement/availability-zone')
+    if arguments.deduce_aws_processors:
+        arguments.max_subprocesses = AWS_PROCESSORS[HOST_INSTANCE_TYPE]
+else:
+    HOST_AMI_ID = None
+    HOST_PUBLIC_NAME = None
+    HOST_PUBLIC_IPV4 = None
+    HOST_INSTANCE_ID = None
+    HOST_INSTANCE_TYPE = None
+    HOST_ZONE = None
+
+TMP_DIR = '/tmp'
 
 
 ###############################################################################
@@ -510,69 +603,58 @@ def collect_cmd_line(image_path):
 
 SUBPROCESS_LIST = []
 
-def run_and_maybe_wait(args, image_path, bootstrapped, sqs_handle):
-    said_waiting = False
-    while len(SUBPROCESS_LIST) == arguments.max_subprocesses:
-        if not said_waiting:
-            main_logger.debug('Waiting for a free subprocess')
-            said_waiting = True
-        for i in xrange(len(SUBPROCESS_LIST)):
-            if SUBPROCESS_LIST[i][0].poll() is not None:
-                old_image_path = SUBPROCESS_LIST[i][1]
-                bootstrapped = SUBPROCESS_LIST[i][2]
-                old_sqs_handle = SUBPROCESS_LIST[i][3]
-                filename = file_clean_name(old_image_path)
-                if arguments.results_in_s3:
-                    results = filename + ' - Job completed'
-                else:
-                    if bootstrapped:
-                        bootstrap_pref = 'force'
-                    else:
-                        bootstrap_pref = 'no'
-                    metadata = file_read_offset_metadata(
-                                                 old_image_path,
-                                                 bootstrap_pref=bootstrap_pref)
-                    results = filename + ' - ' + offset_result_str(metadata)
-                main_logger.info(results)
-                del SUBPROCESS_LIST[i]
-                if old_sqs_handle is not None:
-                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                              ReceiptHandle=sqs_handle)
-                break
-        if len(SUBPROCESS_LIST) == arguments.max_subprocesses:
-            time.sleep(1)
-
-    main_logger.debug('Spawning subprocess %s', str(args))
-        
-    pid = subprocess.Popen(args)
-    SUBPROCESS_LIST.append((pid, image_path, bootstrapped, sqs_handle))
-
-def wait_for_all():
+def wait_for_subprocess(all=False):
+    ec2_termination_count = 0
+    subprocess_count = arguments.max_subprocesses-1
+    if all:
+        subprocess_count = 0
     while len(SUBPROCESS_LIST) > 0:
+        if ec2_termination_count == 5: # Check every 5 seconds
+            ec2_termination_count = 0
+            check_for_ec2_termination()
+        else:
+            ec2_termination_count += 1
         for i in xrange(len(SUBPROCESS_LIST)):
             if SUBPROCESS_LIST[i][0].poll() is not None:
                 old_image_path = SUBPROCESS_LIST[i][1]
                 bootstrapped = SUBPROCESS_LIST[i][2]
                 old_sqs_handle = SUBPROCESS_LIST[i][3]
                 filename = file_clean_name(old_image_path)
-                if arguments.results_in_s3:
-                    results = filename + ' - Job completed'
+                if bootstrapped:
+                    bootstrap_pref = 'force'
                 else:
-                    if bootstrapped:
-                        bootstrap_pref = 'force'
-                    else:
-                        bootstrap_pref = 'no'
+                    bootstrap_pref = 'no'
+                if arguments.results_in_s3:
+                    offset_path = file_clean_join(TMP_DIR,
+                                                  filename+'.off')
+                    metadata = file_read_offset_metadata_path(offset_path)
+                    try:
+                        os.remove(offset_path)
+                    except:
+                        pass
+                else:
                     metadata = file_read_offset_metadata(
                                                  old_image_path,
                                                  bootstrap_pref=bootstrap_pref)
-                    results = filename + ' - ' + offset_result_str(metadata)
+                results = filename + ' - ' + offset_result_str(metadata)
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 if old_sqs_handle is not None:
                     SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
                                               ReceiptHandle=old_sqs_handle)
                 break
+        if len(SUBPROCESS_LIST) <= subprocess_count:
+            break
         time.sleep(1)
+
+def run_and_maybe_wait(args, image_path, bootstrapped, sqs_handle):
+    wait_for_subprocess()
+
+    main_logger.debug('Spawning subprocess %s', str(args))
+        
+    pid = subprocess.Popen(args)
+    SUBPROCESS_LIST.append((pid, image_path, bootstrapped, sqs_handle))
+
 
 ###############################################################################
 #
@@ -651,19 +733,21 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         return True
 
     image_path_local = image_path
+    image_name = file_clean_name(image_path)
     
     if arguments.retrieve_from_pds:
         short_path = file_img_to_short_img_path(image_path)
-        if short_path.index('_CALIB') == -1:
+        if short_path.find('_CALIB') == -1:
             short_path = short_path.replace('.IMG', '_CALIB.IMG')
         url = PDS_RINGS_CALIB_ROOT + short_path
         try:
-            local_fd, image_path_local = tempfile.mkstemp(suffix='.IMG', prefix='ISS_')
+            image_path_local = file_clean_join(TMP_DIR, image_name+'.IMG')
+            local_fp = open(image_path_local, 'wb')
             main_logger.debug('Retrieving %s to %s', url, image_path_local)
             url_fp = urllib2.urlopen(url)
-            os.write(local_fd, url_fp.read())
+            local_fp.write(url_fp.read())
             url_fp.close()
-            os.close(local_fd)
+            local_fp.close()
         except urllib2.HTTPError, e:
             main_logger.error('Failed to retrieve %s: %s', url, e)
             try:
@@ -691,9 +775,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                       make_dirs=not arguments.results_in_s3)
         image_log_path_local = image_log_path
         if arguments.results_in_s3:
-            local_fd, image_log_path_local = tempfile.mkstemp(
-                                                  suffix='_imglog.txt', prefix='CB_')
-            os.close(local_fd)
+            image_log_path_local = file_clean_join(TMP_DIR, 
+                                                   image_name+'_imglog.txt')
         else:
             if os.path.exists(image_log_path_local):
                 os.remove(image_log_path_local) # XXX Need option to not do this
@@ -714,9 +797,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                               make_dirs=not arguments.results_in_s3)
     offset_path_local = offset_path
     if arguments.results_in_s3:
-        local_fd, offset_path_local = tempfile.mkstemp(suffix='.OFF', 
-                                                       prefix='CB_')
-        os.close(local_fd)
+        offset_path_local = file_clean_join(TMP_DIR, image_name+'.off') 
 
     try:
         obs = file_read_iss_file(image_path_local, orig_path=image_path)
@@ -738,10 +819,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                 pass
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
+            if not arguments.is_subprocess:
+                try:
+                    os.remove(offset_path_local)
+                except:
+                    pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -769,10 +851,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
+            if not arguments.is_subprocess:
+                try:
+                    os.remove(offset_path_local)
+                except:
+                    pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -823,10 +906,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
+            if not arguments.is_subprocess:
+                try:
+                    os.remove(offset_path_local)
+                except:
+                    pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -835,6 +919,13 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     pass
         return True
 
+    metadata['host_ami_id'] = HOST_AMI_ID
+    metadata['host_public_name'] = HOST_PUBLIC_NAME
+    metadata['host_public_ipv4'] = HOST_PUBLIC_IPV4
+    metadata['host_instance_id'] = HOST_INSTANCE_ID
+    metadata['host_instance_type'] = HOST_INSTANCE_TYPE
+    metadata['host_zone'] = HOST_ZONE
+    
     overlay_path_local = None
     if not arguments.no_overlay_file:
         overlay_path = file_img_to_overlay_path(
@@ -844,8 +935,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                     make_dirs=not arguments.results_in_s3)
         overlay_path_local = overlay_path
         if arguments.results_in_s3:
-            local_fd, overlay_path_local = tempfile.mkstemp(suffix='.OVR', prefix='CB_')
-            os.close(local_fd)
+            overlay_path_local = file_clean_join(TMP_DIR, image_name+'.ovr')
     
     try:
         file_write_offset_metadata_path(offset_path_local, metadata,
@@ -878,10 +968,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
             copy_file_to_s3(offset_path_local, offset_path)
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
+            if not arguments.is_subprocess:
+                try:
+                    os.remove(offset_path_local)
+                except:
+                    pass
             if image_log_path_local is not None:
                 copy_file_to_s3(image_log_path_local, image_log_path)
                 try:
@@ -902,8 +993,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                             make_dirs=not arguments.results_in_s3)
     png_path_local = png_path
     if arguments.results_in_s3:
-        local_fd, png_path_local = tempfile.mkstemp(suffix='.PNG', prefix='CB_')
-        os.close(local_fd)
+        png_path_local = file_clean_join(TMP_DIR, image_name+'.png')
 
     png_image = offset_create_overlay_image(
                         obs, metadata,
@@ -933,10 +1023,11 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
 
     if arguments.results_in_s3:
         copy_file_to_s3(offset_path_local, offset_path)
-        try:
-            os.remove(offset_path_local)
-        except:
-            pass
+        if not arguments.is_subprocess:
+            try:
+                os.remove(offset_path_local)
+            except:
+                pass
         if image_log_path_local is not None:
             copy_file_to_s3(image_log_path_local, image_log_path)
             try:
@@ -955,6 +1046,38 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             pass
 
     return True
+
+def check_for_ec2_termination():
+    if ON_EC2_INSTANCE:
+        term = read_url('http://169.254.169.254/latest/meta-data/spot/termination-time')
+        if term != 'READ FAILURE' and term.find('Not Found') == -1:
+            # Termination notice! We have two minutes
+            main_logger.error('Termination notice received - shutdown at %s',
+                              term)
+            exit_processing()
+
+def exit_processing():
+    end_time = time.time()
+    
+    main_logger.info('Total files processed %d', num_files_processed)
+    main_logger.info('Total files skipped %d', num_files_skipped)
+    main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
+    
+    if arguments.profile and arguments.max_subprocesses == 0:
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        ps.print_callers()
+        main_logger.info('Profile results:\n%s', s.getvalue())
+    
+    log_close_main_logging('cb_main_offset')
+    
+    if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
+        copy_file_to_s3(main_log_path_local, main_log_path)
+        
+    sys.exit(0)
 
 #===============================================================================
 # 
@@ -988,7 +1111,9 @@ iss.initialize(ck=kernel_type, planets=(6,),
 
 main_log_path = arguments.main_logfile
 main_log_path_local = main_log_path
-if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
+if (arguments.results_in_s3 and
+    arguments.main_logfile_level.upper() != 'NONE' and
+    main_log_path is None):
     local_fd, main_log_path_local = tempfile.mkstemp(suffix='_mainlog.txt', 
                                                      prefix='CB_')
     os.close(local_fd)
@@ -1057,6 +1182,15 @@ main_logger.info('**********************************')
 main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
 main_logger.info('**********************************')
 main_logger.info('')
+main_logger.info('Host Local Name: %s', HOST_FQDN)
+if ON_EC2_INSTANCE:
+    main_logger.info('Host Public Name: %s (%s) in %s', HOST_PUBLIC_NAME, 
+                     HOST_PUBLIC_IPV4, HOST_ZONE)
+    main_logger.info('Host AMI ID: %s', HOST_AMI_ID)
+    main_logger.info('Host Instance Type: %s', HOST_INSTANCE_TYPE)
+    main_logger.info('Host Instance ID: %s', HOST_INSTANCE_ID)
+    
+main_logger.info('')
 main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
 main_logger.info('Subprocesses:  %d', arguments.max_subprocesses)
@@ -1099,8 +1233,8 @@ if arguments.retrieve_from_pds and not arguments.no_update_indexes:
     main_logger.info('Downloading PDS index files')
     index_no = 2001
     while True:
-        index_file = os.path.join(COISS_2XXX_DERIVED_ROOT,
-                                  'COISS_%04d-index.tab' % index_no)
+        index_file = file_clean_join(COISS_2XXX_DERIVED_ROOT,
+                                     'COISS_%04d-index.tab' % index_no)
         if not os.path.exists(index_file):
             url = PDS_RINGS_VOLUMES_ROOT + (
                             'COISS_%04d/index/index.tab' % index_no)
@@ -1133,12 +1267,15 @@ if arguments.use_sqs:
     if SQS_QUEUE:
         SQS_QUEUE_URL = SQS_QUEUE.url
         while True:
+            check_for_ec2_termination()
+            if arguments.max_subprocesses > 0:
+                wait_for_subprocess()
             messages = SQS_QUEUE.receive_messages(
                           MaxNumberOfMessages=1,
                           WaitTimeSeconds=10)
-            if len(messages) == 0:
-                main_logger.info('No new image names in the queue - exiting')
-                break
+#             if len(messages) == 0:
+#                 main_logger.info('No new image names in the queue - exiting')
+#                 break
             for message in messages:
                 image_path = message.body
                 receipt_handle = message.receipt_handle
@@ -1180,24 +1317,6 @@ else:
         else:
             num_files_skipped += 1
 
-wait_for_all()
+wait_for_subprocess(all=True)
 
-end_time = time.time()
-
-main_logger.info('Total files processed %d', num_files_processed)
-main_logger.info('Total files skipped %d', num_files_skipped)
-main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
-
-if arguments.profile and arguments.max_subprocesses == 0:
-    pr.disable()
-    s = StringIO.StringIO()
-    sortby = 'cumulative'
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    ps.print_callers()
-    main_logger.info('Profile results:\n%s', s.getvalue())
-
-log_close_main_logging('cb_main_offset')
-
-if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
-    copy_file_to_s3(main_log_path_local, main_log_path)
+exit_processing()
