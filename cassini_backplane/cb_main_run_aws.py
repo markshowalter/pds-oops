@@ -63,8 +63,17 @@ parser.add_argument(
     help='''The minimum number of entries we allow in the queue before 
     starting to fill again''')
 parser.add_argument(
-    '--drain_delay', type=int, default=10,
+    '--drain-delay', type=int, default=10,
     help='''The number of seconds to wait between polling for queue length''')
+parser.add_argument(
+    '--purge-first', action='store_true',
+    help='''Purge the queue before starting''')
+parser.add_argument(
+    '--send-done', action='store_true',
+    help='''Send DONE message at end''')
+parser.add_argument(
+    '--done-delay', type=int, default=300,
+    help='''The number of seconds to wait before sending DONE''')
 parser.add_argument(
     '--aws-results-bucket', default='seti-cb-results',
     help='The Amazon S3 bucket to store results files in')
@@ -123,22 +132,26 @@ def approximate_number_of_messages():
     attributes = attributes['Attributes']
     num_msg = int(attributes['ApproximateNumberOfMessages'])
     num_msg_notvis = int(attributes['ApproximateNumberOfMessagesNotVisible'])
-    main_logger.debug('Approximate images in queue %d, being processed %d',
-                      num_msg, num_msg_notvis)
+    main_logger.debug('In queue %d, Not vis %d, Sent %d',
+                      num_msg, num_msg_notvis, num_files_processed)
     return num_msg, num_msg_notvis
     
 def feed_one_image(image_path):
-    num_msg, num_msg_notvis = approximate_number_of_messages()
-    if num_msg >= QUEUE_HIGH_WATER_MARK:
-        main_logger.debug('Waiting for queue to drain')
-        while num_msg >= QUEUE_LOW_WATER_MARK:
-            time.sleep(arguments.drain_delay)
-            num_msg, num_msg_notvis = approximate_number_of_messages()
-            
+    global QUEUE_FEED_BEFORE_CHECKING
+    if QUEUE_FEED_BEFORE_CHECKING <= 0:
+        num_msg, num_msg_notvis = approximate_number_of_messages()
+        if num_msg >= QUEUE_HIGH_WATER_MARK:
+            main_logger.debug('Waiting for queue to drain')
+            while num_msg >= QUEUE_LOW_WATER_MARK:
+                time.sleep(arguments.drain_delay)
+                num_msg, num_msg_notvis = approximate_number_of_messages()
+            QUEUE_FEED_BEFORE_CHECKING = (QUEUE_HIGH_WATER_MARK - 
+                                          QUEUE_LOW_WATER_MARK)
+    QUEUE_FEED_BEFORE_CHECKING -= 1
     short_path = file_img_to_short_img_path(image_path)
     if short_path.index('_CALIB') == -1:
         short_path = short_path.replace('.IMG', '_CALIB.IMG')
-    main_logger.debug('Enqueueing %s', short_path)
+    main_logger.info('=> %s', short_path)
     response = SQS_QUEUE.send_message(MessageBody=image_path)
 #                                       MessageGroupId='fifo')
 
@@ -150,6 +163,8 @@ QUEUE_NAME = arguments.sqs_queue_name
 
 QUEUE_HIGH_WATER_MARK = arguments.high_water_mark
 QUEUE_LOW_WATER_MARK = arguments.low_water_mark
+
+QUEUE_FEED_BEFORE_CHECKING = QUEUE_HIGH_WATER_MARK
 
 S3_CLIENT = boto3.client('s3')
 SQS_RESOURCE = boto3.resource('sqs')
@@ -217,11 +232,28 @@ main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
+if arguments.purge_first:
+    main_logger.info('Purging queue')
+    SQS_CLIENT.purge_queue(QueueUrl=SQS_QUEUE_URL)
+    time.sleep(90) # Wait for the purge to finish
+    
 for image_path in file_yield_image_filenames_from_arguments(
                                                 arguments,
                                                 arguments.retrieve_from_pds):
     feed_one_image(image_path)
     num_files_processed += 1
+
+if arguments.send_done:
+    main_logger.info('Waiting for queue to drain before sending DONE marker')
+    while True:
+        num_msg, num_msg_notvis = approximate_number_of_messages()
+        if num_msg > 0 or num_msg_notvis > 0:
+            time.sleep(arguments.drain_delay)
+            continue
+        break
+    main_logger.info('Delaying drain before sending DONE marker')
+    time.sleep(arguments.done_delay)
+    SQS_QUEUE.send_message(MessageBody='DONE')
 
 end_time = time.time()
 

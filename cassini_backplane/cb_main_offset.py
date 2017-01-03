@@ -604,6 +604,7 @@ def collect_cmd_line(image_path):
 SUBPROCESS_LIST = []
 
 def wait_for_subprocess(all=False):
+    global num_files_completed
     ec2_termination_count = 0
     subprocess_count = arguments.max_subprocesses-1
     if all:
@@ -636,7 +637,10 @@ def wait_for_subprocess(all=False):
                     metadata = file_read_offset_metadata(
                                                  old_image_path,
                                                  bootstrap_pref=bootstrap_pref)
+                num_files_completed += 1
                 results = filename + ' - ' + offset_result_str(metadata)
+                results += ' (%.2f sec/image)' % ((time.time()-start_time)/
+                                                  float(num_files_completed))
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 if old_sqs_handle is not None:
@@ -671,6 +675,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
                              botsim_offset=None, cartographic_data=None,
                              bootstrapped=False, sqs_handle=None):
+    global num_files_completed
+    
     if bootstrapped:
         bootstrap_pref = 'force'
     else:
@@ -1003,12 +1009,15 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         font=png_label_font)
     file_write_png_path(png_path_local, png_image)
     
-    if arguments.display_offset_results:
-        display_offset_data(obs, metadata, canvas_size=None)
-
+    num_files_completed += 1
     filename = file_clean_name(image_path)
     results = filename + ' - ' + offset_result_str(metadata)
+    results += ' (%.2f sec/image)' % ((time.time()-start_time)/
+                                      float(num_files_completed))
     main_logger.info(results)
+
+    if arguments.display_offset_results:
+        display_offset_data(obs, metadata, canvas_size=None)
 
     if arguments.profile and arguments.is_subprocess:
         image_pr.disable()
@@ -1114,13 +1123,15 @@ main_log_path_local = main_log_path
 if (arguments.results_in_s3 and
     arguments.main_logfile_level.upper() != 'NONE' and
     main_log_path is None):
-    local_fd, main_log_path_local = tempfile.mkstemp(suffix='_mainlog.txt', 
-                                                     prefix='CB_')
-    os.close(local_fd)
+    main_log_path_local = '/tmp/mainlog.txt' # For CloudWatch logs
     main_log_datetime = datetime.datetime.now().isoformat()[:-7]
     main_log_datetime = main_log_datetime.replace(':','-')
-    main_log_path = 'logs/cb_main_offset/'+main_log_datetime
-    main_log_path += '-'+str(os.getpid())+'.log'
+    main_log_path = 'logs/cb_main_offset/'+main_log_datetime+'-'
+    if HOST_INSTANCE_ID is not None:
+        main_log_path += HOST_INSTANCE_ID
+    else:
+        main_log_path += '-'+str(os.getpid())
+    main_log_path += '.log'
 
 main_logger, image_logger = log_setup_main_logging(
                'cb_main_offset', arguments.main_logfile_level, 
@@ -1177,6 +1188,7 @@ if arguments.saturn_only:
 start_time = time.time()
 num_files_processed = 0
 num_files_skipped = 0
+num_files_completed = 0
 
 main_logger.info('**********************************')
 main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
@@ -1279,6 +1291,14 @@ if arguments.use_sqs:
             for message in messages:
                 image_path = message.body
                 receipt_handle = message.receipt_handle
+                if image_path == 'DONE':
+                    # Delete it and send it again to the next instance
+                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=receipt_handle)
+                    SQS_QUEUE.send_message(MessageBody='DONE')
+                    main_logger.info('DONE message received - exiting')
+                    wait_for_subprocess(all=True)
+                    exit_processing()
                 if process_offset_one_image(
                                 image_path,
                                 allow_stars=arguments.allow_stars, 
