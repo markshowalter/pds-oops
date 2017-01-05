@@ -1888,7 +1888,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                 in_front_mask[intersect] = True
                 metadata['occluded_by'].append(body_metadata['body_name'])
 
-    if not metadata['emission_ok']:
+    if metadata['emission_ok'] == 'plain':
         # Plain model
         radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         model = 1.-radii/RINGS_MAX_RADIUS

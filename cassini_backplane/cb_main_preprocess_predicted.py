@@ -78,14 +78,22 @@ def process_predicted_one_image(image_path):
                                time=polymath.Scalar([obs.midtime,
                                                      obs.midtime-obs.texp/2,
                                                      obs.midtime+obs.texp/2]))
-    ra = center_bp.right_ascension().mvals.astype('float')
-    dec = center_bp.declination().mvals.astype('float')
-    dra_dt = (ra[2]-ra[1])/obs.texp
-    ddec_dt = (dec[2]-dec[1])/obs.texp
+    ra = center_bp.right_ascension().vals.astype('float')
+    dec = center_bp.declination().vals.astype('float')
+    if len(ra.shape) == 0:
+        dra_dt = 0.
+        ddec_dt = 0.
+        ra_mid = ra
+        dec_mid = dec
+    else:
+        dra_dt = (ra[2]-ra[1])/obs.texp
+        ddec_dt = (dec[2]-dec[1])/obs.texp
+        ra_mid = ra[0]
+        dec_mid = dec[0]
     
     pred_metadata = {}
-    pred_metadata['ra_center_midtime'] = ra[0]
-    pred_metadata['dec_center_midtime'] = dec[0]
+    pred_metadata['ra_center_midtime'] = ra_mid
+    pred_metadata['dec_center_midtime'] = dec_mid
     pred_metadata['dra_dt'] = dra_dt
     pred_metadata['ddec_dt'] = ddec_dt
     
@@ -93,7 +101,7 @@ def process_predicted_one_image(image_path):
     
     main_logger.debug('%s RA %9.7f DEC %9.7f DRA %16.13f DDEC %16.13f',
                       file_clean_name(image_path),
-                      ra[0], dec[0], dra_dt, ddec_dt)
+                      ra_mid, dec_mid, dra_dt, ddec_dt)
     
     return True
 
