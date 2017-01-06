@@ -510,6 +510,21 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if titan_offset is not None:
                 total_good_titan_offset += 1
 
+            max_offset = MAX_POINTING_ERROR[(tuple(metadata['image_shape']),
+                                             metadata['camera'])]
+            if (stars_offset is not None and (abs(stars_offset[0]) > max_offset[0] or
+                                              abs(stars_offset[1]) > max_offset[1])):
+                print 'WARNING - ', filename, '-',
+                print 'Stars Offset', stars_offset, 'exceeds maximum', max_offset 
+            if (model_offset is not None and (abs(model_offset[0]) > max_offset[0] or
+                                              abs(model_offset[1]) > max_offset[1])):
+                print 'WARNING - ', filename, '-',
+                print 'Model Offset', model_offset, 'exceeds maximum', max_offset 
+            if (titan_offset is not None and (abs(titan_offset[0]) > max_offset[0] or
+                                              abs(titan_offset[1]) > max_offset[1])):
+                print 'WARNING - ', filename, '-',
+                print 'Titan Offset', titan_offset, 'exceeds maximum', max_offset 
+                
             if stars_offset is not None:
                 if model_offset is not None:
                     key = ('Stars vs. Model',

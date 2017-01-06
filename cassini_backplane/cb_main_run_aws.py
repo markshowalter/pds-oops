@@ -171,7 +171,7 @@ SQS_RESOURCE = boto3.resource('sqs')
 SQS_CLIENT = boto3.client('sqs')
 SQS_QUEUE = SQS_RESOURCE.create_queue(QueueName=QUEUE_NAME,
                                       Attributes={'MessageRetentionPeriod': str(14*86400),
-                                                  'VisibilityTimeout': str(3600),
+                                                  'VisibilityTimeout': str(60*10), # 10 minutes
 #                                                   'FifoQueue': 'true',
                                                   })
 SQS_QUEUE_URL = SQS_QUEUE.url

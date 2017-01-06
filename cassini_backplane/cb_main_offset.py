@@ -248,7 +248,7 @@ if len(command_list) == 0:
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
 
 #TEMP
-    command_line_str = ' N1459804399_1 --image-console-level debug --force-offset --display-offset-results'
+    command_line_str = 'W1586374111_1 --image-console-level debug --force-offset'
 
     
     command_list = command_line_str.split()
@@ -691,7 +691,14 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     offset_metadata = file_read_offset_metadata(
                                                 image_path, overlay=False,
                                                 bootstrap_pref=bootstrap_pref)
-                    if 'error' not in offset_metadata:
+                    if 'error' in offset_metadata: # Old format XXX
+                        offset_metadata['status'] = 'error'
+                        offset_metadata['status_detail1'] = offset_metadata['error']
+                        offset_metadata['status_detail2'] = offset_metadata['error_traceback']
+                    elif 'status' not in offset_metadata:
+                        offset_metadata['status'] = 'ok'
+                    status = offset_metadata['status']
+                    if status != 'error':
                         main_logger.debug(
                             'Skipping %s - offset file exists and metadata OK', 
                             image_path)
@@ -701,9 +708,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                             'Processing %s - offset file indicates error', image_path)
                     else:
                         assert redo_offset_nonspice_error or redo_offset_spice_error
-                        error = offset_metadata['error']
+                        error = offset_metadata['status_detail1']
                         if error == '':
-                            error = offset_metadata['error_traceback'].split('\n')[-2]
+                            error = offset_metadata['status_detail2'].split('\n')[-2]
                         if error.startswith('SPICE(NOFRAMECONNECT)'):
                             if redo_offset_spice_error:
                                 main_logger.debug(
@@ -807,6 +814,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
 
     try:
         obs = file_read_iss_file(image_path_local, orig_path=image_path)
+    except KeyboardInterrupt:
+        raise
     except:
         main_logger.exception('File reading failed - %s', image_path)
         image_logger.exception('File reading failed - %s', image_path)
@@ -890,6 +899,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                               stars_config=stars_config,
                               rings_config=rings_config,
                               bodies_config=bodies_config)
+    except KeyboardInterrupt:
+        raise
     except:
         main_logger.exception('Offset finding failed - %s', image_path)
         image_logger.exception('Offset finding failed - %s', image_path)
@@ -947,6 +958,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         file_write_offset_metadata_path(offset_path_local, metadata,
                                         overlay=not arguments.no_overlay_file,
                                         overlay_path=overlay_path_local)
+    except KeyboardInterrupt:
+        raise
     except:
         main_logger.exception('Offset file writing failed - %s', image_path)
         image_logger.exception('Offset file writing failed - %s', image_path)
@@ -1276,47 +1289,47 @@ if arguments.use_sqs:
     except:
         main_logger.error('Failed to retrieve SQS queue "%s"',
                           arguments.sqs_queue_name)
-    if SQS_QUEUE:
-        SQS_QUEUE_URL = SQS_QUEUE.url
-        while True:
-            check_for_ec2_termination()
-            if arguments.max_subprocesses > 0:
-                wait_for_subprocess()
-            messages = SQS_QUEUE.receive_messages(
-                          MaxNumberOfMessages=1,
-                          WaitTimeSeconds=10)
+        exit_processing()
+    SQS_QUEUE_URL = SQS_QUEUE.url
+    while True:
+        check_for_ec2_termination()
+        if arguments.max_subprocesses > 0:
+            wait_for_subprocess()
+        messages = SQS_QUEUE.receive_messages(
+                      MaxNumberOfMessages=1,
+                      WaitTimeSeconds=10)
 #             if len(messages) == 0:
 #                 main_logger.info('No new image names in the queue - exiting')
 #                 break
-            for message in messages:
-                image_path = message.body
-                receipt_handle = message.receipt_handle
-                if image_path == 'DONE':
-                    # Delete it and send it again to the next instance
+        for message in messages:
+            image_path = message.body
+            receipt_handle = message.receipt_handle
+            if image_path == 'DONE':
+                # Delete it and send it again to the next instance
+                SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                          ReceiptHandle=receipt_handle)
+                SQS_QUEUE.send_message(MessageBody='DONE')
+                main_logger.info('DONE message received - exiting')
+                wait_for_subprocess(all=True)
+                exit_processing()
+            if process_offset_one_image(
+                            image_path,
+                            allow_stars=arguments.allow_stars, 
+                            allow_rings=arguments.allow_rings, 
+                            allow_moons=arguments.allow_moons, 
+                            allow_saturn=arguments.allow_saturn,
+                            botsim_offset=botsim_offset,
+                            cartographic_data=cartographic_data,
+                            bootstrapped=bootstrapped,
+                            sqs_handle=receipt_handle):
+                num_files_processed += 1
+                if arguments.max_subprocesses == 0:
                     SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
                                               ReceiptHandle=receipt_handle)
-                    SQS_QUEUE.send_message(MessageBody='DONE')
-                    main_logger.info('DONE message received - exiting')
-                    wait_for_subprocess(all=True)
-                    exit_processing()
-                if process_offset_one_image(
-                                image_path,
-                                allow_stars=arguments.allow_stars, 
-                                allow_rings=arguments.allow_rings, 
-                                allow_moons=arguments.allow_moons, 
-                                allow_saturn=arguments.allow_saturn,
-                                botsim_offset=botsim_offset,
-                                cartographic_data=cartographic_data,
-                                bootstrapped=bootstrapped,
-                                sqs_handle=receipt_handle):
-                    num_files_processed += 1
-                    if arguments.max_subprocesses == 0:
-                        SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                                  ReceiptHandle=receipt_handle)
-                else:
-                    num_files_skipped += 1
-                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                              ReceiptHandle=receipt_handle)
+            else:
+                num_files_skipped += 1
+                SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                          ReceiptHandle=receipt_handle)
 else:
     main_logger.info('')
     file_log_arguments(arguments, main_logger.info)
