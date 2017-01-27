@@ -74,17 +74,18 @@ def file_clean_join(*args):
     return ret.replace('\\', '/')
 
 def _validate_image_name(name):
-    valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
+    valid = ((len(name) == 13 or len(name) == 14) and
+             name[0] in 'NW' and name[11] == '_')
     if valid:
         try:
             _ = int(name[1:11])
-            _ = int(name[12])
+            _ = int(name[12:])
         except ValueError:
             valid = False
     if not valid:
         raise argparse.ArgumentTypeError(
              name+
-             ' is not a valid image name - format must be [NW]dddddddddd_d')
+             ' is not a valid image name - format must be [NW]dddddddddd_d{d}')
     return name
 
 def file_add_selection_arguments(parser):
@@ -338,7 +339,7 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
             img_dir = file_clean_join(coiss_fulldir, range_dir)
             # Sort by number then letter so N/W are together
             for img_name in sorted(os.listdir(meta_dir),
-                                   key=lambda x: x[1:13]+x[0]):
+                                   key=lambda x: x[1:11]+x[0]):
                 if not img_name.endswith(search_suffix):
                     continue
                 img_name = img_name.replace(search_suffix, suffix)
@@ -349,7 +350,7 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:13] not in restrict_list:
+                if restrict_list and img_name[:img_name.find(suffix)] not in restrict_list:
                     continue
                 img_path = file_clean_join(img_dir, img_name)
                 if not os.path.isfile(img_path):
@@ -460,7 +461,7 @@ def file_yield_image_filenames_index(img_start_num=0, img_end_num=9999999999,
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:13] not in restrict_list:
+                if restrict_list and img_name[:img_name.find(suffix)] not in restrict_list:
                     continue
                 img_path = file_clean_join(image_root, vol_name, 'data',
                                            range_dir, img_name)
@@ -787,7 +788,8 @@ def file_write_png_path(png_path, image):
 
 def file_img_to_predicted_path(img_path, make_dirs=False):
     fn = _results_path(img_path, 'pred', make_dirs=make_dirs, 
-                       include_image_filename=False)
+                       include_image_filename=False,
+                       root=CB_SUPPORT_FILES_ROOT)
     fn = file_clean_join(fn, 'PREDICTED-METADATA.dat')
     return fn
 

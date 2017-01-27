@@ -17,7 +17,7 @@ import oops
 # Root of the cassini_backplane source directory.
 CB_SOURCE_ROOT = os.environ['CB_SOURCE_ROOT']
 
-# CB support files such as Voyager ring profiles.
+# CB support files such as Titan profiles.
 CB_SUPPORT_FILES_ROOT = os.environ['CB_SUPPORT_ROOT']
 
 # Cassini ISS non-calibrated volumes.

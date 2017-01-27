@@ -30,7 +30,7 @@ from cb_util_oops import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = 'N1595480846_1 --main-console-level debug'
+    command_line_str = ''#N1595480846_1 --main-console-level debug'
 
     command_list = command_line_str.split()
 
