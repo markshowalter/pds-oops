@@ -1067,10 +1067,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         blur = blur_list[min(min_features-num_features_in_frame-1,
                              len(blur_list)-1)]
 
-    if blur is not None:
-        blur = blur/rms_gain
-            
-    logger.debug('Returning %d fiducial features, %d in frame, blur %s',
+    logger.info('%d fiducial features, %d in frame, blur %s',
                  num_features, num_features_in_frame, str(blur))
 
     return num_features_in_frame, feature_list, blur
@@ -1701,8 +1698,8 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                     extended FOV.
             'fiducial_blur'         The amount the RMS residual of the features
                                     had to be reduced in order to get enough.
-                                    1 means nothing was reduced. Otherwise
-                                    a number < 1.
+                                    None means nothing was reduced. Otherwise
+                                    a number > 1.
             'fiducial_features_ok'  True if the number of fidcual features
                                     is greater than the threshold.
             'confidence'            The confidence in how well this model will
@@ -1775,7 +1772,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata, None
-        confidence = 0.
+        confidence = min_curv_lc_conf
     else:
         logger.info('Curvature OK')
         metadata['curvature_ok'] = True

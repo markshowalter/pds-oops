@@ -112,13 +112,13 @@ if len(command_list) == 0:
 #     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.00770 Very Not OK
 #     command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur, low features, and stars - Curv 0.03719 Not really OK
 #     command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur and stars - Curv 0.06712 OK
-#     command_line_str = 'N1492060009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.82310 OK
+#     command_line_str = 'N1492060009_1 --no-allow-stars --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.82310 OK
 #     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.73527 OK
 #     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - too low res, but enough other features - Curv 0.54919 OK
 #     command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - star and model match - Curv 0.31104 OK
-#     command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
+    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
 #     command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # Star streaks through the rings but stars in wrong place - Curv N/A
-#     command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model but not used due to blurring - Curv 0.22336 OK
+#     command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model - Curv 0.22336 OK
 #     command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # Distant WAC ring - Curv 6.28 OK for reduced features
 
 #    command_line_str = 'N1495327885_1 --force-offset --image-console-level debug --display-offset-results' # Closeup with multiple gaps and ringlets
@@ -248,7 +248,7 @@ if len(command_list) == 0:
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
 
 #TEMP
-    command_line_str = 'W1586374111_1 --image-console-level debug --force-offset'
+#     command_line_str = 'W1586374111_1 --image-console-level debug --force-offset'
 
     
     command_list = command_line_str.split()
@@ -1161,6 +1161,8 @@ redo_offset_spice_error = arguments.redo_spice_error
 botsim_offset = None
 
 if arguments.botsim_offset:
+    if arguments.botsim_offset[0] == ',':
+        arguments.botsim_offset = arguments.botsim_offset[1:]
     x, y = arguments.botsim_offset.split(',')
     botsim_offset = (float(x.replace('"','')), float(y.replace('"','')))
 

@@ -39,6 +39,7 @@ def shift_image(image, offset_u, offset_v):
     if offset_u == 0 and offset_v == 0:
         return image
     
+    image = image.copy()
     image = np.roll(image, offset_u, 1)
     image = np.roll(image, offset_v, 0)
 

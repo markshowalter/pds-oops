@@ -643,7 +643,8 @@ def master_find_offset(obs,
         entirely_body = None
  
     if entirely_body:
-        if (entirely_body not in FUZZY_BODY_LIST and
+        if (botsim_offset is None and
+            entirely_body not in FUZZY_BODY_LIST and
             (bodies_cartographic_data is None or
              entirely_body not in bodies_cartographic_data)):
             # Nothing we can do here except bootstrap
@@ -699,8 +700,12 @@ def master_find_offset(obs,
                          rings_metadata['fiducial_features_ok'])
     rings_any_features = (rings_metadata is not None and
                           len(rings_metadata['fiducial_features'])>0)
-    rings_features_blurred = (rings_metadata is not None and
-                              rings_metadata['fiducial_blur'])
+    if (rings_metadata is not None and 
+        (rings_metadata['fiducial_blur'] is None or
+         rings_metadata['fiducial_blur'] == 1.)):
+        rings_features_blurred = None
+    else:
+        rings_features_blurred = rings_metadata['fiducial_blur']
     
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
@@ -979,7 +984,7 @@ def master_find_offset(obs,
 
         gaussian_blur = offset_config['default_gaussian_blur']
         if model_blur_amount is not None:
-            gaussian_blur = model_blur_amount
+            gaussian_blur = max(model_blur_amount, gaussian_blur)
             logger.info('Blurring model by %f', model_blur_amount)
         else:
             logger.info('Blurring model by default amount %f',
@@ -1746,5 +1751,8 @@ def offset_result_str(metadata):
             ret += ' '
         if single_body_str:
             ret += ' ' + single_body_str
+        model_blur = metadata['model_blur_amount']
+        if model_blur is not None:
+            ret += (' (Blur %.5f)' % model_blur)
         
     return ret
