@@ -1053,7 +1053,6 @@ def callback_offset(x, y, offdispdata):
         offdispdata.label_off_radius.config(
                                 text=('%7.3f'%offdispdata.off_radii[y,x]))
     if offdispdata.off_resolution is not None:
-        print offdispdata.off_resolution
         offdispdata.label_off_resolution.config(
                                 text=('%7.3f'%offdispdata.off_resolution[y,x]))
     if offdispdata.off_emission is not None:
@@ -1095,29 +1094,27 @@ def callback_b1press(x, y, offdispdata):
 def setup_offset_window(image_name):
     npres = np.load(image_name)
     data = npres['data']
-    arr_none = np.array(None)
     offdispdata = OffDispData()
     offdispdata.midtime = npres['midtime']
     offdispdata.off_radii = npres['radii']
     offdispdata.off_longitudes = npres['longitudes']
     offdispdata.off_resolution = npres['resolution']
-    if offdispdata.off_resolution == arr_none:
+    if offdispdata.off_resolution.shape[0] == 1:
         offdispdata.off_resolution = None
     offdispdata.off_incidence = npres['incidence']
-    if offdispdata.off_incidence == arr_none:
-        offdispdata.off_incidence = None
     offdispdata.off_emission = npres['emission']
-    if offdispdata.off_emission == arr_none:
+    if offdispdata.off_emission.shape[0] == 1:
         offdispdata.off_emission = None
     offdispdata.off_phase = npres['phase']
-    if offdispdata.off_phase == arr_none:
+    if offdispdata.off_phase.shape[0] == 1:
         offdispdata.off_phase = None
     
     # The original image and overlaid ring curves
     offdispdata.imdisp_offset = ImageDisp([data],
                                           title=image_name,
                                           canvas_size=CANVAS_SIZE,
-                                          allow_enlarge=True, auto_update=True)
+                                          allow_enlarge=True, auto_update=True,
+                                          one_zoom=False)
 
     callback_b1press_command = (lambda x, y, offdispdata=offdispdata: 
                                 callback_b1press(x, y, offdispdata))
