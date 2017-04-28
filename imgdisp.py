@@ -945,7 +945,7 @@ class ImageDisp(tk.Frame):
             return
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
                              (x-self.origin[0], y-self.origin[1]))
-        val = self.imgdata_list[img_num][y,x]
+        val = self.imgdata_list[img_num][int(y),int(x)]
         if val > 10000:
             self.label_val.config(text='Mouse val: %e' % val)
         else:
