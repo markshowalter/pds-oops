@@ -48,6 +48,7 @@ import numpy as np
 import msgpack
 import msgpack_numpy
 import os.path
+import sys
 import zlib
 from PIL import Image
 
@@ -191,10 +192,11 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                 csvreader = csv.reader(csvfile)
                 header = csvreader.next()
                 for colnum in xrange(len(header)):
-                    if header[colnum] == 'Primary File Spec':
+                    if (header[colnum] == 'Primary File Spec' or
+                        header[colnum] == 'primaryfilespec'):
                         break
                 else:
-                    print 'Badly formatted CSV file %s'
+                    print 'Badly formatted CSV file', filename
                     sys.exit(-1)
                 if arguments.image_name is None:
                     arguments.image_name = []
@@ -210,7 +212,13 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
         for filename in arguments.image_filelist:
             with open(filename, 'r') as fp:
                 for line in fp:
-                    restrict_image_list.append(line.strip())
+                    line = line.strip()
+                    if len(line) == 0:
+                        continue
+                    if len(line) != 13 and len(line) != 14:
+                        print 'BAD FILENAME', line
+                        sys.exit(-1)
+                    restrict_image_list.append(line)
     
     restrict_camera = 'NW'
     if arguments.nac_only:
@@ -225,8 +233,12 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
     volumes = arguments.volume
     
     if len(restrict_image_list):
-        first_image_number = min([int(x[1:11]) for x in restrict_image_list])
-        last_image_number = max([int(x[1:11]) for x in restrict_image_list])
+        first_image_number = max(first_image_number,
+                                 min([int(x[1:11]) 
+                                      for x in restrict_image_list]))
+        last_image_number = min(last_image_number,
+                                max([int(x[1:11]) 
+                                     for x in restrict_image_list]))
         
     if not use_index_files:
         for image_path in file_yield_image_filenames(

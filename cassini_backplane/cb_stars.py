@@ -683,8 +683,10 @@ def stars_make_good_bad_overlay(obs, star_list, offset,
 # 
 #===============================================================================
 
-def _trust_star_dn(obs):
-    return obs.filter1 == 'CL1' and obs.filter2 == 'CL2'
+def _trust_star_dn(obs, star, stars_config):
+    dn_ok = star.dn < stars_config['max_star_dn']
+    filter_ok = obs.filter1 == 'CL1' and obs.filter2 == 'CL2'
+    return dn_ok and filter_ok
 
 #def _stars_perform_photometry(obs, calib_data, star, offset,
 #                              extend_fov, stars_config):
@@ -746,6 +748,9 @@ def _stars_perform_photometry(obs, calib_data, star, offset,
     else:
         boxsize = stars_config['photometry_boxsize_default']
 
+    boxsize /= (1024 / obs.data.shape[0])
+    boxsize = max(boxsize, 5)
+    
     star.photometry_box_size = boxsize
 
     psf_size_half_u = int(boxsize + np.round(abs(star.move_u))) // 2
@@ -861,7 +866,8 @@ def stars_perform_photometry(obs, calib_data, star_list, offset=None,
             integrated_dn, bkgnd, integrated_std, bkgnd_std = ret
             if integrated_dn < 0:
                 confidence = 0.    
-            elif star.temperature_faked or not _trust_star_dn(obs):
+            elif (star.temperature_faked or 
+                  not _trust_star_dn(obs, star, stars_config)):
                 # Really the only thing we can do here is see if we detected
                 # something at all, because we can't trust the photometry
                 confidence = ((integrated_dn >= min_dn)*0.5 +

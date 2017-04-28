@@ -7,6 +7,9 @@
 #
 #####################################################################################
 
+CANVAS_SIZE = (512,512)
+
+import glob
 import sys
 import os.path
 import numpy as np
@@ -956,7 +959,8 @@ class ImageDisp(tk.Frame):
             return
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
                              (x-self.origin[0], y-self.origin[1]))
-        val = self.imgdata_list[img_num][y,x]
+        
+        val = self.imgdata_list[img_num][int(y),int(x)]
         if val > 10000:
             self.label_val.config(text='Mouse val: %e' % val)
         else:
@@ -1040,6 +1044,8 @@ class OffDispData(object):
 
 # The callback for mouse move events on the offset image
 def callback_offset(x, y, offdispdata):
+    x = int(x)
+    y = int(y)
     if offdispdata.off_longitudes is not None:
         offdispdata.label_off_inertial_longitude.config(
                                 text=('%7.3f'%offdispdata.off_longitudes[y,x]))
@@ -1054,7 +1060,7 @@ def callback_offset(x, y, offdispdata):
                                 text=('%7.3f'%offdispdata.off_emission[y,x]))
     if offdispdata.off_incidence is not None:
         offdispdata.label_off_incidence.config(
-                                text=('%7.3f'%offdispdata.off_incidence[y,x]))
+                                text=('%7.3f'%offdispdata.off_incidence))
     if offdispdata.off_phase is not None:
         offdispdata.label_off_phase.config(
                                 text=('%7.3f'%offdispdata.off_phase[y,x]))
@@ -1062,20 +1068,22 @@ def callback_offset(x, y, offdispdata):
 def callback_b1press(x, y, offdispdata):
     if (offdispdata.off_longitudes is not None and 
         offdispdata.off_radii is not None):
+        x = int(x)
+        y = int(y)
         longitude = offdispdata.off_longitudes[y,x]
         radius = offdispdata.off_radii[y,x]
         ring_x = np.cos(longitude * np.pi/180) * radius
         ring_y = np.sin(longitude * np.pi/180) * radius
-        print ('X %4d Y %4d: Longitude %7.3f degrees, Radius %7.3f km, '+
-               'Ring X %7.1f km, Ring Y %7.1f km')%(x,y,longitude,radius,ring_x,ring_y)
+        print ('X %4d Y %4d: Longitude %7.3f degrees, Radius %7.3f km'
+               # Ring X %7.1f km, Ring Y %7.1f km'
+               )%(x,y,longitude,radius)#,ring_x,ring_y)
         if offdispdata.last_xy is not None:
             last_x = offdispdata.last_xy[0]
             last_y = offdispdata.last_xy[1]
             print '** Distance %.2f km' % (np.sqrt((ring_x-last_x)**2+
                                                 (ring_y-last_y)**2)), 
-            print 'Angle %.2f degrees' % (longitude-np.arctan2(
-                                                ring_y-last_y,
-                                                ring_x-last_x) * 180./np.pi)
+#            print 'Angle %.2f degrees' % (np.arctan2(ring_y-last_y,
+#                                                     ring_x-last_x) * 180./np.pi)
             print
             offdispdata.last_xy = None
         else:
@@ -1084,21 +1092,29 @@ def callback_b1press(x, y, offdispdata):
 
 # Setup the offset window with no data
 def setup_offset_window(image_name):
-    npres = np.load(image_name+'.npz')
+    npres = np.load(image_name)
     data = npres['data']
     offdispdata = OffDispData()
+    offdispdata.midtime = npres['midtime']
     offdispdata.off_radii = npres['radii']
     offdispdata.off_longitudes = npres['longitudes']
     offdispdata.off_resolution = npres['resolution']
+    if offdispdata.off_resolution.shape[0] == 1:
+        offdispdata.off_resolution = None
     offdispdata.off_incidence = npres['incidence']
     offdispdata.off_emission = npres['emission']
+    if offdispdata.off_emission.shape[0] == 1:
+        offdispdata.off_emission = None
     offdispdata.off_phase = npres['phase']
+    if offdispdata.off_phase.shape[0] == 1:
+        offdispdata.off_phase = None
     
     # The original image and overlaid ring curves
     offdispdata.imdisp_offset = ImageDisp([data],
                                           title=image_name,
-                                          canvas_size=(512,512),
-                                          allow_enlarge=True, auto_update=True)
+                                          canvas_size=CANVAS_SIZE,
+                                          allow_enlarge=True, auto_update=True,
+                                          one_zoom=False)
 
     callback_b1press_command = (lambda x, y, offdispdata=offdispdata: 
                                 callback_b1press(x, y, offdispdata))
@@ -1113,7 +1129,13 @@ def setup_offset_window(image_name):
     gridrow = 0
     gridcolumn = 0
 
-    # Display for longitude and radius
+    label = tk.Label(img_addon_control_frame, text='Date:')
+    label.grid(row=gridrow, column=gridcolumn, sticky=tk.W)
+    offdispdata.label_midtime = tk.Label(img_addon_control_frame, 
+                                         text=offdispdata.midtime)
+    offdispdata.label_midtime.grid(row=gridrow, column=gridcolumn+1, sticky=tk.W)
+    gridrow += 1
+    
     label = tk.Label(img_addon_control_frame, text='Inertial Long:')
     label.grid(row=gridrow, column=gridcolumn, sticky=tk.W)
     offdispdata.label_off_inertial_longitude = tk.Label(img_addon_control_frame, text='')
@@ -1174,4 +1196,6 @@ root.withdraw()
 if len(sys.argv) < 2:
     print 'No image name specified'
 else:
-    display_offset(sys.argv[1])
+    for filename_desc in sys.argv[1:]:
+        for filename in sorted(glob.glob(filename_desc)):
+            display_offset(filename)

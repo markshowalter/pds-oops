@@ -56,10 +56,10 @@ parser.add_argument(
     '--sqs-queue-name', type=str, default='cdapsfeeder',
     help='''The name of the SQS queue; defaults to "cdapsfeeder"''')
 parser.add_argument(
-    '--high-water-mark', type=int, default=50,
+    '--high-water-mark', type=int, default=800,
     help='''The maximum number of entries we allow in the queue''')
 parser.add_argument(
-    '--low-water-mark', type=int, default=50,
+    '--low-water-mark', type=int, default=500,
     help='''The minimum number of entries we allow in the queue before 
     starting to fill again''')
 parser.add_argument(

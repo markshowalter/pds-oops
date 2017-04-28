@@ -67,7 +67,7 @@ DISPLAY_MOSAIC_METADATA_PY = os.path.join(CB_SOURCE_ROOT, 'utilities',
 # INSTRUMENT CONSTANTS #
 ########################
 
-# The maximum pointing error we allow in the (V,U) directions.
+# The maximum pointing error we allow in the (U,V) directions.
 MAX_POINTING_ERROR_NAC =   (110,80)  # Pixels
 MAX_POINTING_ERROR_WAC =   (11,8)
 MAX_POINTING_ERROR_LORRI = (40,40)
@@ -192,6 +192,9 @@ STARS_DEFAULT_CONFIG = {
     'photometry_boxsize_2': (100,9),
     'photometry_boxsize_default': 7,
     
+    # The maximum DN a star can have for us to trust the photometry.
+    'max_star_dn': 10000.,
+    
     # How far (in pixels) a star has to be from a major body before it is no
     # longer considered to conflict.
     'star_body_conflict_margin': 3,
@@ -214,6 +217,10 @@ BODIES_DEFAULT_CONFIG = {
     # in order to bother with it.
     'min_bounding_box_area': 3*3,
 
+    # Do enough oversampling of a small body to fill a box approximately this
+    # size. This allows nice anti-aliasing of edges.
+    'oversample_edge_limit': 128,
+    
     # The minimum number of pixels in the bounding box surrounding the body
     # in order to compute the latlon mask for bootstrapping.
     'min_latlon_mask_area': 10*10,
@@ -244,28 +251,30 @@ BODIES_DEFAULT_CONFIG = {
     'limb_incidence_frac': 0.4, 
     
     # What resolution is so small that the surface features make the moon
-    # non-circular when viewing the limb?
+    # non-circular when viewing the limb? If the center resolution is
+    # higher than this, we need to blur the body before correlating.
     'surface_bumpiness':
-        {'SATURN': 90., # This is really a measure of atmospheric haze
-         'PAN': 7., #30.,
-         'DAPHNIS': 3., #9.,
-         'ATLAS': 10., #41.,
-         'PROMETHEUS': 75., #140.,
-         'PANDORA': 52., #105.,
-         'EPIMETHEUS': 21., # 131
-         'JANUS': 35., # 205
-         'MIMAS': 0.5,
-         'ENCELADUS': 0.5,
-         'TETHYS': 1.,
-         'TELESTO': 34.,
-         'CALYPSO': 32.,
-         'DIONE': 1.,
-         'HELENE': 45.,
-         'RHEA': 1.2,
-         'TITAN': 0.,
-         'HYPERION': 0.,
-         'IAPETUS': 35.,
-         'PHOEBE': 0.,},
+        {'SATURN': 90.,     # This is really a measure of atmospheric haze
+         'PAN': 7.,         # Synchronous; this is irregularity in surface
+         'DAPHNIS': 3.,     # Synchronous; this is irregularity in surface
+         'ATLAS': 12.,      # Synchronous; this is irregularity in surface
+         'PROMETHEUS': 25., # Synchronous; this is irregularity in surface
+         'PANDORA': 20.,    # Synchronous; this is irregularity in surface
+         'EPIMETHEUS': 13., # Synchronous; this is irregularity in surface
+         'JANUS': 20.,      # Synchronous; this is irregularity in surface
+         'MIMAS': 5.,       # Relief of Herschel crater
+         'ENCELADUS': 0.5,  # Lacks high-relief
+         'TETHYS': 5.,      # Relief of Odysseus crater
+         'TELESTO': 5.,     # Synchronous; this is irregularity in surface
+         'CALYPSO': 7.,     # Synchronous; this is irregularity in surface
+         'DIONE': 0.75,     # Lacks high-relief craters
+         'HELENE': 45.,     # Very irregular and tumbles
+         'RHEA': 0.75,      # Lacks high-relief craters
+         'TITAN': 0.,       # We never do Titan with a Lambert model
+         'HYPERION': 350.,  # Highly elongated and tumbles
+         'IAPETUS': 35.,    # This is the height of the "walnut" equatorial bulge
+         'PHOEBE': 40.,     # A real mess with lots of deep craters
+         },
                          
     # Whether or not Lambert shading should be used, as opposed to just a
     # solid unshaded shape, when a cartographic reprojection is not
@@ -337,7 +346,7 @@ RINGS_DEFAULT_CONFIG = {
     
     # When manufacturing a model from an ephemeris list, each one-sided feature 
     # is shaded approximately this many pixels wide.
-    'fiducial_ephemeris_width': 30,
+    'fiducial_ephemeris_width': 100,
      
     # There must be at least this much curvature present for rings to be used 
     # for correlation.
@@ -352,7 +361,7 @@ RINGS_DEFAULT_CONFIG = {
     # The minimum ring emission angle in the image must be at least this
     # many degrees away from 90 for fiducial features to be used; otherwise
     # we just use a plain model.
-    'emission_fiducial_threshold': 5., 
+    'emission_fiducial_threshold': 1.5, 
     
     # The minimum ring emission angle in the image must be at least this
     # many degrees away from 90 to be used at all.
@@ -377,6 +386,10 @@ OFFSET_DEFAULT_CONFIG = {
     # before correlation. This can be overridden if the rings model requests
     # additional blurring.
     'default_gaussian_blur': 0.25,
+    
+    # This is the maximum we allow a model to be blurred because of rings
+    # or bodies before we give up.
+    'maximum_blur': 100.,
     
     # By default, the median filter looks at this many pixels.
     'median_filter_size': 11,
@@ -408,7 +421,7 @@ OFFSET_DEFAULT_CONFIG = {
     'secondary_corr_search_size': (15,15),  
     
     # The lowest confidence to allow for models
-    'lowest_confidence': 0.05,
+    'lowest_confidence': 0.01,
     
     # If the stars-based and bodies/rings-based correlations differ by at
     # least this number of pixels, then we need to choose between the stars
@@ -420,13 +433,26 @@ OFFSET_DEFAULT_CONFIG = {
     # Otherwise, the bodies/rings model overrides the stars.
     'stars_override_threshold': 6,
 
+    # The maximum number of times to iterate on secondary correlation while
+    # trying to zero in on the maximum answer.
+    'secondary_max_attempts': 10,
+    
     # If secondary correlation is off by at least this number of pixels, it 
-    # fails.
-    'secondary_corr_threshold': 3,
+    # fails (or continues to iterate).
+    'secondary_corr_threshold': 1,
     
     # If the secondary correlation peak isn't at least this fraction of the
     # primary correlation peak, correlation fails.
-    'secondary_corr_peak_threshold': 0.75,
+    'secondary_corr_peak_threshold': 0.4,
+    
+    # If the best secondary correlation peak found during offset tweaking isn't
+    # at least this fraction of the previous worst secondary correlation peak,
+    # correlation fails.
+    'secondary_corr_tweak_threshold': 0.7,
+    
+    # The maximum number of exhaustive search correlations that can be done
+    # if secondary correlation doesn't converge after max_attempts attempts.
+    'secondary_max_num_exhaustive': 7*7,
 }
 
 BOOTSTRAP_DEFAULT_CONFIG = {
