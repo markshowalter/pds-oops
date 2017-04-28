@@ -116,18 +116,18 @@ if len(command_list) == 0:
 #     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.73527 OK
 #     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - too low res, but enough other features - Curv 0.54919 OK
 #     command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - star and model match - Curv 0.31104 OK
-    command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
+#     command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
 #     command_line_str = 'N1595336719_1 --force-offset --image-console-level debug --display-offset-results' # Star streaks through the rings but stars in wrong place - Curv N/A
 #     command_line_str = 'N1755729895_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge with circular A ring model - Curv 0.22336 OK
 #     command_line_str = 'W1466448054_1 --force-offset --image-console-level debug --display-offset-results' # Distant WAC ring - Curv 6.28 OK for reduced features
 
-#    command_line_str = 'N1495327885_1 --force-offset --image-console-level debug --display-offset-results' # Closeup with multiple gaps and ringlets
-#    command_line_str = 'N1498373872_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
-#    command_line_str = 'N1541685510_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature
-#    command_line_str = 'N1588249321_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
-#    command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res, other features out of frame
-#    command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
-#    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
+#     command_line_str = 'N1495327885_1 --force-offset --image-console-level debug --display-offset-results' # Closeup with multiple gaps and ringlets
+#     command_line_str = 'N1498373872_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
+#     command_line_str = 'N1541685510_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature
+#     command_line_str = 'N1588249321_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
+#     command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res, other features out of frame
+#     command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
+    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
 
 #     command_line_str = 'N1459733315_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Tethys and rings - curv 3.094
 #     command_line_str = 'N1454732332_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
@@ -248,7 +248,7 @@ if len(command_list) == 0:
 #    command_line_str = '--volume COISS_2099 --main-console-level info --image-console-level none --image-logfile-level none --aws --max-subprocesses 2'
 
 #TEMP
-#     command_line_str = 'W1586374111_1 --image-console-level debug --force-offset'
+#     command_line_str = 'N1714688546_1 --image-console-level debug --no-allow-stars --force-offset'
 
     
     command_list = command_line_str.split()
@@ -853,14 +853,26 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         except:
             pass
 
+    skipped = False
     if obs.dict['SHUTTER_STATE_ID'] == 'DISABLED':
         main_logger.info('Skipping because shutter disabled - %s', image_path)
         image_logger.info('Skipping because shutter disabled - %s', 
                           image_path)
+        skipped = True
         metadata = {}
-        metadata['status'] = 'skipped'
         metadata['status_detail1'] = 'Shutter disabled'
         metadata['status_detail2'] = 'Shutter disabled'
+    elif obs.texp < 1e-4: # 5 ms is smallest commandable exposure
+        main_logger.info('Skipping because zero exposure time - %s', image_path)
+        image_logger.info('Skipping because zero exposure time - %s', 
+                          image_path)
+        skipped = True
+        metadata = {}
+        metadata['status_detail1'] = 'Zero exposure time'
+        metadata['status_detail2'] = 'Zero exposure time'
+        
+    if skipped:
+        metadata['status'] = 'skipped'
         file_write_offset_metadata_path(offset_path_local, metadata,
                                         overlay=False)
         cb_logging.log_remove_file_handler(image_log_filehandler)
@@ -1019,7 +1031,8 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                         blackpoint=arguments.png_blackpoint,
                         whitepoint=arguments.png_whitepoint,
                         gamma=arguments.png_gamma,
-                        font=png_label_font)
+                        font=png_label_font,
+                        interpolate_missing_stripes=True)
     file_write_png_path(png_path_local, png_image)
     
     num_files_completed += 1

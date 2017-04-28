@@ -791,11 +791,11 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
         # It's not in the extended FOV, but is in the original image
         out_of_frame = True
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
-    if max_res is None:
+    if min_res is None:
         return None, None, None, None # Something went wrong; we couldn't find a resolution
-    if rms*rms_gain/blur > max_res:
+    if rms*rms_gain/blur > min_res:
         # Additional blurring needed
-        return (rms*rms_gain/blur)/max_res, out_of_frame, min_res, max_res
+        return (rms*rms_gain/blur)/min_res, out_of_frame, min_res, max_res
     return 1., out_of_frame, min_res, max_res # OK as is
     
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
@@ -870,6 +870,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     
     blur = None
     blur_list = []
+    blur_list_in_frame = []
     
     # We do two phases - the first one is to determine the amount of blur, if
     # any. If there is no blur needed, we exit the loop early. Otherwise, 
@@ -955,7 +956,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                              'feature too narrow (%.2f pixels)',
                              pretty_name, entry_type, outer[0][1],
                              feature_width)
-                    # However, in the special case of the Huygen Gap,
+                    # However, in the special case of the Huygens Gap,
                     # we can go ahead and keep the inner edge because that's
                     # the B ring outer edge and it's really visible.
                     if pretty_name == 'Huygens' and entry_type == 'GAP':
@@ -1021,8 +1022,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             # Everything is going well...we can at least use this to determine
             # the blur amount
             if ret_inner is not None and ret_inner != 1.:
+                if not inner_out_of_frame:
+                    blur_list_in_frame.append(ret_inner)
                 blur_list.append(ret_inner)
             if ret_outer is not None and ret_outer != 1.:
+                if not outer_out_of_frame:
+                    blur_list_in_frame.append(ret_outer)
                 blur_list.append(ret_outer)
 
             # And maybe we can even use it as a real feature right now
@@ -1059,14 +1064,20 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             break
 
         blur_list.sort()
+        blur_list_in_frame.sort()
         
         # We allow this process to continue even if there are too few
         # features because the main offset loop will attempt to use
         # an insufficient number of features at a lower confidence.
         
-        blur = blur_list[min(min_features-num_features_in_frame-1,
-                             len(blur_list)-1)]
-
+        if len(blur_list_in_frame) >= min_features-num_features_in_frame:
+            # First try to use only features that are in the frame
+            blur = blur_list_in_frame[min_features-num_features_in_frame-1]
+        else:
+            # Just use everything we got, because we don't know which ones will
+            # eventually be in the frame.
+            blur = blur_list[-1]
+            
     logger.info('%d fiducial features, %d in frame, blur %s',
                  num_features, num_features_in_frame, str(blur))
 
@@ -1337,6 +1348,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
+    # Uncomment to handle black-filled gaps XXX
+    # model += 0.1
     model_text = np.zeros(model.shape, dtype=np.bool)
     text_im = Image.frombuffer('L', (model_text.shape[1], 
                                      model_text.shape[0]), 
@@ -1405,6 +1418,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
             outer_radii_bp = None
             text_name_list = []
             intersect_list = []
+#             Uncomment this to allow gaps to be black-filled XXX
+#             if inner is not None and outer is not None:
             if (inner is not None and outer is not None and
                 entry_type == 'RINGLET'):
                 # If we have a full ringlet, find both edges even if one
@@ -1487,6 +1502,28 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                 named_full_gap = False
                 if (inner_radii is not None and outer_radii is not None and
                     entry_type == 'GAP'):
+# Uncomment this to allow black-filled gaps
+#                     # XXXvvv
+#                     # We have both edges for a gap - just make it solid
+#                     logger.debug('Adding %s %s a=%.2f to %.2f',
+#                                  pretty_name, entry_type, inner_a, outer_a)
+#                     # We add/subtract 1/2 the resolution because the radius location
+#                     # is the middle of the pixel and shade_antialias below will take
+#                     # care of the fractional part.
+#                     inner_above = inner_radii-resolutions/2 >= inner_a
+#                     outer_below = outer_radii+resolutions/2 <= outer_a
+#                     intersect = (np.logical_and(inner_above, outer_below).
+#                                  filled(False))
+#                     intersect[in_front_mask] = False
+#                     model[intersect] = 0.
+#                     shade1 = _shade_antialias(inner_radii, inner_a, True,
+#                                               resolutions)
+#                     model += shade1
+#                     shade2 = _shade_antialias(outer_radii, outer_a, False,
+#                                               resolutions)
+#                     model += shade2
+#                     # XXX^^^
+                    # We have both edges for a gap - name the whole gap
                     if (feature_name and 
                         feature_name.upper().startswith('HUYGENS')):
                         # We need to fake this one out - it's really the B Ring
@@ -1520,6 +1557,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                                                                        outer_a))
                         named_full_gap = True
                     # Fall through to...
+# Uncomment to allow black-filled gaps XXX
+#                 elif inner_radii is not None:
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
@@ -1541,6 +1580,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                             if (feature_name and 
                                 feature_name.upper().startswith('KEELER-A RING')):
                                 text_name_list.append('Keeler OEG')
+                            elif (feature_name and
+                                  feature_name.upper().startswith('HUYGENS') and
+                                  entry_type == 'GAP'):
+                                text_name_list.append('B Ring Outer Edge')
                             else:
                                 feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
                                                           else 'IEG')

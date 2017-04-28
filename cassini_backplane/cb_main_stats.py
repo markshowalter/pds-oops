@@ -10,6 +10,7 @@ import logging
 import argparse
 import math
 import numpy as np
+import re
 import os
 import sys
 
@@ -133,10 +134,12 @@ def dump_body_info(body_db):
          bad_size, bad_size_filename_list,
          bad_curvature, bad_curvature_filename_list,
          bad_limb, bad_limb_filename_list,
-         bad_bumpy, bad_bumpy_filename_list,
          ok, ok_filename_list,
          ok_but_bad_secondary, ok_but_bad_secondary_filename_list,
-         ok_but_no_secondary, ok_but_no_secondary_filename_list) = body_db[body_name]
+         ok_but_no_secondary, ok_but_no_secondary_filename_list,
+         bad_body_blur, bad_body_blur_filename_list,
+         bad_rings_blur, bad_rings_blur_filename_list
+        ) = body_db[body_name]
         print '      %-15s  %6d (%6.2f%%, %6.2f%% of total)' % (
                     body_name, count,
                     float(count)/total_bad_offset*100,
@@ -155,15 +158,8 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in bad_size_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
-        if bad_bumpy:
-            print '        Large and bumpy:     %6d (%6.2f%%) [%s]' % (
-                        bad_bumpy, float(bad_bumpy)/count*100,
-                        bad_bumpy_filename_list[0])
-            if arguments.top_bad:
-                for filename in bad_bumpy_filename_list[:arguments.top_bad]:
-                    print '          %s' % filename
         if bad_limb:
-            if bad_size or bad_bumpy:
+            if bad_size:
                 print '      ELSE...'
             print '        Bad limb:            %6d (%6.2f%%) [%s]' % (
                         bad_limb, float(bad_limb)/count*100,
@@ -172,7 +168,7 @@ def dump_body_info(body_db):
                 for filename in bad_limb_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
         if bad_curvature:
-            if bad_size or bad_bumpy or bad_limb:
+            if bad_size or bad_limb:
                 print '      ELSE...'
             print '        Bad curvature:       %6d (%6.2f%%) [%s]' % (
                         bad_curvature, float(bad_curvature)/count*100,
@@ -180,6 +176,23 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in bad_curvature_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
+        if bad_body_blur:
+            print '        Bad body blur:       %6d (%6.2f%%) [%6.3f %s]' % (
+                        bad_body_blur, float(bad_body_blur)/count*100,
+                        bad_body_blur_filename_list[0][0],
+                        bad_body_blur_filename_list[0][1])
+            if arguments.top_bad:
+                for blur, filename in bad_body_blur_filename_list[:arguments.top_bad]:
+                    print '          %6.3f %s' % (blur, filename) 
+        if bad_rings_blur:
+            print '        Bad rings blur:      %6d (%6.2f%%) [%6.3f %s]' % (
+                        bad_rings_blur, float(bad_rings_blur)/count*100,
+                        bad_rings_blur_filename_list[0][0],
+                        bad_rings_blur_filename_list[0][1])
+            if arguments.top_bad:
+                for blur, filename in bad_rings_blur_filename_list[:arguments.top_bad]:
+                    print '          %6.3f %s' % (blur, filename) 
+            
         if ok_but_bad_secondary:
             if ok:
                 print '        All OK Good Sec Corr %6d (%6.2f%%) [%s]' % (
@@ -224,6 +237,9 @@ total_botsim_winner_excess_diff = 0
 total_botsim_potential_excess_diff = 0
 botsim_potential_excess_diff_x_list = []
 botsim_potential_excess_diff_y_list = []
+total_botsim_potential_stars_excess_diff = 0
+botsim_potential_stars_excess_diff_x_list = []
+botsim_potential_stars_excess_diff_y_list = []
 total_good_offset = 0
 total_good_offset_list = {('NAC',256): [],
                           ('NAC',512): [],
@@ -239,7 +255,12 @@ total_winner_star = 0
 total_winner_model = 0
 total_winner_titan = 0
 total_winner_botsim = 0
+good_offset_broken_assumptions = {}
+good_body_blur_list = []
+good_rings_blur_list = []
 total_secondary_corr_failed = 0
+total_images_marked_bad = 0
+image_description_db = {}
 secondary_corr_failed_filename_list = []
 compare_good_nav_list = {}
 body_only_db = {}
@@ -355,44 +376,9 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
         bodies_metadata = metadata['bodies_metadata']
         titan_metadata = metadata['titan_metadata']
         
-        bootstrap_cand = False        
-        if (metadata['bootstrap_candidate'] or
-            metadata['bootstrapped']):
-            bodies_metadata = metadata['bodies_metadata']
-            if bodies_metadata is not None:
-                for body_name in metadata['large_bodies']:
-                    if (body_name not in bootstrap_config['body_list'] or
-                        body_name in FUZZY_BODY_LIST or
-                        body_name == 'TITAN'):
-                        continue
-                    if body_name not in bodies_metadata:
-                        continue
-                    body_metadata = bodies_metadata[body_name]
-                    if not body_metadata['size_ok']:
-                        continue
-                    if body_name not in bootstrap_cand_db:
-                        cand_count = 0
-                        bootstrap_status_db = {}
-                    else:
-                        (cand_count, 
-                         bootstrap_status_db) = bootstrap_cand_db[body_name]
-                    bootstrap_cand = True
-                    bootstrap_status = 'Not bootstrapped'
-                    if metadata['bootstrapped']:
-                        bootstrap_status = metadata['bootstrap_status']
-                    bootstrap_status_db[bootstrap_status] = bootstrap_status_db.get(bootstrap_status,0)+1
-                    
-                    bootstrap_cand_db[body_name] = (cand_count+1, 
-                                                    bootstrap_status_db)
-                    status += '  %s: %s' % (body_name, bootstrap_status)
-                
-                    break # Only allow one bootstrap body for now XXX
-
-        if bootstrap_cand:
-            total_bootstrap_cand += 1
-            if offset is None:
-                total_bootstrap_cand_no_offset += 1
-                
+        # We don't use IF/ELSE constructs here to save on indentation
+        description_ok = True
+                        
         if offset is not None:
             total_good_offset += 1
             total_good_offset_list[metadata['camera'],
@@ -404,11 +390,90 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 abs(offset[1]) > max_offset[1]):
                 print 'WARNING - ', filename, '-',
                 print 'Offset', winner, offset, 'exceeds maximum', max_offset 
-        else:
+
+            broken_assumptions_list = []
+            if metadata['model_override_bodies_curvature']:
+                broken_assumptions_list.append('BodyCurv')
+            if metadata['model_override_bodies_limb']:
+                broken_assumptions_list.append('BodyLimb')
+            if 'model_bodies_blur' in metadata and metadata['model_bodies_blur']:
+                broken_assumptions_list.append('BodyBlur')
+            if metadata['model_override_rings_curvature']:
+                broken_assumptions_list.append('RingCurv')
+            if metadata['model_override_fiducial_features']:
+                broken_assumptions_list.append('RingFeat')
+            if metadata['model_rings_blur']:
+                broken_assumptions_list.append('RingBlur') 
+                
+            if len(broken_assumptions_list) > 0:
+                broken_assumptions_str = '+'.join(broken_assumptions_list)
+                if broken_assumptions_str not in good_offset_broken_assumptions:
+                    good_offset_broken_assumptions[broken_assumptions_str] = []
+                good_offset_broken_assumptions[broken_assumptions_str].append(filename)
+
+            if (rings_metadata is not None and
+                rings_metadata['fiducial_blur']):
+                good_rings_blur_list.append((rings_metadata['fiducial_blur'], filename))
+
+            if bodies_metadata is not None:
+                for body_name in sorted(bodies_metadata):
+                    body_metadata = bodies_metadata[body_name]
+                    if body_metadata['body_blur'] is not None:
+                        good_body_blur_list.append((body_metadata['body_blur'], body_name, filename))
+            
+        if offset is None:
+            if ('description' in metadata and
+                metadata['description'] != 'N/A'):
+                description_ok = False
+                description = metadata['description']
+                description = re.sub('[NW][0-9]*_[0-9]*.IMG', '[IMAGE]', description)
+                if description not in image_description_db:
+                    image_description_db[description] = []
+                image_description_db[description].append(filename)
+                total_images_marked_bad += 1
+                             
+        if offset is None and description_ok:
             if metadata['secondary_corr_ok'] is False:
                 # Beware - None means not performed
                 total_secondary_corr_failed += 1
                 secondary_corr_failed_filename_list.append(filename)
+
+            bootstrap_cand = False  
+            if (metadata['bootstrap_candidate'] or
+                metadata['bootstrapped']):
+                if bodies_metadata is not None:
+                    for body_name in metadata['large_bodies']:
+                        if (body_name not in bootstrap_config['body_list'] or
+                            body_name in FUZZY_BODY_LIST or
+                            body_name == 'TITAN'):
+                            continue
+                        if body_name not in bodies_metadata:
+                            continue
+                        body_metadata = bodies_metadata[body_name]
+                        if not body_metadata['size_ok']:
+                            continue
+                        if body_name not in bootstrap_cand_db:
+                            cand_count = 0
+                            bootstrap_status_db = {}
+                        else:
+                            (cand_count, 
+                             bootstrap_status_db) = bootstrap_cand_db[body_name]
+                        bootstrap_cand = True
+                        bootstrap_status = 'Not bootstrapped'
+                        if metadata['bootstrapped']:
+                            bootstrap_status = metadata['bootstrap_status']
+                        bootstrap_status_db[bootstrap_status] = bootstrap_status_db.get(bootstrap_status,0)+1
+                        
+                        bootstrap_cand_db[body_name] = (cand_count+1, 
+                                                        bootstrap_status_db)
+                        status += '  %s: %s' % (body_name, bootstrap_status)
+                    
+                        break # Only allow one bootstrap body for now XXX
+    
+            if bootstrap_cand:
+                total_bootstrap_cand += 1
+                if offset is None:
+                    total_bootstrap_cand_no_offset += 1
                 
             has_rings = not (
                 rings_metadata is None or
@@ -491,14 +556,17 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                  bad_size, bad_size_filename_list,
                  bad_curvature, bad_curvature_filename_list,
                  bad_limb, bad_limb_filename_list,
-                 bad_bumpy, bad_bumpy_filename_list,
                  ok, ok_filename_list,
                  ok_but_bad_secondary,
                  ok_but_bad_secondary_filename_list,
                  ok_but_no_secondary,
-                 ok_but_no_secondary_filename_list) = body_db_to_update.get(closest_body_name,
-                                                       (0,0,[],0,[],0,[],0,[],
-                                                        0,[],0,[],0,[],0,[]))
+                 ok_but_no_secondary_filename_list,
+                 bad_body_blur, bad_body_blur_filename_list,
+                 bad_rings_blur, bad_rings_blur_filename_list
+                ) = body_db_to_update.get(closest_body_name,
+                                          (0,0,[],0,[],0,[],0,[],
+                                           0,[],0,[],0,[],
+                                           0,[],0,[]))
                 count += 1
                 if closest_body_name != 'NONE':
                     if closest_body_name.replace(' (BS)','') not in metadata['bodies_metadata']:
@@ -509,9 +577,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                         if not body_metadata['size_ok']:
                             bad_size += 1
                             bad_size_filename_list.append(filename)
-                        elif body_metadata['too_bumpy']:
-                                bad_bumpy += 1
-                                bad_bumpy_filename_list.append(filename)
                         # Give preference to a bad limb, because usually if the limb is bad
                         # there wasn't any point in dealing with the curvature
                         elif not body_metadata['limb_ok']:
@@ -522,8 +587,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                             bad_curvature_filename_list.append(filename)
                         if (body_metadata['size_ok'] and
                             body_metadata['curvature_ok'] and
-                            body_metadata['limb_ok'] and
-                            not body_metadata['too_bumpy']):
+                            body_metadata['limb_ok']):
                             if metadata['secondary_corr_ok'] is False:
                                 ok_but_bad_secondary += 1
                                 ok_but_bad_secondary_filename_list.append(filename)
@@ -534,16 +598,28 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                                 # This really should never happen
                                 ok += 1
                                 ok_filename_list.append(filename)
+                        if (body_metadata['body_blur'] is not None and
+                            body_metadata['body_blur'] > OFFSET_DEFAULT_CONFIG['maximum_blur']):
+                            bad_body_blur += 1
+                            bad_body_blur_filename_list.append((body_metadata['body_blur'],
+                                                                filename))
+                if (has_rings and
+                    rings_metadata['fiducial_blur'] > OFFSET_DEFAULT_CONFIG['maximum_blur']):
+                    bad_rings_blur += 1
+                    bad_rings_blur_filename_list.append((rings_metadata['fiducial_blur'],
+                                                         filename))
+
                 body_db_to_update[closest_body_name] = (
                     count, 
                     no_metadata, no_metadata_filename_list,
                     bad_size, bad_size_filename_list,
                     bad_curvature, bad_curvature_filename_list,
                     bad_limb, bad_limb_filename_list,
-                    bad_bumpy, bad_bumpy_filename_list,
                     ok, ok_filename_list,
                     ok_but_bad_secondary, ok_but_bad_secondary_filename_list,
-                    ok_but_no_secondary, ok_but_no_secondary_filename_list)
+                    ok_but_no_secondary, ok_but_no_secondary_filename_list,
+                    bad_body_blur, bad_body_blur_filename_list,
+                    bad_rings_blur, bad_rings_blur_filename_list)
         
         if (last_nac_filename is not None and
             filename[0] == 'W' and
@@ -553,18 +629,26 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if last_nac_offset is None and offset is not None:
                 total_bad_but_botsim_candidate += 1
                 
-            if (last_nac_offset is not None and offset is not None and
-                last_nac_metadata['offset_winner'] != 'TITAN' and
-                winner != 'TITAN'):
-                total_botsim_potential_excess_diff += 1
-                botsim_potential_excess_diff_x_list.append(
-                                   last_nac_offset[0]-offset[0]*10)                
-                botsim_potential_excess_diff_y_list.append(
-                                   last_nac_offset[1]-offset[1]*10)                
-                if (abs(last_nac_offset[0]-offset[0]*10) > 10 or
-                    abs(last_nac_offset[1]-offset[1]*10) > 10):
-                    if winner == 'BOTSIM':
+            if (last_nac_offset is not None and offset is not None):
+                if (last_nac_metadata['offset_winner'] != 'BOTSIM' and
+                    winner != 'BOTSIM'):
+                    total_botsim_potential_excess_diff += 1
+                    botsim_potential_excess_diff_x_list.append(
+                                       last_nac_offset[0]-offset[0]*10)                
+                    botsim_potential_excess_diff_y_list.append(
+                                       last_nac_offset[1]-offset[1]*10)                
+                if (last_nac_metadata['offset_winner'] == 'STARS' and
+                    winner == 'STARS'):
+                    total_botsim_potential_stars_excess_diff += 1
+                    botsim_potential_stars_excess_diff_x_list.append(
+                                       last_nac_offset[0]-offset[0]*10)                
+                    botsim_potential_stars_excess_diff_y_list.append(
+                                       last_nac_offset[1]-offset[1]*10)                
+                if winner == 'BOTSIM':
+                    if (abs(last_nac_offset[0]-offset[0]*10) > 10 or
+                        abs(last_nac_offset[1]-offset[1]*10) > 10):
                         total_botsim_winner_excess_diff += 1
+                        
         stars_offset = metadata['stars_offset']
         if stars_offset is not None:
             total_good_star_offset += 1
@@ -792,6 +876,24 @@ if total_offset:
                     total_bad_offset, 
                     float(total_bad_offset)/total_has_offset_result*100)
         if total_bad_offset:
+            if len(image_description_db) > 0:
+                print '  Images marked bad:   %6d (%6.2f%%, %6.2f%% of total)' % (
+                            total_images_marked_bad, 
+                            float(total_images_marked_bad)/total_bad_offset*100,
+                            float(total_images_marked_bad)/total_has_offset_result*100)
+                for description in sorted(image_description_db):
+                    print '    %s' % description
+                    print '                            %6d (%6.2f%%) [%s]' % (
+                                       len(image_description_db[description]),
+                                       float(len(image_description_db[description]))/
+                                         total_bad_offset*100.,
+                                       image_description_db[description][0])
+                    if arguments.top_bad:
+                        for filename in image_description_db[description][:arguments.top_bad]:
+                            print '      %s' % filename
+                print
+                print ' Otherwise...'
+
             print '  Secondary corr fail: %6d (%6.2f%%, %6.2f%% of total)' % (
                         total_secondary_corr_failed, 
                         float(total_secondary_corr_failed)/total_bad_offset*100,
@@ -900,6 +1002,22 @@ if total_offset:
                                                         np.mean(botsim_potential_excess_diff_y_list),
                                                         np.std(botsim_potential_excess_diff_y_list))
     
+            print '  Both OK stars diff:  %6d (%6.2f%%, %6.2f%% of total)' % (
+                        total_botsim_potential_stars_excess_diff, 
+                        float(total_botsim_potential_stars_excess_diff)/total_botsim_candidate*100,
+                        float(total_botsim_potential_stars_excess_diff)/total_has_offset_result*100)
+            if len(botsim_potential_stars_excess_diff_x_list):
+                print '    X DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                        np.min(botsim_potential_stars_excess_diff_x_list),
+                                                        np.max(botsim_potential_stars_excess_diff_x_list),
+                                                        np.mean(botsim_potential_stars_excess_diff_x_list),
+                                                        np.std(botsim_potential_stars_excess_diff_x_list))
+                print '    Y DIFF: MIN %.2f MAX %.2f MEAN %.2f STD %.2f' % (
+                                                        np.min(botsim_potential_stars_excess_diff_y_list),
+                                                        np.max(botsim_potential_stars_excess_diff_y_list),
+                                                        np.mean(botsim_potential_stars_excess_diff_y_list),
+                                                        np.std(botsim_potential_stars_excess_diff_y_list))
+    
         print sep
         print 'Total bootstrap candidates:         %6d (%6.2f%%)' % (
                     total_bootstrap_cand, 
@@ -950,7 +1068,36 @@ if total_offset:
     for body_name in sorted(body_only_db):
         print '    %-10s %6d' % (body_name+':', body_only_db[body_name]) 
     print 'Total filled by rings:              %6d (%6.2f%%)' % (total_rings_only, float(total_rings_only)/total_has_offset_result*100)
-    print sep
+
+    if total_good_model_offset:
+        print sep
+        print 'Good model, broken assumptions:'
+        for broken_assumptions_str in sorted(good_offset_broken_assumptions):
+            filelist = good_offset_broken_assumptions[broken_assumptions_str]
+            print '  %s' % broken_assumptions_str
+            print '                       %6d (%6.2f%%, %6.2f%% of total)' % (
+                        len(filelist), 
+                        float(len(filelist))/total_good_model_offset*100,
+                        float(len(filelist)/total_has_offset_result*100))
+            if arguments.top_bad:
+                for filename in filelist[:arguments.top_bad]:
+                    print '      %s' % filename
+
+    if ((len(good_body_blur_list) > 0 or len(good_rings_blur_list) > 0) and
+        arguments.top_bad):
+        print sep
+        if len(good_body_blur_list) > 0:
+            print 'Body blur:'
+            good_body_blur_list.sort(reverse=True)
+            for body_blur, body_name, filename in good_body_blur_list[:arguments.top_bad]:
+                print '  %6.3f %-10s %s' % (body_blur, body_name, filename)
+        if len(good_rings_blur_list) > 0:
+            print 'Rings blur:'
+            good_rings_blur_list.sort(reverse=True)
+            for rings_blur, filename in good_rings_blur_list[:arguments.top_bad]:
+                print '  %6.3f %s' % (rings_blur, filename)
+                      
+    print sep    
     print 'Earliest offset:', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(earliest_date))
     print 'Latest offset:  ', time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(latest_date))
     print

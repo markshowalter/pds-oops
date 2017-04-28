@@ -5,6 +5,7 @@
 # pointing offset.
 #
 # Exported routines:
+#    correlate2d
 #    find_correlation_and_offset
 ###############################################################################
 
@@ -64,7 +65,7 @@ def _pad_to_power_of_2(data):
 # 
 #==============================================================================
 
-def _correlate2d(image, model, normalize=False, retile=False):
+def correlate2d(image, model, normalize=False, retile=False):
     """Correlate the image with the model; normalization to [-1,1] is optional.
 
     Correlation is performed using the 'correlation theorem' that equates
@@ -160,7 +161,6 @@ def _correlate_2d_masked(image, model, search_size_min, search_size_max,
                               extend_fov[0]+u_offset:
                               extend_fov[0]+u_offset+image.shape[1]]
             corr = ma.corrcoef(image.flatten(), sub_model.flatten())[0][1]
-            print corr
             ret[v_offset+search_size_max_v,
                 u_offset+search_size_max_u] = corr
 #            toplevel = tk.Tk()
@@ -462,8 +462,8 @@ def find_correlation_and_offset(image, model, search_size_min=0,
                 
                 if filter is not None:
                     sub_model = filter(sub_model, masked=masked)
-                corr = _correlate2d(sub_image, sub_model,
-                                    normalize=True, retile=True)
+                corr = correlate2d(sub_image, sub_model,
+                                   normalize=True, retile=True)
 
             ret_list = _find_correlated_offset(corr, search_size_min,
                                                (search_size_max_u,

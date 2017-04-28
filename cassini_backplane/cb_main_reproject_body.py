@@ -25,6 +25,7 @@ from cb_config import *
 from cb_gui_body_mosaic import *
 import cb_logging
 from cb_util_file import *
+from cb_util_image import *
 
 command_list = sys.argv[1:]
 
@@ -149,7 +150,7 @@ def reproject_image(image_path, body_name, bootstrap_pref):
 
     image_logger.info('Offset file %s', metadata['offset_path'])
     
-    data = bodies_interpolate_missing_stripes(obs.data)
+    data = image_interpolate_missing_stripes(obs.data)
     offset = metadata['offset']
     
     navigation_uncertainty = metadata['model_blur_amount']

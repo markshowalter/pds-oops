@@ -25,8 +25,8 @@ except ImportError:
 import cspice
 import oops
 
-from cb_bodies import *
 from cb_config import *
+from cb_util_image import *
 from cb_util_oops import *
 
 def _callback_mousemove(x, y, metadata):
@@ -136,7 +136,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     stars_metadata = metadata['stars_metadata']
     
     if interpolate_missing_stripes:
-        ext_data = bodies_interpolate_missing_stripes(ext_data)
+        ext_data = image_interpolate_missing_stripes(ext_data)
         
     ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
     ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
@@ -536,7 +536,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     emission_ok = 'N/A'
             
     if rings_metadata and 'emission_ok' in rings_metadata:
-        curvature_ok = str(rings_metadata['emission_ok'])
+        emission_ok = str(rings_metadata['emission_ok'])
         
     label = ttk.Label(addon_control_frame, text='Ring Emission OK:', 
                      anchor='w', width=label_width)
