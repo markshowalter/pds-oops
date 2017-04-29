@@ -876,10 +876,11 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     # any. If there is no blur needed, we exit the loop early. Otherwise, 
     # during the second phase we apply the blur.
     for allow_blur in [False,True]:
-        logger.debug('Allow blur %s', str(allow_blur))
+        logger.debug('Allow blur %s, blur %s', str(allow_blur), str(blur))
         
         feature_list = []
         best_blur = None
+        force_blur = 0.
         num_features = 0
         num_features_in_frame = 0
         for fiducial_feature in restricted_feature_list:
@@ -889,7 +890,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             pretty_name = feature_name
             if pretty_name is None:
                 pretty_name = 'UNNAMED'
-            
+            must_include_inner = False
+            must_include_outer = False
+            if pretty_name == 'Huygens' and entry_type == 'GAP':
+                must_include_inner = True
+                must_include_outer = True
+                
             inner_out_of_frame = False
             outer_out_of_frame = False
             ret_inner = None
@@ -906,6 +912,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if ret_inner is None or abs(ret_inner-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase.
+                    if must_include_inner and ret_inner is not None:
+                        force_blur = max(force_blur, ret_inner)
+                        logger.debug('Forcing blur %.5f because of inner %s %s',
+                                     force_blur, pretty_name, entry_type)
                     inner = None
             if outer is not None:
                 (ret_outer, outer_out_of_frame, min_res_a_outer,
@@ -917,6 +927,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if ret_outer is None or abs(ret_outer-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase
+                    if must_include_outer and ret_outer is not None:
+                        force_blur = max(force_blur, ret_outer)
+                        logger.debug('Forcing blur %.5f because of outer %s %s',
+                                     force_blur, pretty_name, entry_type)
                     outer = None
 
             if inner is not None or outer is not None:
@@ -1052,10 +1066,15 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if not outer_out_of_frame:
                     num_features_in_frame += 1
 
-        if num_features_in_frame >= min_features:
+        if num_features_in_frame >= min_features and force_blur == 0.:
             logger.debug('Found enough (%d vs. %d) features in frame',
                          num_features_in_frame, min_features)
             break
+
+        if num_features_in_frame >= min_features:
+            logger.debug('Found enough (%d vs. %d) features in frame but '+
+                         'repeating due to forced blur',
+                         num_features_in_frame, min_features)
 
         logger.debug('%d features, %d in frame', num_features,
                      num_features_in_frame)
@@ -1072,11 +1091,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         
         if len(blur_list_in_frame) >= min_features-num_features_in_frame:
             # First try to use only features that are in the frame
-            blur = blur_list_in_frame[min_features-num_features_in_frame-1]
+            blur = blur_list_in_frame[max(min_features-num_features_in_frame-1,0)]
         else:
             # Just use everything we got, because we don't know which ones will
             # eventually be in the frame.
             blur = blur_list[-1]
+        blur = max(blur, force_blur)
             
     logger.info('%d fiducial features, %d in frame, blur %s',
                  num_features, num_features_in_frame, str(blur))

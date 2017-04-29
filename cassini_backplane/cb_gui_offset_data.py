@@ -519,31 +519,29 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
+    gridrow += 1
+
     curvature_ok = 'N/A'
-            
     if rings_metadata and 'curvature_ok' in rings_metadata:
         curvature_ok = str(rings_metadata['curvature_ok'])
         
     label = ttk.Label(addon_control_frame, text='Ring Curvature OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     label = ttk.Label(addon_control_frame, text=curvature_ok,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         
-    gridrow += 1
-
     emission_ok = 'N/A'
-            
     if rings_metadata and 'emission_ok' in rings_metadata:
         emission_ok = str(rings_metadata['emission_ok'])
         
     label = ttk.Label(addon_control_frame, text='Ring Emission OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     label = ttk.Label(addon_control_frame, text=emission_ok,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         
     gridrow += 1
 
