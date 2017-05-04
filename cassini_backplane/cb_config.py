@@ -337,7 +337,7 @@ RINGS_DEFAULT_CONFIG = {
     
     # A full gap or ringlet must be at least this many pixels wide at some
     # place in the image to use it.
-    'fiducial_min_feature_width': 3,
+    'fiducial_min_feature_width': 2,
     
     # Assume a one-sided feature is about this wide in km. This is used to 
     # determine if the local resolution is high enough for the feature to be 

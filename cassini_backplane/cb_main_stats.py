@@ -160,7 +160,7 @@ def dump_body_info(body_db):
                     print '          %s' % filename
         if bad_limb:
             if bad_size:
-                print '      ELSE...'
+                print '          (else...)'
             print '        Bad limb:            %6d (%6.2f%%) [%s]' % (
                         bad_limb, float(bad_limb)/count*100,
                         bad_limb_filename_list[0])
@@ -169,7 +169,7 @@ def dump_body_info(body_db):
                     print '          %s' % filename
         if bad_curvature:
             if bad_size or bad_limb:
-                print '      ELSE...'
+                print '          (else...)'
             print '        Bad curvature:       %6d (%6.2f%%) [%s]' % (
                         bad_curvature, float(bad_curvature)/count*100,
                         bad_curvature_filename_list[0])

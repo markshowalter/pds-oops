@@ -1089,7 +1089,8 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
         # features because the main offset loop will attempt to use
         # an insufficient number of features at a lower confidence.
         
-        if len(blur_list_in_frame) >= min_features-num_features_in_frame:
+        if (len(blur_list_in_frame) > 0 and
+            len(blur_list_in_frame) >= min_features-num_features_in_frame):
             # First try to use only features that are in the frame
             blur = blur_list_in_frame[max(min_features-num_features_in_frame-1,0)]
         else:
