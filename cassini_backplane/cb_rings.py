@@ -21,6 +21,18 @@
 #    rings_fring_longitude_radius
 #    rings_fring_pixels
 #
+#    rings_bring_edge_inertial_to_corotating
+#    rings_bring_edge_corotating_to_inertial
+#    rings_bring_edge_radius_at_longitude
+#    rings_bring_edge_longitude_radius
+#    rings_bring_edge_pixels
+#
+#    rings_ring_inertial_to_corotating
+#    rings_ring_corotating_to_inertial
+#    rings_ring_radius_at_longitude
+#    rings_ring_longitude_radius
+#    rings_ring_pixels
+#
 #    rings_reproject
 #    rings_mosaic_init
 #    rings_mosaic_add
@@ -2197,12 +2209,15 @@ def _rings_restrict_longitude_radius_to_obs(obs, longitude, radius,
     
 def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
     """Convert longitude,radius pairs to U,V."""
-    assert corotating in (None, 'F')
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
     longitude = np.asarray(longitude)
     radius = np.asarray(radius)
     
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         longitude = rings_fring_corotating_to_inertial(longitude, obs.midtime)
+    elif corotating == 'BRING-OUTER-EDGE':
+        longitude = rings_bring_edge_corotating_to_inertial(longitude, 
+                                                            obs.midtime)
     
     if len(longitude) == 0:
         return np.array([]), np.array([])
@@ -2264,7 +2279,7 @@ def rings_fring_longitude_radius(obs, longitude_step=0.01*oops.RPD):
     
     return longitudes, radius
 
-def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
+def rings_fring_pixels(obs, offset=None, longitude_step=0.002*oops.RPD):
     """Return a set of U,V pairs for the F ring in an image."""
     longitude, radius = rings_fring_longitude_radius(
                                      obs,
@@ -2277,6 +2292,120 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
     
     return u_pixels, v_pixels
 
+##
+# B ring routines - XXX These need to be updated to use full mode information
+##
+
+BRING_EDGE_ROTATING_ET = None
+BRING_EDGE_MEAN_MOTION = 758.768 * oops.RPD # rad/day
+BRING_EDGE_A = 117570.
+BRING_EDGE_E = 0.
+BRING_EDGE_W0 = 0. * oops.RPD # deg
+BRING_EDGE_DW = 0. * oops.RPD # deg/day                
+
+def _compute_bring_edge_longitude_shift(et):
+    global BRING_EDGE_ROTATING_ET
+    if BRING_EDGE_ROTATING_ET is None:
+        BRING_EDGE_ROTATING_ET = cspice.utc2et("2009-08-11")
+ 
+    return - (BRING_EDGE_MEAN_MOTION * 
+              ((et - BRING_EDGE_ROTATING_ET) / 86400.)) % oops.TWOPI
+
+def rings_bring_edge_inertial_to_corotating(longitude, et):
+    """Convert inertial longitude to corotating."""
+    return (longitude + _compute_bring_edge_longitude_shift(et)) % oops.TWOPI
+
+def rings_bring_edge_corotating_to_inertial(co_long, et):
+    """Convert corotating longitude (deg) to inertial."""
+    return (co_long - _compute_bring_edge_longitude_shift(et)) % oops.TWOPI
+
+def rings_bring_edge_radius_at_longitude(obs, longitude):
+    """Return the radius (km) of the F ring core at a given inertial longitude
+    (deg)."""
+    curly_w = BRING_EDGE_W0 + BRING_EDGE_DW*obs.midtime/86400.
+
+    radius = (BRING_EDGE_A * (1-BRING_EDGE_E**2) /
+              (1 + BRING_EDGE_E * np.cos(longitude-curly_w)))
+
+    return radius
+    
+def rings_bring_edge_longitude_radius(obs, longitude_step=0.01*oops.RPD):
+    """Return  a set of longitude,radius pairs for the F ring core."""
+    num_longitudes = int(oops.TWOPI / longitude_step)
+    longitudes = np.arange(num_longitudes) * longitude_step
+    radius = rings_bring_edge_radius_at_longitude(obs, longitudes)
+    
+    return longitudes, radius
+
+def rings_bring_edge_pixels(obs, offset=None, longitude_step=0.002*oops.RPD):
+    """Return a set of U,V pairs for the F ring in an image."""
+    longitude, radius = rings_bring_edge_longitude_radius(
+                                     obs,
+                                     longitude_step=longitude_step)
+    
+    (longitude, radius,
+     u_pixels, v_pixels) = _rings_restrict_longitude_radius_to_obs(
+                                     obs, longitude, radius,
+                                     offset=offset)
+    
+    return u_pixels, v_pixels
+
+##
+# Generalized ring routines
+##
+
+def _compute_ring_longitude_shift(corotating, et):
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
+
+    if corotating == 'FRING-CORE':
+        return _compute_fring_longitude_shift(et)
+    if corotating == 'BRING-OUTER-EDGE':
+        return _compute_bring_edge_longitude_shift(et)
+
+_RINGS_COROT_DISPATCH = {
+    'FRING-CORE': {
+        'inertial_to_corotating': rings_fring_inertial_to_corotating,
+        'corotating_to_inertial': rings_fring_corotating_to_inertial,
+        'radius_at_longitude': rings_fring_radius_at_longitude,
+        'longitude_radius': rings_fring_longitude_radius,
+        'pixels': rings_fring_pixels
+    },
+    'BRING-OUTER-EDGE': {
+        'inertial_to_corotating': rings_bring_edge_inertial_to_corotating,
+        'corotating_to_inertial': rings_bring_edge_corotating_to_inertial,
+        'radius_at_longitude': rings_bring_edge_radius_at_longitude,
+        'longitude_radius': rings_bring_edge_longitude_radius,
+        'pixels': rings_bring_edge_pixels
+    }
+}
+
+def rings_ring_inertial_to_corotating(corotating, longitude, et):
+    """Convert inertial longitude to corotating."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'inertial_to_corotating'](longitude, et)
+
+def rings_ring_corotating_to_inertial(corotating, co_long, et):
+    """Convert corotating longitude (deg) to inertial."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'corotating_to_inertial'](co_long, et)
+
+def rings_ring_radius_at_longitude(corotating, obs, longitude):
+    """Return the radius (km) at a given inertial longitude
+    (deg)."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'radius_at_longitude'](obs, longitude)
+    
+def rings_ring_longitude_radius(corotating, obs, 
+                                longitude_step=0.01*oops.RPD):
+    """Return  a set of longitude,radius pairs for the ring."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'longitude_radius'](obs, longitude_step)
+
+def rings_ring_pixels(corotating, obs, offset=None, 
+                      longitude_step=0.002*oops.RPD):
+    """Return a set of U,V pairs for the ring in an image."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'pixels'](obs, offset, longitude_step)
 
 #==============================================================================
 # 
@@ -2372,7 +2501,7 @@ def rings_reproject(
     """
     logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
-    assert corotating in (None, 'F')
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
 
     if data is None:
         data = obs.data
@@ -2437,9 +2566,12 @@ def rings_reproject(
         data[saturn_shadow] = 0
 
     # Deal with co-rotating longitudes
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
                                                           obs.midtime)
+    elif corotating == 'BRING-OUTER-EDGE':
+        bp_longitude = rings_bring_edge_inertial_to_corotating(bp_longitude, 
+                                                               obs.midtime)
     
     # The number of pixels in the final reprojection in the radial direction
     radius_pixels = int(np.ceil((radius_outer-radius_inner+
@@ -2485,11 +2617,22 @@ def rings_reproject(
     # Radius bin numbers
     rad_bins = np.repeat(np.arange(radius_pixels), longitude_pixels)
     # Actual radius for each bin (km)
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         rad_bins_offset = rings_fring_radius_at_longitude(obs,
                               rings_fring_corotating_to_inertial(long_bins_act,
                                                                  obs.midtime))        
-        rad_bins_act = (rad_bins * radius_resolution + radius_inner +
+        rad_bins_act = (rad_bins * radius_resolution + 
+                        radius_inner-FRING_A +
+                        rad_bins_offset)
+        logger.debug('Radius offset range %.2f %.2f',
+                     np.min(rad_bins_offset),
+                     np.max(rad_bins_offset))
+    elif corotating == 'BRING-OUTER-EDGE':
+        rad_bins_offset = rings_bring_edge_radius_at_longitude(obs,
+                      rings_bring_edge_corotating_to_inertial(long_bins_act,
+                                                              obs.midtime))        
+        rad_bins_act = (rad_bins * radius_resolution + 
+                        radius_inner-BRING_EDGE_A +
                         rad_bins_offset)
         logger.debug('Radius offset range %.2f %.2f',
                      np.min(rad_bins_offset),
@@ -2497,7 +2640,7 @@ def rings_reproject(
     else:
         rad_bins_act = rad_bins * radius_resolution + radius_inner
 
-    logger.info('Radius range %.2f %.2f', np.min(bp_radius), 
+    logger.info('Image radius range %.2f %.2f', np.min(bp_radius), 
                  np.max(bp_radius))
     logger.debug('Radius bin range %.2f %.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))

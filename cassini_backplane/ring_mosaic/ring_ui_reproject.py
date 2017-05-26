@@ -1,11 +1,12 @@
-'''
-Created on Sep 19, 2011
+# Issues:
+# Use existing OFFSET programs
+# Store manual offsets in a different file
+# Modern argument parsing
+# Use modern logging
+# 80-char lines
+# Handle rings other than F ring
 
-@author: rfrench
-'''
-
-from optparse import OptionParser
-import pickle
+import argparse
 import os
 import os.path
 import sys
@@ -16,7 +17,7 @@ import cspice
 from imgdisp import ImageDisp, FloatEntry, draw_line
 from Tkinter import *
 from PIL import Image
-import fring_util
+import ring_util
 from cb_logging import *
 from cb_util_file import *
 from cb_util_image import *
@@ -25,23 +26,17 @@ from cb_rings import *
 import cProfile, pstats, StringIO
 import traceback
 
-#oops.LOGGING.all(True)
+command_list = sys.argv[1:]
 
-python_dir = os.path.split(sys.argv[0])[0]
-python_reproject_program = os.path.join(python_dir, fring_util.PYTHON_RING_REPROJECT)
-
-python_filename = sys.argv[0]
-
-cmd_line = sys.argv[1:]
-
-
-if len(cmd_line) == 0:
-    cmd_line = [
+if len(command_list) == 0:
+    command_line_str = '--all-obsid --no-auto-offset --image-log-console-level debug --max-subprocesses 3 --verbose'
+#     command_line_str = 'ISS_029RF_FMOVIE001_VIMS --no-auto-offset --image-log-console-level debug --max-subprocesses 4 --verbose'
+#     command_line_str = '--ring-type BRING_MOUNTAINS --all-obsid --no-auto-offset --image-log-console-level debug --max-subprocesses 4 --verbose'
 #                '--recompute-auto-offset',
 #                 '--image-logfile-level', 'debug',
-                '--image-log-console-level', 'debug',
+#                 '--image-log-console-level', 'debug',
 #                 '-a',
-                 '--max-subprocesses', '3',
+#                  '--max-subprocesses', '3',
 #                 '--start-obsid', 'ISS_007RI_AZSCNLOPH001_PRIME',
 #                '--start-obsid', 'ISS_115RF_FMOVIEEQX001_PRIME',
 #                 'ISS_000RI_SATSRCHAP001_PRIME',
@@ -58,52 +53,8 @@ if len(cmd_line) == 0:
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
 
-#'ISS_080RF_FMOVIE005_PRIME',
-#'ISS_098RI_TMAPN30LP001_CIRS/W1608705204_1',
-#'ISS_072RI_SPKHRLPDF001_PRIME',
-#'ISS_105RI_TDIFS20HP001_CIRS',
-#'ISS_105RI_TMAPN45LP001_CIRS',
-#'ISS_006RI_LPHRLFMOV001_PRIME',
-#'ISS_081RI_FMOVIE106_VIMS',
-#'ISS_091RI_APOMOSL109_VIMS',
-#'ISS_096RF_FMOVIE004_PRIME',
-#'ISS_109RI_TDIFS20HP001_CIRS',
-#'ISS_112RF_FMOVIE002_PRIME',
-#'ISS_132RI_FMOVIE001_VIMS',
-#'ISS_115RF_FMOVIEEQX001_PRIME',
-#'ISS_080RF_FMOVIE005_PRIME/N1597390953_1',
 
-#'ISS_051RI_LPMRDFMOV001_PRIME',
-#'ISS_059RF_FMOVIE002_VIMS',
-
-#'ISS_000RI_SATSRCHAP001_PRIME',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479252612_1',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479201492_1',
-#'ISS_00ARI_SPKMOVPER001_PRIME/N1479246132_1',
-#'ISS_006RI_LPHRLFMOV001_PRIME/N1492102189_1',
-#'--no-allow-stars',
-#'--no-allow-moons',
-
-'ISS_036RF_FMOVIE001_VIMS',
-#'ISS_029RF_FMOVIE001_VIMS/N1538192308_1',
-#'ISS_081RI_FMOVIE106_VIMS',
-#'ISS_075RB_BMOVIE4001_VIMS',
-#'ISS_096RF_FMOVIE004_PRIME',
-#'ISS_112RF_FMOVIE002_PRIME',
-#'ISS_111RF_FMOVIE002_PRIME',
-#'ISS_115RF_FMOVIEEQX001_PRIME',
-
-#'ISS_043RF_FMOVIE001_VIMS/N1555595413_1',
-#'ISS_043RF_FMOVIE001_VIMS/N1555588813_1',
-#'ISS_081RI_FMOVIE106_VIMS/N1597902245_1',
-#'ISS_081RI_FMOVIE106_VIMS/N1597904975_1',
-#'ISS_112RF_FMOVIE002_PRIME/N1623341484_1',
-#'ISS_096RF_FMOVIE004_PRIME/N1607637941_1',
-#'ISS_096RF_FMOVIE004_PRIME/N1607657381_1',
-#'ISS_094RF_FMOVIE001_PRIME/N1606005062_1',
-#'ISS_051RI_LPMRDFMOV001_PRIME/N1571435347_1',
-
-                '--allow-exception',
+#                 '--allow-exception',
 #                '--no-auto-offset',
 #                 '--recompute-auto-offset',
 #                 '--recompute-reproject',
@@ -112,13 +63,16 @@ if len(cmd_line) == 0:
 #                '--profile',
 #                '--no-update-auto-offset',
 #                '--no-update-reproject',
-                 '--verbose']
+#                  '--verbose']
 
-parser = OptionParser() 
+    command_list = command_line_str.split()
+
+parser = argparse.ArgumentParser()
 
 #
-# For each of (offset, reprojection), the default behavior is to check the timestamps
-# on the input file and the output file and recompute if the output file is out of date.
+# For each of (offset, reprojection), the default behavior is to check the 
+# timestamps on the input file and the output file and recompute if the output
+# file is out of date.
 # Several options change this behavior:
 #   --no-xxx: Don't recompute no matter what; this may leave you without an output file at all
 #   --no-update: Don't recompute if the output file exists, but do compute if the output file doesn't exist at all
@@ -129,70 +83,72 @@ parser = OptionParser()
 ##
 ## General options
 ##
-parser.add_option('--allow-exception', dest='allow_exception',
+parser.add_argument('--allow-exception', dest='allow_exception',
                   action='store_true', default=True, # XXX
                   help="Allow exceptions to be thrown")
-parser.add_option('--profile', dest='profile',
+parser.add_argument('--profile', dest='profile',
                   action='store_true', default=False,
                   help="Do performance profiling")
-parser.add_option('--start-obsid', dest='start_obsid',
+parser.add_argument('--start-obsid', dest='start_obsid',
                   default='', help='The first obsid to process')
-parser.add_option('--max-subprocesses', dest='max_subprocesses',
-                  type='int', default=0,
+parser.add_argument('--max-subprocesses', dest='max_subprocesses',
+                  type=int, default=0,
                   help="Fork a subprocess for each file")
-parser.add_option('--image-logfile-level', dest='image_logfile_level',
+parser.add_argument('--image-logfile-level', dest='image_logfile_level',
                   default='info',
                   help='Logging level for the individual logfiles')
-parser.add_option('--image-log-console-level', dest='image_log_console_level',
+parser.add_argument('--image-log-console-level', dest='image_log_console_level',
                   default='info',
                   help='Logging level for the console')
 
 ##
 ## Options for finding the pointing offset
 ##
-parser.add_option('--no-auto-offset', dest='no_auto_offset',
+parser.add_argument('--no-auto-offset', dest='no_auto_offset',
                   action='store_true', default=False,
                   help="Don't compute the automatic offset even if we don't have one")
-parser.add_option('--no-update-auto-offset', dest='no_update_auto_offset',
+parser.add_argument('--no-update-auto-offset', dest='no_update_auto_offset',
                   action='store_true', default=False,
                   help="Don't compute the automatic offset unless we don't have one")
-parser.add_option('--recompute-auto-offset', dest='recompute_auto_offset',
+parser.add_argument('--recompute-auto-offset', dest='recompute_auto_offset',
                   action='store_true', default=False,
                   help='Recompute the automatic offset even if we already have one that is current')
-parser.add_option('--display-offset-reproject', dest='display_offset_reproject',
+parser.add_argument('--display-offset-reproject', dest='display_offset_reproject',
                   action='store_true', default=False,
                   help='Display the offset and reprojection and allow manual change')
-parser.add_option('--display-invalid-offset', dest='display_invalid_offset',
+parser.add_argument('--display-invalid-offset', dest='display_invalid_offset',
                   action='store_true', default=False,
                   help='Display the offset and reprojection and allow manual change only for images that have bad automatic offsets')
-parser.add_option('--display-invalid-reproject', dest='display_invalid_reproject',
+parser.add_argument('--display-invalid-reproject', dest='display_invalid_reproject',
                   action='store_true', default=False,
                   help='Display the offset and reprojection and allow manual change only for images that have a bad reprojection')
-parser.add_option('--no-allow-stars', dest='no_allow_stars',
+parser.add_argument('--no-allow-stars', dest='no_allow_stars',
                    action='store_true', default=False,
                    help="Don't allow stars during auto offset")
-parser.add_option('--no-allow-moons', dest='no_allow_moons',
+parser.add_argument('--no-allow-moons', dest='no_allow_moons',
                    action='store_true', default=False,
                    help="Don't allow moons during auto offset")
 
 ##
 ## Options for reprojection
 ##
-parser.add_option('--no-reproject', dest='no_reproject',
+parser.add_argument('--no-reproject', dest='no_reproject',
                   action='store_true', default=False,
                   help="Don't compute the reprojection even if we don't have one")
-parser.add_option('--no-update-reproject', dest='no_update_reproject',
+parser.add_argument('--no-update-reproject', dest='no_update_reproject',
                   action='store_true', default=False,
                   help="Don't compute the reprojection unless if we don't have one")
-parser.add_option('--recompute-reproject', dest='recompute_reproject',
+parser.add_argument('--recompute-reproject', dest='recompute_reproject',
                   action='store_true', default=False,
                   help='Recompute the reprojection even if we already have one that is current')
 
-fring_util.add_parser_options(parser)
+ring_util.ring_add_parser_options(parser)
 
-options, args = parser.parse_args(cmd_line)
+arguments = parser.parse_args(command_list)
 
-assert not (options.display_offset_reproject and options.max_subprocesses)
+assert not (arguments.display_offset_reproject and arguments.max_subprocesses)
+
+ring_util.ring_init(arguments)
 
 class OffRepDispData:
     def __init__(self):
@@ -225,61 +181,59 @@ class OffRepDispData:
 #####################################################################################
 
 def collect_cmd_line():
-    ret = ['--radius_inner', str(options.radius_inner)]
-    ret += ['--radius_outer', str(options.radius_outer)]
-    ret += ['--radius_resolution', str(options.radius_resolution)]
-    ret += ['--longitude_resolution', str(options.longitude_resolution)]
-    if options.verbose:
+    ret = ring_util.ring_basic_cmd_line(arguments)
+    if arguments.verbose:
         ret += ['--verbose']
-    if options.no_auto_offset:
+    if arguments.no_auto_offset:
         ret += ['--no-auto-offset']
-    if options.no_update_auto_offset:
+    if arguments.no_update_auto_offset:
         ret += ['--no-update-auto-offset']
-    if options.recompute_auto_offset:
+    if arguments.recompute_auto_offset:
         ret += ['--recompute-auto-offset']
-    if options.no_reproject:
+    if arguments.no_reproject:
         ret += ['--no-reproject']
-    if options.no_update_reproject:
+    if arguments.no_update_reproject:
         ret += ['--no-update-reproject']
-    if options.recompute_reproject:
+    if arguments.recompute_reproject:
         ret += ['--recompute-reproject']
-    ret += ['--image-logfile-level', options.image_logfile_level]
-    ret += ['--image-log-console-level', options.image_log_console_level]
+    ret += ['--image-logfile-level', arguments.image_logfile_level]
+    ret += ['--image-log-console-level', arguments.image_log_console_level]
         
     return ret
 
 def run_and_maybe_wait(args):
     said_waiting = False
-    while len(subprocess_list) == options.max_subprocesses:
-        if options.verbose and not said_waiting:
+    while len(subprocess_list) == arguments.max_subprocesses:
+        if arguments.verbose and not said_waiting:
             print 'WAITING'
             said_waiting = True
         for i in xrange(len(subprocess_list)):
             if subprocess_list[i].poll() is not None:
                 del subprocess_list[i]
                 break
-        if len(subprocess_list) == options.max_subprocesses:
+        if len(subprocess_list) == arguments.max_subprocesses:
             time.sleep(1)
 
-    if options.verbose:
+    if arguments.verbose:
         print 'SPAWNING SUBPROCESS'
         
     pid = subprocess.Popen(args)
     subprocess_list.append(pid)
                     
 
-#####################################################################################
+###############################################################################
 #
 # LOGGING
 #
-#####################################################################################
+###############################################################################
 
 def setup_image_logging(offrepdata):
     if offrepdata.image_log_filehandler is not None: # Already set up
         return
     
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
-        image_log_path = file_img_to_log_path(offrepdata.image_path, bootstrap=False)
+        image_log_path = file_img_to_log_path(offrepdata.image_path, 'ring_repro',
+                                              bootstrap=False)
         
         if os.path.exists(image_log_path):
             os.remove(image_log_path) # XXX Need option to not do this
@@ -290,31 +244,28 @@ def setup_image_logging(offrepdata):
         offrepdata.image_log_filehandler = None
 
 
-#####################################################################################
+###############################################################################
 #
 # FIND THE POINTING OFFSET
 #
-#####################################################################################
+###############################################################################
     
 #
 # The primary entrance for finding pointing offset
 #
 
 def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, save_results=True):
-    # Input file: image_path (<IMAGE>_CALIB.IMG)
-    # Output file: offset_path(<IMAGE>_CALIB.IMG.FOFFSET)
-
-    if options.verbose:
+    if arguments.verbose:
         print '** Find offset', offrepdata.obsid, '/', offrepdata.image_name, '-',
     
     if option_no:  # Just don't do anything - we hope you know what you're doing!
-        if options.verbose:
+        if arguments.verbose:
             print 'Ignored because of --no-auto_offset'
         return
         
     if os.path.exists(offrepdata.offset_path):
         if option_no_update:
-            if options.verbose:
+            if arguments.verbose:
                 print 'Ignored because offset file already exists'
             return # Offset file already exists, don't update
         # Save the manual offset!
@@ -328,12 +279,12 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     time_image = os.stat(offrepdata.image_path).st_mtime
     if time_offset >= time_image and not option_recompute:
         # The offset file exists and is more recent than the image, and we're not forcing a recompute
-        if options.verbose:
+        if arguments.verbose:
             print 'Ignored because offset file is up to date'
         return
 
-    if options.max_subprocesses:
-        if options.verbose:
+    if arguments.max_subprocesses:
+        if arguments.verbose:
             print 'QUEUEING SUBPROCESS'
         offrepdata.subprocess_run = True
         return
@@ -351,14 +302,14 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
     
     try:
         offrepdata.off_metadata = master_find_offset(obs,
-                         allow_stars=not options.no_allow_stars,
-                         allow_moons=not options.no_allow_moons,
+                         allow_stars=not arguments.no_allow_stars,
+                         allow_moons=not arguments.no_allow_moons,
                          create_overlay=True,
                          stars_overlay_box_width=5,
                          stars_overlay_box_thickness=2,
                          rings_config=rings_config)
     except:
-        if options.verbose:
+        if arguments.verbose:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
         print 'EXCEPTION:'
         print sys.exc_info()
@@ -366,30 +317,30 @@ def offset_one_image(offrepdata, option_no, option_no_update, option_recompute, 
         offrepdata.off_metadata = {}
         offrepdata.off_metadata['error'] = str(sys.exc_value)
         offrepdata.off_metadata['error_traceback'] = err
-        if options.allow_exception:
+        if arguments.allow_exception:
             raise
     if ('offset' in offrepdata.off_metadata and 
         offrepdata.off_metadata['offset'] is not None):
         offrepdata.the_offset = offrepdata.off_metadata['offset']
-        if options.verbose:
+        if arguments.verbose:
             print 'FOUND %6.2f, %6.2f' % (offrepdata.the_offset[0], offrepdata.the_offset[1])
     else:
         offrepdata.the_offset = None
-        if options.verbose:
+        if arguments.verbose:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY BAD IMAGE'
     
     if offrepdata.manual_offset:
         offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset
         
-    if save_results:
-        file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
+#     if save_results:
+#         file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
 
 
-#####################################################################################
+###############################################################################
 #
 # REPROJECT ONE IMAGE
 #
-#####################################################################################
+###############################################################################
 
 def _update_offrepdata_repro(offrepdata, metadata):
     if metadata is None:
@@ -410,7 +361,7 @@ def _update_offrepdata_repro(offrepdata, metadata):
         offrepdata.repro_incidence_angle = metadata['incidence']
         offrepdata.repro_time = metadata['time']
         
-        full_longitudes = rings_generate_longitudes(longitude_resolution=options.longitude_resolution*oops.RPD)
+        full_longitudes = rings_generate_longitudes(longitude_resolution=arguments.longitude_resolution*oops.RPD)
         offrepdata.repro_longitudes = full_longitudes[offrepdata.repro_long_mask]
 
 def _write_repro_data(offrepdata):
@@ -425,7 +376,13 @@ def _write_repro_data(offrepdata):
         metadata['incidence'] = offrepdata.repro_incidence_angle
         metadata['time'] = offrepdata.repro_time
     
-    fring_util.write_repro(offrepdata.repro_path, metadata)
+    # To make the directories if necessary
+    offrepdata.repro_path = ring_util.repro_path(arguments,
+                                                 offrepdata.image_path, 
+                                                 offrepdata.image_name,
+                                                 make_dirs=True)
+
+    ring_util.write_repro(offrepdata.repro_path, metadata)
     
 def _reproject_one_image(offrepdata):
     if offrepdata.obs is None:
@@ -446,16 +403,19 @@ def _reproject_one_image(offrepdata):
     
     try:
         ret = rings_reproject(obs, offset=offset,
-                              longitude_resolution=options.longitude_resolution*oops.RPD,
-                              radius_resolution=options.radius_resolution,
-                              radius_range=(options.radius_inner,options.radius_outer),
-                              corotating='F')
+                              longitude_resolution=arguments.longitude_resolution*oops.RPD,
+                              radius_resolution=arguments.radius_resolution,
+                              radius_range=(arguments.ring_radius+
+                                            arguments.radius_inner_delta,
+                                            arguments.ring_radius+
+                                            arguments.radius_outer_delta),
+                              corotating=arguments.corot_type)
     except:
-        if options.verbose:
+        if arguments.verbose:
             print 'REPROJECTION FAILED'
         print 'EXCEPTION:'
         print sys.exc_info()
-        if options.allow_exception:
+        if arguments.allow_exception:
             raise
         ret = None
 
@@ -465,41 +425,50 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
     # Input file: offset_path (<IMAGE>_CALIB.IMG.OFFSET)
     # Output file: repro_path (<IMAGE>_<RES_DATA>_REPRO.IMG)
 
-    if options.verbose:
+    if arguments.verbose:
         print '** Reproject', offrepdata.obsid, '/', offrepdata.image_name, '-',
     
     if offrepdata.subprocess_run:
-        if options.verbose:
+        if arguments.verbose:
             print 'LETTING SUBPROCESS HANDLE IT'
         return
     
     if option_no:  # Just don't do anything
-        if options.verbose:
+        if arguments.verbose:
             print 'Ignored because of --no-reproject'
         return
 
-    if os.path.exists(offrepdata.repro_path+'.pickle'):
+    if os.path.exists(offrepdata.repro_path):
         if option_no_update:
-            if options.verbose:
+            if arguments.verbose:
                 print 'Ignored because repro file already exists'
             return # Repro file already exists, don't update
-        time_repro = os.stat(offrepdata.repro_path+'.pickle').st_mtime
+        time_repro = os.stat(offrepdata.repro_path).st_mtime
     else:
         time_repro = 0
     
     if not os.path.exists(offrepdata.offset_path):
-        if options.verbose:
+        if arguments.verbose:
             print 'NO OFFSET FILE - ABORTING'
         return
     
     time_offset = os.stat(offrepdata.offset_path).st_mtime
     if time_repro >= time_offset and not option_recompute:
         # The repro file exists and is more recent than the image, and we're not forcing a recompute
-        if options.verbose:
+        if arguments.verbose:
             print 'Ignored because repro file is up to date'
         return
 
     offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
+    status = offrepdata.off_metadata['status']
+    if status != 'ok':
+        if arguments.verbose:
+            print 'Ignored because offsetting skipped file'
+        return
+    if 'offset' not in offrepdata.off_metadata:
+        if arguments.verbose:
+            print 'Skipped because no offset field present'
+        return
     if offrepdata.off_metadata['offset'] is None:
         offrepdata.the_offset = None
     else:
@@ -510,12 +479,12 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
         offrepdata.manual_offset = offrepdata.off_metadata['manual_offset']
     
     if offrepdata.the_offset is None and offrepdata.manual_offset is None:
-        if options.verbose:
+        if arguments.verbose:
             print 'OFFSET IS INVALID - ABORTING'
         return
 
-    if options.max_subprocesses:
-        if options.verbose:
+    if arguments.max_subprocesses:
+        if arguments.verbose:
             print 'QUEUEING SUBPROCESS'
         offrepdata.subprocess_run = True
         return
@@ -526,22 +495,24 @@ def reproject_one_image(offrepdata, option_no, option_no_update, option_recomput
     
     _write_repro_data(offrepdata)
     
-    if options.verbose:
+    if arguments.verbose:
         print 'OK'
 
 
-#####################################################################################
+###############################################################################
 #
 # DISPLAY ONE IMAGE AND ITS REPROJECTION ALLOWING MANUAL CHANGING OF THE OFFSET
 #
-#####################################################################################
+###############################################################################
 
 def draw_repro_overlay(offrepdata, offrepdispdata):
     if offrepdata.repro_img is None:
         return
     repro_overlay = np.zeros(offrepdata.repro_img.shape + (3,))
-    y = int(float(options.radius_outer)/(options.radius_outer-options.radius_inner)*
+    y = int(float(arguments.radius_outer_delta)/
+            (arguments.radius_outer_delta-arguments.radius_inner_delta)*
             offrepdata.repro_img.shape[0])
+    y = repro_overlay.shape[0]-1-y
     if 0 <= y < repro_overlay.shape[0]:
         repro_overlay[y, :, 0] = 1
     
@@ -564,29 +535,34 @@ def draw_offset_overlay(offrepdata, offrepdispdata):
         offset_overlay = np.zeros((offrepdata.obs.data.shape + (3,)))
     if offrepdata.manual_offset is not None:
         if offrepdata.the_offset is None:
-            x_diff = int(-offrepdata.manual_offset[0]) 
-            y_diff = int(-offrepdata.manual_offset[1])
+            x_diff = int(offrepdata.manual_offset[0]) 
+            y_diff = int(offrepdata.manual_offset[1])
         else: 
-            x_diff = int(offrepdata.the_offset[0] - offrepdata.manual_offset[0])
-            y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
+            x_diff = int(offrepdata.manual_offset[0] - offrepdata.the_offset[0])
+            y_diff = int(offrepdata.manual_offset[1] - offrepdata.the_offset[1])
         offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
  
-    x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs) # No offset - blue
+    x_pixels, y_pixels = rings_ring_pixels(arguments.corot_type,
+                                           offrepdata.obs) # No offset - blue
     x_pixels = x_pixels.astype('int')
     y_pixels = y_pixels.astype('int')
     offset_overlay[y_pixels, x_pixels, 2] = 255
 
-    if offrepdata.the_offset is not None:
+    if (offrepdata.the_offset is not None and
+        tuple(offrepdata.the_offset) != (0,0)):
         # Auto offset - red
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+        x_pixels, y_pixels = rings_ring_pixels(arguments.corot_type,
+                                               offrepdata.obs, 
                                         offset=offrepdata.the_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
         offset_overlay[y_pixels, x_pixels, 0] = 255
 
-    if offrepdata.manual_offset is not None:
+    if (offrepdata.manual_offset is not None and
+        tuple(offrepdata.manual_offset) != (0,0)):
         # Manual offset - green
-        x_pixels, y_pixels = rings_fring_pixels(offrepdata.obs, 
+        x_pixels, y_pixels = rings_ring_pixels(arguments.corot_type,
+                                               offrepdata.obs, 
                                         offset=offrepdata.manual_offset)
         x_pixels = x_pixels.astype('int')
         y_pixels = y_pixels.astype('int')
@@ -607,10 +583,16 @@ def callback_offset(x, y, offrepdata, offrepdispdata):
         y < 0 or y > offrepdata.obs.data.shape[0]-1):
         return
     
+    x = int(x)
+    y = int(y)
+    
     if offrepdispdata.off_longitudes is not None:
         offrepdispdata.label_off_corot_longitude.config(text=('%7.3f'%(offrepdispdata.off_longitudes[y,x]*oops.DPR)))
-        offrepdispdata.label_off_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.off_longitudes[y,x],
-                                                                                                            offrepdata.obs.midtime)*oops.DPR)))
+        offrepdispdata.label_off_inertial_longitude.config(
+               text=('%7.3f'%(rings_ring_corotating_to_inertial(
+                                 arguments.corot_type,
+                                 offrepdispdata.off_longitudes[y,x],
+                                 offrepdata.obs.midtime)*oops.DPR)))
     if offrepdispdata.off_radii is not None:
         offrepdispdata.label_off_radius.config(text=('%7.3f'%offrepdispdata.off_radii[y,x]))
 
@@ -689,7 +671,7 @@ def command_commit_changes(offrepdata, offrepdispdata):
         offrepdata.manual_offset = (float(offrepdispdata.entry_x_offset.get()),
                                     float(offrepdispdata.entry_y_offset.get()))
         offrepdata.off_metadata['manual_offset'] = offrepdata.manual_offset 
-    file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
+#     file_write_offset_metadata(offrepdata.image_path, offrepdata.off_metadata)
     _write_repro_data(offrepdata)
 
 # Setup the offset/reproject window with no data
@@ -698,8 +680,10 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
     
     offrepdispdata.off_radii = offrepdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
     offrepdispdata.off_longitudes = offrepdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float')
-    offrepdispdata.off_longitudes = rings_fring_inertial_to_corotating(offrepdispdata.off_longitudes,
-                                                                       offrepdata.obs.midtime)
+    offrepdispdata.off_longitudes = rings_ring_inertial_to_corotating(
+                           arguments.corot_type,
+                           offrepdispdata.off_longitudes,
+                           offrepdata.obs.midtime)
     
     offrepdispdata.toplevel = Tk()
     offrepdispdata.toplevel.title(offrepdata.obsid + ' / ' + offrepdata.image_name)
@@ -717,11 +701,13 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
         offrepdispdata.imdisp_repro = ImageDisp([np.zeros((1024,1024))], parent=frame_toplevel,
                                                 canvas_size=(512,512), overlay_list=[np.zeros((1024,1024,3))],
                                                 allow_enlarge=True, auto_update=True,
+                                                one_zoom=False,
                                                 flip_y=True)
     else:
         offrepdispdata.imdisp_repro = ImageDisp([offrepdata.repro_img], parent=frame_toplevel,
                                                 canvas_size=(512,512), overlay_list=[offrepdispdata.repro_overlay],
                                                 allow_enlarge=True, auto_update=True,
+                                                one_zoom=False,
                                                 flip_y=True)
     
     ###############################################
@@ -907,7 +893,7 @@ def setup_offset_reproject_window(offrepdata, offrepdispdata):
 # Display the original and reproject images (if any)
 def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
                              option_invalid_reproject, do_mainloop=True):
-    if options.verbose:
+    if arguments.verbose:
         print '** Display', offrepdata.obsid, '/', offrepdata.image_name
     if offrepdata.off_metadata is None:
         offrepdata.off_metadata = file_read_offset_metadata(offrepdata.image_path)
@@ -926,7 +912,7 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
 
     if (option_invalid_offset and 
         (offrepdata.the_offset is not None or offrepdata.manual_offset is not None)):
-        if options.verbose:
+        if arguments.verbose:
             print 'Skipping because not invalid'
         return
 
@@ -938,7 +924,7 @@ def display_offset_reproject(offrepdata, offrepdispdata, option_invalid_offset,
     img_max_y = offrepdata.obs.data.shape[1]-1
 
     if offrepdata.repro_img is None:
-        ret = fring_util.read_repro(offrepdata.repro_path)
+        ret = ring_util.read_repro(offrepdata.repro_path)
         _update_offrepdata_repro(offrepdata, ret)
  
     if offrepdata.repro_img is not None:
@@ -963,11 +949,17 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
     if offrepdispdata.repro_longitudes is None:
         return
 
-    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%(offrepdispdata.repro_longitudes[x]*oops.DPR)))
-    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%(rings_fring_corotating_to_inertial(offrepdispdata.repro_longitudes[x],
-                                                                                                    offrepdata.obs.midtime)*oops.DPR)))
+    x = int(x)
     
-    radius = y*options.radius_resolution+options.radius_inner
+    offrepdispdata.label_corot_longitude.config(text=('%7.3f'%(offrepdispdata.repro_longitudes[x]*oops.DPR)))
+    offrepdispdata.label_inertial_longitude.config(text=('%7.3f'%(
+                      rings_ring_corotating_to_inertial(
+                             arguments.corot_type,
+                             offrepdispdata.repro_longitudes[x],
+                             offrepdata.obs.midtime)*oops.DPR)))
+    radius = (y*arguments.radius_resolution+
+              arguments.ring_radius+
+              arguments.radius_inner_delta)
     offrepdispdata.label_radius.config(text = '%7.3f'%radius)
     offrepdispdata.label_resolution.config(text=('%7.3f'%offrepdispdata.repro_resolutions[x]))
     offrepdispdata.label_phase.config(text=('%7.3f'%(offrepdispdata.repro_phase_angles[x]*oops.DPR)))
@@ -985,8 +977,8 @@ def callback_repro(x, y, offrepdata, offrepdispdata):
 _LOGGING_NAME = 'cb.' + __name__
 image_logger = logging.getLogger(_LOGGING_NAME)
 
-image_logfile_level = log_decode_level(options.image_logfile_level)
-image_log_console_level = log_decode_level(options.image_log_console_level)
+image_logfile_level = log_decode_level(arguments.image_logfile_level)
+image_log_console_level = log_decode_level(arguments.image_log_console_level)
 
 cb_logging.log_set_default_level(log_min_level(image_logfile_level,
                                                image_log_console_level))
@@ -1005,54 +997,57 @@ obsid_list = []
 image_name_list = []
 image_path_list = []
 repro_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
+for obsid, image_name, image_path in ring_util.ring_enumerate_files(arguments):
 #    if obsid == 'ISS_006RI_LPHRLFMOV001_PRIME':
 #        continue
-    if options.start_obsid != '' and not found_obsid:
-        if obsid != options.start_obsid:
+    if arguments.start_obsid != '' and not found_obsid:
+        if obsid != arguments.start_obsid:
             continue
         found_obsid = True
             
-    offrepdata = fring_util.OffRepData()
+    offrepdata = ring_util.OffRepData()
     offrepdata.obsid = obsid
     offrepdata.image_name = image_name
     offrepdata.image_path = image_path
     
     offrepdata.offset_path = file_img_to_offset_path(image_path)
-    offrepdata.repro_path = fring_util.repro_path(options, image_path, image_name)
+    offrepdata.repro_path = ring_util.repro_path(arguments,
+                                                 image_path, 
+                                                 image_name,
+                                                 make_dirs=False)
 
     offrepdata.subprocess_run = False
 
-    if options.profile:
+    if arguments.profile:
         pr = cProfile.Profile()
         pr.enable()
 
     offrepdata.image_log_filehander = None
     
     # Pointing offset
-    offset_one_image(offrepdata, options.no_auto_offset, options.no_update_auto_offset,
-                     options.recompute_auto_offset)
+    offset_one_image(offrepdata, arguments.no_auto_offset, arguments.no_update_auto_offset,
+                     arguments.recompute_auto_offset)
     
     # Reprojection
-    reproject_one_image(offrepdata, options.no_reproject, options.no_update_reproject,
-                        options.recompute_reproject)
+    reproject_one_image(offrepdata, arguments.no_reproject, arguments.no_update_reproject,
+                        arguments.recompute_reproject)
 
     cb_logging.log_remove_file_handler(offrepdata.image_log_filehandler)
 
-    if options.max_subprocesses and offrepdata.subprocess_run:
-        run_and_maybe_wait([fring_util.PYTHON_EXE, python_reproject_program] + 
+    if arguments.max_subprocesses and offrepdata.subprocess_run:
+        run_and_maybe_wait([ring_util.PYTHON_EXE, ring_util.RING_REPROJECT_PY] + 
                            collect_cmd_line() + 
                            [offrepdata.obsid+'/'+offrepdata.image_name])
     
     # Display offset and reprojection
-    if options.display_offset_reproject or options.display_invalid_offset or options.display_invalid_reproject:
-        display_offset_reproject(offrepdata, offrepdispdata, options.display_invalid_offset,
-                                 options.display_invalid_reproject, do_mainloop=not options.profile)
+    if arguments.display_offset_reproject or arguments.display_invalid_offset or arguments.display_invalid_reproject:
+        display_offset_reproject(offrepdata, offrepdispdata, arguments.display_invalid_offset,
+                                 arguments.display_invalid_reproject, do_mainloop=not arguments.profile)
     
     del offrepdata
     offrepdata = None
     
-    if options.profile:
+    if arguments.profile:
         pr.disable()
         s = StringIO.StringIO()
         sortby = 'cumulative'

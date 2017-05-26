@@ -12,6 +12,7 @@
 #    file_clean_name
 #    file_read_iss_file
 #    file_img_to_short_img_path
+#    file_results_path
 #    file_img_to_log_path
 #    file_img_to_offset_path
 #    file_offset_to_img_path
@@ -517,8 +518,8 @@ def file_img_to_short_img_path(img_path):
 
 # RESULTS FILES
     
-def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
-                  include_image_filename=True):
+def file_results_path(img_path, file_type, root=CB_RESULTS_ROOT, 
+                      make_dirs=False, include_image_filename=True):
     """Results path is of the form:
     
     <ROOT>/<file_type>/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
@@ -567,7 +568,7 @@ def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
 
 def file_img_to_log_path(img_path, log_type, root=CB_RESULTS_ROOT, 
                          bootstrap=False, make_dirs=True):
-    fn = _results_path(img_path, 'logs', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'logs', root=root, make_dirs=make_dirs)
     fn += '-'+log_type
     if bootstrap:
         fn += '-BOOTSTRAP'
@@ -581,7 +582,7 @@ def file_img_to_log_path(img_path, log_type, root=CB_RESULTS_ROOT,
 
 def file_img_to_offset_path(img_path, root=CB_RESULTS_ROOT, 
                             bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'offsets', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'offsets', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OFFSET.dat'
@@ -603,7 +604,7 @@ def file_offset_to_img_path(offset_path):
 
 def file_img_to_overlay_path(img_path, root=CB_RESULTS_ROOT, 
                              bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'overlays', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'overlays', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OVERLAY.dat'
@@ -778,7 +779,7 @@ def file_write_offset_metadata_path(offset_path, metadata, overlay_path=None,
 
 def file_img_to_png_path(img_path, root=CB_RESULTS_ROOT, 
                          bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'png', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'png', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '.png'
@@ -799,7 +800,7 @@ def file_write_png_path(png_path, image):
 ### PREDICTED KERNEL METADATA
 
 def file_img_to_predicted_path(img_path, make_dirs=False):
-    fn = _results_path(img_path, 'pred', make_dirs=make_dirs, 
+    fn = file_results_path(img_path, 'pred', make_dirs=make_dirs, 
                        include_image_filename=False,
                        root=CB_SUPPORT_FILES_ROOT)
     fn = file_clean_join(fn, 'PREDICTED-METADATA.dat')
@@ -871,7 +872,7 @@ def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
 def file_img_to_reproj_body_path(img_path, body_name, lat_res, lon_res, 
                                  latlon_type, lon_dir,
                                  make_dirs=False):
-    fn = _results_path(img_path, 'reproj', make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'reproj', make_dirs=make_dirs)
     fn += '-%.3f_%.3f-%s-%s-REPROJBODY-%s.dat' % (
               lat_res*oops.DPR, lon_res*oops.DPR, latlon_type, lon_dir,
               body_name.upper())

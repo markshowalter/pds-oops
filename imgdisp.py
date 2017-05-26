@@ -830,7 +830,7 @@ class ImageDisp(tk.Frame):
         update3 = self._update_zoom()
         if update1 or update2 or update3:
             self._update_pil_images()
-    
+
     def _command_auto_update_checkbox(self):
         """Internal - callback for auto update checkbox."""
         if not self.var_auto_update.get():
@@ -899,7 +899,16 @@ class ImageDisp(tk.Frame):
              (self.var_xzoom.get() == self.last_xzoom and
               self.var_yzoom.get() == self.last_yzoom))):
             return False
-        
+
+        xzoom, yzoom = self._get_zoom_factors()
+
+        for i, img in enumerate(self.imgdata_list):
+            greyscale_img = self.greyscale_list[i]
+            num_pix = (greyscale_img.shape[0]*greyscale_img.shape[1]/
+                       xzoom/yzoom)
+            if num_pix > 5760000:
+                return False
+
         if self.one_zoom:
             self.last_zoom = self.var_zoom.get()
         else:
