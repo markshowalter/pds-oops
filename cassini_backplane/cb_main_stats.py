@@ -17,7 +17,6 @@ import sys
 import oops.inst.cassini.iss as iss
 import oops
 
-from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
 from cb_rings import *
@@ -42,6 +41,12 @@ parser.add_argument(
 parser.add_argument(
     '--top-bad', type=int, default=0,
     help='Show the top N files for each bad navigation')
+parser.add_argument(
+    '--create-filelists', action='store_true', default=False,
+    help='Create filelists for each of the top-bad categories')
+parser.add_argument(
+    '--results-dir', type=str,
+    help='The directory in which to store filelists and other results')
 
 file_add_selection_arguments(parser)
 
@@ -127,7 +132,8 @@ class Histogram(object):
             his += line
         return his
 
-def dump_body_info(body_db):    
+def dump_body_info(body_db, results_prefix):
+    results_prefix = file_clean_join(RESULTS_DIR, results_prefix)
     for body_name in sorted(body_db):
         (count, 
          no_metadata, no_metadata_filename_list,
@@ -144,6 +150,7 @@ def dump_body_info(body_db):
                     body_name, count,
                     float(count)/total_bad_offset*100,
                     float(count)/total_offset*100)
+        clean_body_name = body_name.replace(' ','_').replace('(','').replace(')','')
         if no_metadata:
             print '        No metadata:         %6d (%6.2f%%) [%s]' % (
                         no_metadata, float(no_metadata)/count*100,
@@ -151,6 +158,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in no_metadata_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
+                if arguments.create_filelists and len(no_metadata_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_no_metadata.txt', 'w')
+                    for filename in no_metadata_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
         if bad_size:
             print '        Too small:           %6d (%6.2f%%) [%s]' % (
                         bad_size, float(bad_size)/count*100,
@@ -158,6 +170,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in bad_size_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
+                if arguments.create_filelists and len(bad_size_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_bad_size.txt', 'w')
+                    for filename in bad_size_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
         if bad_limb:
             if bad_size:
                 print '          (else...)'
@@ -167,6 +184,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in bad_limb_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
+                if arguments.create_filelists and len(bad_limb_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_bad_limb.txt', 'w')
+                    for filename in bad_limb_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
         if bad_curvature:
             if bad_size or bad_limb:
                 print '          (else...)'
@@ -176,6 +198,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for filename in bad_curvature_filename_list[:arguments.top_bad]:
                     print '          %s' % filename
+                if arguments.create_filelists and len(bad_curvature_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_bad_curvature.txt', 'w')
+                    for filename in bad_curvature_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
         if bad_body_blur:
             print '        Bad body blur:       %6d (%6.2f%%) [%6.3f %s]' % (
                         bad_body_blur, float(bad_body_blur)/count*100,
@@ -184,6 +211,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for blur, filename in bad_body_blur_filename_list[:arguments.top_bad]:
                     print '          %6.3f %s' % (blur, filename) 
+                if arguments.create_filelists and len(bad_body_blur_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_bad_body_blur.txt', 'w')
+                    for blur, filename in bad_body_blur_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
         if bad_rings_blur:
             print '        Bad rings blur:      %6d (%6.2f%%) [%6.3f %s]' % (
                         bad_rings_blur, float(bad_rings_blur)/count*100,
@@ -192,6 +224,11 @@ def dump_body_info(body_db):
             if arguments.top_bad:
                 for blur, filename in bad_rings_blur_filename_list[:arguments.top_bad]:
                     print '          %6.3f %s' % (blur, filename) 
+                if arguments.create_filelists and len(bad_rings_blur_filename_list) > 0:
+                    topfp = open(results_prefix+'_'+clean_body_name+'_bad_rings_blur.txt', 'w')
+                    for blur, filename in bad_rings_blur_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
             
         if ok_but_bad_secondary:
             if ok:
@@ -208,6 +245,11 @@ def dump_body_info(body_db):
                 if arguments.top_bad:
                     for filename in ok_but_bad_secondary_filename_list[:arguments.top_bad]:
                         print '            %s' % filename
+                    if arguments.create_filelists and len(ok_but_bad_secondary_filename_list) > 0:
+                        topfp = open(results_prefix+'all_ok_bad_sec.txt', 'w')
+                        for filename in ok_but_bad_secondary_filename_list[:arguments.top_bad]:
+                            print >> topfp, filename
+                        topfp.close()
             if ok_but_no_secondary:
                 print '        All OK No Sec Corr   %6d (%6.2f%%) [%s]' % (
                         ok_but_no_secondary, float(ok_but_no_secondary)/count*100,
@@ -215,6 +257,11 @@ def dump_body_info(body_db):
                 if arguments.top_bad:
                     for filename in ok_but_no_secondary_filename_list[:arguments.top_bad]:
                         print '            %s' % filename
+                    if arguments.create_filelists and len(ok_but_no_secondary_filename_list) > 0:
+                        topfp = open(results_prefix+'all_ok_no_sec.txt', 'w')
+                        for filename in ok_but_no_secondary_filename_list[:arguments.top_bad]:
+                            print >> topfp, filename
+                        topfp.close()
 
 
 bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
@@ -462,7 +509,9 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                         bootstrap_status = 'Not bootstrapped'
                         if metadata['bootstrapped']:
                             bootstrap_status = metadata['bootstrap_status']
-                        bootstrap_status_db[bootstrap_status] = bootstrap_status_db.get(bootstrap_status,0)+1
+                        if bootstrap_status not in bootstrap_status_db:
+                            bootstrap_status_db[bootstrap_status] = []
+                        bootstrap_status_db[bootstrap_status].append(filename)
                         
                         bootstrap_cand_db[body_name] = (cand_count+1, 
                                                         bootstrap_status_db)
@@ -735,6 +784,12 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
     if arguments.verbose:
         print status
 
+RESULTS_DIR = file_clean_join(CB_RESULTS_ROOT, 'stats')
+if arguments.results_dir is not None and arguments.results_dir != '':
+    RESULTS_DIR = arguments.results_dir
+if not os.path.exists(RESULTS_DIR):
+    os.mkdir(RESULTS_DIR)
+
 sep = '-' * 55
 
 print sep
@@ -849,6 +904,11 @@ if total_offset:
                 print
                 print '  %s' % offset_list_navsrc
                 last_navsrc = offset_list_navsrc
+            if arguments.create_filelists:
+                topfn = file_clean_join(RESULTS_DIR,
+                                        offset_list_navsrc.replace(' ','_').replace('.','')+
+                                        '_'+offset_list_camera+'_'+str(offset_list_size)+'_')
+
             off_list = [x[0] for x in offset_list]
             print '    %s %4d X Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f (%d)' % (
                                 offset_list_camera, offset_list_size, 
@@ -859,6 +919,12 @@ if total_offset:
                 file_list = [('%s %7.2f'%(x[2],x[0])) for x in offset_list[:arguments.top_bad]]
                 for file in file_list:
                     print '      %s' % file
+                if arguments.create_filelists and len(offset_list) > 0:
+                    topfp = open(topfn+'X.txt', 'w')
+                    for filename in [x[2] for x in offset_list[:arguments.top_bad]]:
+                        print >> topfp, filename
+                    topfp.close()
+                    
             off_list = [x[1] for x in offset_list]
             print '    %s %4d Y Offset: MIN %7.2f MAX %7.2f MEAN %7.2f STD %7.2f' % (
                                 offset_list_camera, offset_list_size,
@@ -869,6 +935,11 @@ if total_offset:
                 file_list = [('%s %7.2f'%(x[2],x[1])) for x in offset_list[:arguments.top_bad]]
                 for file in file_list:
                     print '      %s' % file
+                if arguments.create_filelists and len(offset_list) > 0:
+                    topfp = open(topfn+'Y.txt', 'w')
+                    for file in [x[2] for x in offset_list[:arguments.top_bad]]:
+                        print >> topfp, file
+                    topfp.close()
         
         print sep
         total_bad_offset = total_has_offset_result-total_good_offset
@@ -891,6 +962,14 @@ if total_offset:
                     if arguments.top_bad:
                         for filename in image_description_db[description][:arguments.top_bad]:
                             print '      %s' % filename
+                        if arguments.create_filelists and len(image_description_db[description]) > 0:
+                            topfn = file_clean_join(RESULTS_DIR,
+                                                    description.replace(' ', '_')+'.txt')
+                            topfp = open(topfn, 'w')
+                            for filename in image_description_db[description][:arguments.top_bad]:
+                                print >> topfp, filename
+                            topfp.close()
+                        
                 print
                 print ' Otherwise...'
 
@@ -901,6 +980,13 @@ if total_offset:
             if arguments.top_bad:
                 for filename in secondary_corr_failed_filename_list[:arguments.top_bad]:
                     print '      %s' % filename
+                if arguments.create_filelists and len(secondary_corr_failed_filename_list) > 0:
+                    topfn = file_clean_join(RESULTS_DIR,
+                                            'secondary_corr_fail.txt')
+                    topfp = open(topfn, 'w')
+                    for filename in secondary_corr_failed_filename_list[:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
             print '  BOTSIM candidate:    %6d (%6.2f%%, %6.2f%% of total)' % (
                         total_bad_but_botsim_candidate, 
                         float(total_bad_but_botsim_candidate)/total_bad_offset*100,
@@ -918,9 +1004,9 @@ if total_offset:
                         float(total_bad_offset_no_rings_or_bodies)/total_bad_offset*100,
                         float(total_bad_offset_no_rings_or_bodies)/total_has_offset_result*100)
             print '    Single body only:'
-            dump_body_info(no_rings_single_body_db)
+            dump_body_info(no_rings_single_body_db, 'no_rings_single_body')
             print '    Multiple bodies, closest:'
-            dump_body_info(no_rings_multi_body_db)
+            dump_body_info(no_rings_multi_body_db, 'no_rings_multi_body')
             print '  Has rings (D-F)'
             print '    Filled by main:    %6d (%6.2f%%, %6.2f%% of total)' % (
                         total_rings_entirely_no_offset, 
@@ -973,9 +1059,9 @@ if total_offset:
                                 total_rings_only_no_offset_dring, 
                                 float(total_rings_only_no_offset_dring)/total_rings_only_no_offset*100)
             print '    Single body only:'
-            dump_body_info(with_rings_single_body_db)
+            dump_body_info(with_rings_single_body_db, 'rings_single_body')
             print '    Multiple bodies, closest:'
-            dump_body_info(with_rings_multi_body_db)
+            dump_body_info(with_rings_multi_body_db, 'rings_multi_body')
     
         if total_botsim_candidate:
             print sep
@@ -1028,10 +1114,19 @@ if total_offset:
             for bootstrap_status in sorted(bootstrap_status_db):
                 print '    %-28s %6d (%6.2f%%)' % (
                                    bootstrap_status+':',
-                                   bootstrap_status_db[bootstrap_status],
-                                   float(bootstrap_status_db[bootstrap_status])/
+                                   len(bootstrap_status_db[bootstrap_status]),
+                                   float(len(bootstrap_status_db[bootstrap_status]))/
                                    cand_count*100)
-        
+                if len(bootstrap_status_db[bootstrap_status]) > 0:
+                    for filename in bootstrap_status_db[bootstrap_status][:arguments.top_bad]:
+                        print '      %s' % (filename)
+                if arguments.create_filelists and len(bootstrap_status_db[bootstrap_status]) > 0:
+                    topfp = open(RESULTS_DIR+'/'+'bootstrap_'+body_name+
+                                 bootstrap_status.replace(' ','_'), 'w')
+                    for filename in bootstrap_status_db[bootstrap_status][:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
+
         print sep
         print 'Total Titan navigation attempts:    %6d (%6.2f%%)' % (
                     total_titan_attempt, 
@@ -1046,6 +1141,14 @@ if total_offset:
             if arguments.top_bad:
                 for filename in titan_status_db[titan_status][:arguments.top_bad]:
                     print '      %s' % filename
+                if (arguments.create_filelists and len(titan_status_db[titan_status]) > 0 and
+                    titan_status != 'Success' and titan_status != 'Insufficient profile data'):
+                    topfn = file_clean_join(RESULTS_DIR,
+                                            'titan_'+titan_status.replace(' ','_')+'.txt')
+                    topfp = open(topfn, 'w')
+                    for filename in titan_status_db[titan_status][:arguments.top_bad]:
+                        print >> topfp, filename
+                    topfp.close()
             if titan_status == 'Insufficient profile data':
                 for key in sorted(titan_insuff_db):
                     filter, phase = key

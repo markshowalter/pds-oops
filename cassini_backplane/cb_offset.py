@@ -1217,17 +1217,17 @@ def master_find_offset(obs,
         # the correlation will produce bad results. See for example
         # N1511727503_2.
         rings_occluded_ok = True
-        if rings_model is not None:
-            for body_name in rings_metadata['occluded_by']:
-                for body_model, body_metadata, body_text in bodies_model_list:
-                    if (body_metadata['body_name'] == body_name and
-                        body_metadata['body_blur'] is not None):
-                        rings_occluded_ok = False
-                        logger.info('Ignoring rings because they are occluded by'+
-                                    ' a bumpy %s', body_name)
-                        break
-                if not rings_occluded_ok:
-                    break
+#         if rings_model is not None:
+#             for body_name in rings_metadata['occluded_by']:
+#                 for body_model, body_metadata, body_text in bodies_model_list:
+#                     if (body_metadata['body_name'] == body_name and
+#                         body_metadata['body_blur'] is not None):
+#                         rings_occluded_ok = False
+#                         logger.info('Ignoring rings because they are occluded by'+
+#                                     ' a bumpy %s', body_name)
+#                         break
+#                 if not rings_occluded_ok:
+#                     break
 
         if (rings_model is not None and 
             rings_occluded_ok and
@@ -1509,7 +1509,6 @@ def master_find_offset(obs,
                               extend_fov=extend_fov,
                               stars_config=stars_config)
                     offset = model_offset
-                    metadata['used_objects_type'] = 'MODEL'
 
     if (offset is not None and
         (abs(offset[0]) > extend_fov[0] or 

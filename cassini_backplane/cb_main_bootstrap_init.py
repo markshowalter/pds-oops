@@ -181,7 +181,7 @@ def check_add_one_image_good(image_path, image_filename, metadata):
         return
     
     offset_confidence = metadata['confidence']
-    if offset_confidence < 0.35:
+    if offset_confidence < 0.1:
         main_logger.debug('%s - Skipping due to low confidence %.2f', 
                           image_filename, offset_confidence)
         return

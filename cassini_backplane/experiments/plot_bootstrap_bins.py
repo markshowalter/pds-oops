@@ -184,28 +184,59 @@ def check_add_one_image_good(image_path, image_filename, metadata):
         
         GOOD_IMAGE_BY_BODY_DB[body_name].append(entry)
 
-GOOD_IMAGE_BY_BODY_DB = {}
-CAND_IMAGE_BY_BODY_DB = {}
-
-for image_path in file_yield_image_filenames_from_arguments(arguments):
-    check_add_one_image(image_path)
-
-for body_name in GOOD_IMAGE_BY_BODY_DB:
+def plot_body(body_name, good_image_list, cand_image_list):
+    print body_name, 'GOOD IMAGES', len(good_image_list),
+    print 'CAND IMAGES', len(cand_image_list)
     for lon_shadow_dir in [False, True]:
         for lat_shadow_dir in [False, True]:
-            good_sun_lon_list = np.array([x[1]*oops.DPR for x in GOOD_IMAGE_BY_BODY_DB[body_name] if x[8] == lon_shadow_dir and x[9] == lat_shadow_dir])
-            good_sun_lat_list = np.array([x[2]*oops.DPR for x in GOOD_IMAGE_BY_BODY_DB[body_name] if x[8] == lon_shadow_dir and x[9] == lat_shadow_dir])
-            cand_sun_lon_list = np.array([x[1]*oops.DPR for x in CAND_IMAGE_BY_BODY_DB[body_name] if x[8] == lon_shadow_dir and x[9] == lat_shadow_dir])
-            cand_sun_lat_list = np.array([x[2]*oops.DPR for x in CAND_IMAGE_BY_BODY_DB[body_name] if x[8] == lon_shadow_dir and x[9] == lat_shadow_dir])
+            good_sun_lon_list = np.array([x[1]*oops.DPR for x in good_image_list 
+                  if get_shadow_dirs(x[1], x[4], x[2], x[5])[0] == lon_shadow_dir and
+                     get_shadow_dirs(x[1], x[4], x[2], x[5])[1] == lat_shadow_dir])
+            good_sun_lat_list = np.array([x[2]*oops.DPR for x in good_image_list 
+                  if get_shadow_dirs(x[1], x[4], x[2], x[5])[0] == lon_shadow_dir and
+                     get_shadow_dirs(x[1], x[4], x[2], x[5])[1] == lat_shadow_dir])
+            cand_sun_lon_list = np.array([x[1]*oops.DPR for x in cand_image_list 
+                  if get_shadow_dirs(x[1], x[4], x[2], x[5])[0] == lon_shadow_dir and
+                     get_shadow_dirs(x[1], x[4], x[2], x[5])[1] == lat_shadow_dir])
+            cand_sun_lat_list = np.array([x[2]*oops.DPR for x in cand_image_list 
+                  if get_shadow_dirs(x[1], x[4], x[2], x[5])[0] == lon_shadow_dir and
+                     get_shadow_dirs(x[1], x[4], x[2], x[5])[1] == lat_shadow_dir])
             if len(good_sun_lon_list) == 0 or len(cand_sun_lon_list) == 0:
                 continue
             plt.figure()
-            plt.title('%s %s %s' % (body_name, str(lon_shadow_dir), str(lat_shadow_dir)))
+            plt.title('%s Lon Same=%s Lat Same=%s' % (body_name, str(lon_shadow_dir), str(lat_shadow_dir)))
             plt.plot(good_sun_lon_list, good_sun_lat_list,
                      'o', mec='green', mfc='none', ms=6)
             plt.plot(cand_sun_lon_list, cand_sun_lat_list,
                      'o', mec='red', mfc='none', ms=9)
             plt.xlim(0,360.)
             plt.ylim(-30.,30)
+            plt.xlabel('Sub-solar longitude')
+            plt.ylabel('Sub-solar latitude)')
 
-plt.show()
+        plt.show()
+        
+GOOD_IMAGE_BY_BODY_DB = {}
+CAND_IMAGE_BY_BODY_DB = {}
+
+#for image_path in file_yield_image_filenames_from_arguments(arguments):
+#    check_add_one_image(image_path)
+
+for body_name in bootstrap_config['body_list']:
+    body_path = file_bootstrap_good_image_path(body_name, make_dirs=False)
+    if not os.path.exists(body_path):
+        continue
+    body_fp = open(body_path, 'rb')
+    good_image_list = msgpack.unpackb(body_fp.read(),
+                                      object_hook=msgpack_numpy.decode)    
+    body_fp.close()
+
+    body_path = file_bootstrap_candidate_image_path(body_name, make_dirs=False)
+    if not os.path.exists(body_path):
+        continue
+    body_fp = open(body_path, 'rb')
+    cand_image_list = msgpack.unpackb(body_fp.read(),
+                                      object_hook=msgpack_numpy.decode)    
+    body_fp.close()
+
+    plot_body(body_name, good_image_list, cand_image_list)
