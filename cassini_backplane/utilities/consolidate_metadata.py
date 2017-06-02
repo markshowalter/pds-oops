@@ -1,11 +1,8 @@
 ###############################################################################
-# cb_main_copy_png.py
+# consolidate_metadata.py
 #
 # Copy the selected image png files to a common destination directory.
 ###############################################################################
-
-from cb_logging import *
-import logging
 
 import argparse
 import os

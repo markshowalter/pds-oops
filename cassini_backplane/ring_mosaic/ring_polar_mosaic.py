@@ -19,8 +19,8 @@ from cb_rings import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-#     command_line_str = '--all-obsid --display-radius-inner 140020 --display-radius-outer 140420 --radius-polar-base-factor 1.5'
-    command_line_str = '--ring-type BRING_MOUNTAINS ISS_115RI_AZSCANLIT001_PRIME --radius-polar-base-factor 2.5 --image-size 4096'# --blackpoint 0 --whitepoint 0.0071 --gamma 0.8'
+    command_line_str = '--all-obsid --display-radius-inner 140020 --display-radius-outer 140420 --radius-polar-base-factor 1.5'
+#     command_line_str = '--ring-type BRING_MOUNTAINS ISS_115RI_AZSCANLIT001_PRIME --radius-polar-base-factor 2.5 --image-size 4096'# --blackpoint 0 --whitepoint 0.0071 --gamma 0.8'
 #     command_line_str = '--ring-type BRING_MOUNTAINS --all-obsid --radius-polar-base-factor 2.5'
     command_list = command_line_str.split()
 
@@ -171,4 +171,5 @@ for obsid, image_name, image_path in ring_util.ring_enumerate_files(arguments):
     
     if cur_obsid != obsid:
         cur_obsid = obsid
+        print 'Processing', obsid
         polar_project_mosaic(obsid)

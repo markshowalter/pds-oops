@@ -246,7 +246,7 @@ def dump_body_info(body_db, results_prefix):
                     for filename in ok_but_bad_secondary_filename_list[:arguments.top_bad]:
                         print '            %s' % filename
                     if arguments.create_filelists and len(ok_but_bad_secondary_filename_list) > 0:
-                        topfp = open(results_prefix+'all_ok_bad_sec.txt', 'w')
+                        topfp = open(results_prefix+'_'+clean_body_name+'_all_ok_bad_sec.txt', 'w')
                         for filename in ok_but_bad_secondary_filename_list[:arguments.top_bad]:
                             print >> topfp, filename
                         topfp.close()
@@ -258,7 +258,7 @@ def dump_body_info(body_db, results_prefix):
                     for filename in ok_but_no_secondary_filename_list[:arguments.top_bad]:
                         print '            %s' % filename
                     if arguments.create_filelists and len(ok_but_no_secondary_filename_list) > 0:
-                        topfp = open(results_prefix+'all_ok_no_sec.txt', 'w')
+                        topfp = open(results_prefix+'_'+clean_body_name+'_all_ok_no_sec.txt', 'w')
                         for filename in ok_but_no_secondary_filename_list[:arguments.top_bad]:
                             print >> topfp, filename
                         topfp.close()
@@ -372,15 +372,6 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
         
     total_offset += 1
     
-    # Fix up the metadata for old files - eventually this should
-    # be removed! XXX
-    if 'error' in metadata:
-        metadata['status'] = 'error'
-        metadata['status_detail1'] = metadata['error']
-        metadata['status_detail2'] = metadata['error_traceback']
-    elif 'status' not in metadata:
-        metadata['status'] = 'ok'
-
     status = metadata['status']
     if status == 'error':            
         error = metadata['status_detail1']
@@ -479,7 +470,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                 image_description_db[description].append(filename)
                 total_images_marked_bad += 1
                              
-        if offset is None and description_ok:
+        if offset is None:# and description_ok:
             if metadata['secondary_corr_ok'] is False:
                 # Beware - None means not performed
                 total_secondary_corr_failed += 1
@@ -489,7 +480,11 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
             if (metadata['bootstrap_candidate'] or
                 metadata['bootstrapped']):
                 if bodies_metadata is not None:
-                    for body_name in metadata['large_bodies']:
+                    # We're restricting this to the first body in the list
+                    # for consistency with the current bootstrap process.
+                    # Perhaps in the future we can handle bootstrapping
+                    # with multiple bodies in the image.
+                    for body_name in metadata['large_bodies'][:1]:
                         if (body_name not in bootstrap_config['body_list'] or
                             body_name in FUZZY_BODY_LIST or
                             body_name == 'TITAN'):
@@ -498,6 +493,8 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                             continue
                         body_metadata = bodies_metadata[body_name]
                         if not body_metadata['size_ok']:
+                            continue
+                        if body_metadata['latlon_mask'] is None:
                             continue
                         if body_name not in bootstrap_cand_db:
                             cand_count = 0
@@ -1121,7 +1118,7 @@ if total_offset:
                     for filename in bootstrap_status_db[bootstrap_status][:arguments.top_bad]:
                         print '      %s' % (filename)
                 if arguments.create_filelists and len(bootstrap_status_db[bootstrap_status]) > 0:
-                    topfp = open(RESULTS_DIR+'/'+'bootstrap_'+body_name+
+                    topfp = open(RESULTS_DIR+'/'+'bootstrap_'+body_name+'_'+
                                  bootstrap_status.replace(' ','_'), 'w')
                     for filename in bootstrap_status_db[bootstrap_status][:arguments.top_bad]:
                         print >> topfp, filename

@@ -522,7 +522,6 @@ def bodies_create_model(obs, body_name, inventory,
 
     if bb_area >= bodies_config['min_latlon_mask_area']:
         # Compute the lat/lon mask for bootstrapping
-        
         latlon_mask = bodies_reproject(obs, body_name, 
             lat_resolution=bodies_config['mask_lat_resolution'], 
             lon_resolution=bodies_config['mask_lon_resolution'],
@@ -540,7 +539,9 @@ def bodies_create_model(obs, body_name, inventory,
         metadata['mask_lon_resolution'] = bodies_config['mask_lon_resolution']
         metadata['mask_latlon_type'] = bodies_config['mask_latlon_type']
         metadata['mask_lon_direction'] = bodies_config['mask_lon_direction']
-
+    else:
+        logger.info('Skipping bootstrap latlon mask due to small body size')
+        
     if mask_only:
         metadata['end_time'] = time.time()
         return None, metadata, None
