@@ -6,8 +6,7 @@
 ###############################################################################
 
 import Tkinter as tk
-import ImageTk
-from PIL import Image
+from PIL import Image, ImageTk
 import numpy as np
 import scipy.ndimage.interpolation as ndinterp
 
@@ -906,8 +905,8 @@ class ImageDisp(tk.Frame):
             greyscale_img = self.greyscale_list[i]
             num_pix = (greyscale_img.shape[0]*greyscale_img.shape[1]/
                        xzoom/yzoom)
-            if num_pix > 5760000:
-                return False
+#             if num_pix > 5760000:
+#                 return False
 
         if self.one_zoom:
             self.last_zoom = self.var_zoom.get()

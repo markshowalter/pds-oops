@@ -1054,7 +1054,8 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
         
         offset            The offset if found, otherwise None.
         good_stars        If the offset is found, the number of good stars.
-        corr              The correlation value for this offset.
+        corr_val          The correlation value for this offset.
+        corr_details      The correlation details (corr, u, v) for this offset.
         keep_searching    Even if an offset was found, we don't entirely
                           trust it, so add it to the list and keep searching.
         no_peaks          The correlation utterly failed and there are no
@@ -1111,10 +1112,12 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
     
     new_offset_list = []
     new_peak_list = []
+    new_corr_details_list = []
     for i in xrange(len(offset_list)):
         if offset_list[i][0] not in already_tried:
             new_offset_list.append(offset_list[i][0])
             new_peak_list.append(offset_list[i][1])
+            new_corr_details_list.append(offset_list[i][2])
             # Nobody else gets to try these before we do
             already_tried.append(offset_list[i][0])
         else:
@@ -1131,7 +1134,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
     if len(new_offset_list) == 0:
         # No peaks found at all - tell the top-level loop there's no point
         # in trying more
-        return None, None, None, False, True
+        return None, None, None, None, False, True
             
     for peak_num in xrange(len(new_offset_list)):
         #
@@ -1147,6 +1150,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
         #
         offset = new_offset_list[peak_num]
         peak = new_peak_list[peak_num]
+        corr_details = new_corr_details_list[peak_num]
 
         logger.debug('** LEVEL %d: Peak %d - Trial offset U,V %d,%d', 
                      debug_level, peak_num+1, offset[0], offset[1])
@@ -1205,13 +1209,13 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                             seen_bright_stars, bright_stars,
                             offset[0], offset[1])
                 # Return True so the top-level loop keeps searching
-                return offset, good_stars, peak, True, False
+                return offset, good_stars, peak, corr_details, True, False
             logger.info('***** Enough good stars (%s photometry) - '+
                         'final offset U,V %d,%d',
                         photometry_str,
                         offset[0], offset[1])
             # Return False so the top-level loop gives up
-            return offset, good_stars, peak, False, False
+            return offset, good_stars, peak, corr_details, False, False
 
         if not something_conflicted:
             # No point in trying again - we'd just have the same stars!
@@ -1249,7 +1253,7 @@ def _stars_find_offset(obs, filtered_data, star_list, min_stars,
                 
     logger.debug('Exhausted all peaks - No offset found')
 
-    return None, None, None, False, False
+    return None, None, None, None, False, False
 
 def _stars_refine_offset(obs, calib_data, star_list, offset,
                          stars_config):
@@ -1344,6 +1348,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         metadata           A dictionary containing information about the
                            offset result:
             'offset'            The (U,V) offset.
+            'corr_psf_details'  Correlation details.
             'confidence'        The confidence (0-1) in the result.
             'full_star_list'    The list of Stars in the FOV.
             'num_stars',        The number of Stars in the FOV.
@@ -1397,6 +1402,7 @@ def stars_find_offset(obs, ra_dec_predicted,
 
     metadata['offset'] = None
     metadata['confidence'] = 0.
+    metadata['corr_psf_details'] = None
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
     metadata['num_good_stars'] = 0
@@ -1409,7 +1415,8 @@ def stars_find_offset(obs, ra_dec_predicted,
         metadata['smear'] = smear_amt
         if smear_amt > stars_config['max_smear']:
             logger.debug(
-             'FAILED to find a valid offset - star smear is too great')
+             'FAILED to find a valid offset - star smear %.2f is too great',
+             smear_amt)
             return metadata
 
     if obs.calib_dn_ext_data is None:
@@ -1509,6 +1516,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         offset = None
         good_stars = 0
         confidence = 0.
+        corr_psf_details = None
     
         got_it = False
         
@@ -1560,7 +1568,7 @@ def stars_find_offset(obs, ra_dec_predicted,
                                          stars_config) 
         
                 # Save the offset and maybe continue iterating
-                (offset, good_stars, corr,
+                (offset, good_stars, corr_val, corr_details,
                  keep_searching, no_peaks) = ret
 
                 if no_peaks and search_multipler == 1.:
@@ -1574,9 +1582,10 @@ def stars_find_offset(obs, ra_dec_predicted,
                     continue
 
                 logger.debug('Found valid offset U,V %d,%d STARS %d CORR %f', 
-                             offset[0], offset[1], good_stars, corr)
+                             offset[0], offset[1], good_stars, corr_val)
                 saved_star_list = copy.deepcopy(star_list)
-                saved_offsets.append((offset, good_stars, corr, saved_star_list))
+                saved_offsets.append((offset, good_stars, corr_val, 
+                                      corr_details, saved_star_list))
                 if not keep_searching:
                     got_it = True
                     break
@@ -1631,6 +1640,7 @@ def stars_find_offset(obs, ra_dec_predicted,
             
     if len(saved_offsets) == 0:
         offset = None
+        corr_psf_details = None
         good_stars = 0
         logger.info('FAILED to find a valid offset')
         
@@ -1649,10 +1659,11 @@ def stars_find_offset(obs, ra_dec_predicted,
                                      1, [], 4, 
                                      perform_photometry, rings_can_conflict,
                                      radec_movement, stars_config) 
-            (offset, good_stars, corr,
+            (offset, good_stars, corr_val, corr_details,
              keep_searching, no_peaks) = ret
             if no_peaks:
                 offset = None
+                corr_psf_details = None
             
         if offset is None and perform_photometry and try_without_photometry:
             logger.info('Trying again with photometry disabled')
@@ -1661,10 +1672,11 @@ def stars_find_offset(obs, ra_dec_predicted,
                                      1, [], 4, 
                                      False, rings_can_conflict,
                                      radec_movement, stars_config) 
-            (offset, good_stars, corr,
+            (offset, good_stars, corr_val, corr_details,
              keep_searching, no_peaks) = ret
             if no_peaks:
                 offset = None
+                corr_psf_details = None
             used_photometry = False
 
         if (offset is None and stars_only and
@@ -1676,40 +1688,52 @@ def stars_find_offset(obs, ra_dec_predicted,
                                      1, [], 4, 
                                      False, rings_can_conflict,
                                      radec_movement, stars_config) 
-            (offset, good_stars, corr,
+            (offset, good_stars, corr_val, corr_details,
              keep_searching, no_peaks) = ret
             if no_peaks:
                 offset = None
+                corr_psf_details = None
             used_photometry = False
 
     else:
         best_offset = None
         best_star_list = None
         best_good_stars = -1
-        best_corr = -1
-        for offset, good_stars, corr, saved_star_list in saved_offsets:
+        best_corr_val = -1
+        best_corr_details = None
+        for (offset, good_stars, corr_val, corr_details, 
+             saved_star_list) in saved_offsets:
             if len(saved_offsets) > 1:
                 logger.info('Saved offset U,V %d,%d / Good stars %d / Corr %f',
-                            offset[0], offset[1], good_stars, corr)
+                            offset[0], offset[1], good_stars, corr_val)
             if (good_stars > best_good_stars or
                 (good_stars == best_good_stars and 
-                 corr > best_corr)):
+                 corr_val > best_corr_val)):
                 best_offset = offset
                 best_good_stars = good_stars
-                best_corr = corr
+                best_corr_val = corr_val
+                best_corr_details = corr_details
                 best_star_list = saved_star_list
         offset = best_offset
         good_stars = best_good_stars
-        corr = best_corr
+        corr_val = best_corr_val
+        corr_psf_details = best_corr_details
         star_list = saved_star_list
 
     if offset is not None:
         logger.info('Trial final offset U,V %d,%d / Good stars %d / Corr %f',
-                     offset[0], offset[1], good_stars, corr)
+                     offset[0], offset[1], good_stars, corr_val)
+
+        corr_psf_details = corr_analyze_peak(*corr_details)
+        if corr_psf_details is None:
+            logger.info('Correlation peak analysis failed')
+        else:
+            corr_log_sigma(logger, corr_psf_details)
 
         offset = _stars_refine_offset(obs, obs.data, star_list,
                                       offset, stars_config)
 
+    # Compute confidence
     if offset is None:
         confidence = 0.
     else:
@@ -1732,6 +1756,7 @@ def stars_find_offset(obs, ra_dec_predicted,
         confidence = np.clip(confidence, 0., 1.)
         
     metadata['offset'] = offset
+    metadata['corr_psf_details'] = corr_psf_details
     metadata['confidence'] = confidence         
     metadata['full_star_list'] = star_list
     metadata['num_stars'] = len(star_list)
@@ -1741,7 +1766,7 @@ def stars_find_offset(obs, ra_dec_predicted,
     if offset is not None:
         logger.info('Returning final offset U,V %.2f,%.2f / Good stars %d / '+
                     'Corr %f / Conf %f / Rings sub %s',
-                    offset[0], offset[1], good_stars, corr, confidence,
+                    offset[0], offset[1], good_stars, corr_val, confidence,
                     str(not rings_can_conflict))
 
 

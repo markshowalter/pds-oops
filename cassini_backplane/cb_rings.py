@@ -1235,7 +1235,8 @@ def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
     shade[shade > 1.] = 0.
     shade *= max
     
-    shade[radii.mask] = 0.
+    if radii.mask.shape != ():
+        shade[radii.mask] = 0.
     
     return shade
     

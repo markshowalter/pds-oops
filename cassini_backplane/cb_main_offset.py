@@ -58,7 +58,7 @@ if len(command_list) == 0:
             #>>> STARS <<<
             #=============
 
-#     command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega
+#     command_line_str = 'W1569203537_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega HAL
 #     command_line_str = 'N1470361604_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega CLR
 #     command_line_str = 'N1470361637_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega GRN
 #     command_line_str = 'N1470361670_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - Vega UV3
@@ -81,9 +81,9 @@ if len(command_list) == 0:
 #     command_line_str = 'N1569375917_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - TheTau IR1
 #     command_line_str = 'N1578052095_1 --force-offset --image-console-level debug --display-offset-results' # Single bright star - AlpSco CLR
 
-#     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
-#    command_line_str = 'N1751425716_1 --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else
-#     command_line_str = 'N1484580522_1 --force-offset --image-console-level debug --display-offset-results --stars-label-font courbd.ttf,30 --png-label-font courbd.ttf,30' # Star smear with Mimas
+    command_line_str = 'N1595336241_1 --overlay-show-star-streaks --force-offset --image-console-level debug --display-offset-results' # Star smear with edge of A ring
+#     command_line_str = 'N1751425716_1 --overlay-show-star-streaks --force-offset --image-console-level debug --display-offset-results' # Star smear with nothing else
+#    command_line_str = 'N1484580522_1 --overlay-show-star-streaks --force-offset --image-console-level debug --display-offset-results' # Star smear with Mimas
 
 #    command_line_str = 'N1656930617_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks through the D ring, photometry OK without ring subtraction 
 #    command_line_str = 'N1659250659_1 --force-offset --image-console-level debug --display-offset-results --overlay-show-star-streaks' # Long streaks, fails photometry 
@@ -102,18 +102,18 @@ if len(command_list) == 0:
 #     command_line_str = 'N1654250545_1 --force-offset --image-console-level debug --display-offset-results' # Rings closeup - A ring - no features
 #     command_line_str = 'N1477599121_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - curv 1.58
 #     command_line_str = 'N1588310978_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.10881 OK
-#     command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.03632 Minimally OK
+#     command_line_str = 'N1600327271_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.03632 Not OK
 #     command_line_str = 'N1608902918_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Colombo->Huygens closeup - Curv 0.07357 OK
 #     command_line_str = 'N1624548280_1 --force-offset --image-console-level debug --display-offset-results' # Colombo->Huygens closeup - Curv 0.09491 OK 
 #     command_line_str = 'W1532487683_1 --force-offset --image-console-level debug --display-offset-results' # Wide angle ring with full B ring gap - Curv 2.49766 OK for reduced features
 
 #     command_line_str = 'N1589083632_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.02914 Not OK
 #     command_line_str = 'N1591063671_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.01333 Very Not OK
-#     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.00770 Very Not OK
-#     command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur, low features, and stars - Curv 0.03719 Not really OK
+#     command_line_str = 'N1595336241_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - no curvature - Curv 0.00770 Very Not OK - stars win
+#     command_line_str = 'N1601009125_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur, low features, and stars - Curv 0.03719 Not OK
 #     command_line_str = 'N1625958009_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - blur and stars - Curv 0.06712 OK
 #     command_line_str = 'N1492060009_1 --no-allow-stars --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.82310 OK
-#     command_line_str = 'N1492072293_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.73527 OK
+#     command_line_str = 'N1492072293_1 --no-allow-stars --force-offset --image-console-level debug --display-offset-results' # A ring edge - matches with limited features, stars - Curv 1.73527 OK
 #     command_line_str = 'N1493613276_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - too low res, but enough other features - Curv 0.54919 OK
 #     command_line_str = 'N1543168726_1 --force-offset --image-console-level debug --display-offset-results' # A ring edge - star and model match - Curv 0.31104 OK
 #     command_line_str = 'N1601009320_1 --force-offset --image-console-level debug --display-offset-results' # High res A ring edge - only works with blurring - tests A ring special case for PNG - low confidence - Curv 0.03857 Not OK
@@ -127,7 +127,8 @@ if len(command_list) == 0:
 #     command_line_str = 'N1588249321_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res but other features OK
 #     command_line_str = 'N1627296827_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge too low res, other features out of frame
 #     command_line_str = 'N1627301821_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # B ring edge but nothing in frame
-    command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
+#     command_line_str = 'N1630088199_1 --force-offset --image-console-level debug --display-offset-results' # B ring edge, bad curvature, Saturn behind
+#     command_line_str = 'N1627296064_1 --force-offset --image-console-level debug --display-offset-results' # B ring outer edge bad navigation
 
 #     command_line_str = 'N1459733315_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Tethys and rings - curv 3.094
 #     command_line_str = 'N1454732332_1 --force-offset --image-console-level debug --no-allow-stars --display-offset-results' # Saturn and rings
@@ -140,9 +141,11 @@ if len(command_list) == 0:
             #>>> BODIES <<<
             #==============
             
-#    command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Rhea and Dione overlapping
-#    command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
+#     command_line_str = 'N1512448422_1 --force-offset --image-console-level debug --display-offset-results --no-allow-stars' # Rhea and Dione overlapping
+#     command_line_str = 'N1511716650_2 --force-offset --image-console-level debug --display-offset-results' # Rhea closeup but not whole image
 #    command_line_str = 'N1511728708_2 --force-offset --image-console-level debug --display-offset-results' # Rhea whole image
+#     command_line_str = 'N1501641912_1 --force-offset --image-console-level debug --display-offset-results' # Mimas blur 10
+#     command_line_str = 'N1644778141_1 --force-offset --image-console-level debug --display-offset-results' # Mimas blur 47
 
             #=============
             #>>> TITAN <<<

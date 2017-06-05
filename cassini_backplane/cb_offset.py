@@ -90,7 +90,7 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
                                    search_size_min, search_size_max,
                                    model_filter_func, 
                                    model_rings_radial_only,
-                                   masked_model, extend_fov, 
+                                   extend_fov, 
                                    offset_config, rings_config):
     logger = logging.getLogger(_LOGGING_NAME+'._iterate_secondary_correlation')
 
@@ -109,6 +109,7 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
     # failure.
     offset_x_list = []
     offset_y_list = []
+    offset_corr_list = []
     offset_x_list.append(model_offset[0])
     offset_y_list.append(model_offset[1])
     min_corr = 1e38
@@ -125,33 +126,32 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
                                obs.data,
                                offset_model, search_size_min=search_size_min,
                                search_size_max=search_size_max,
-                               filter=model_filter_func,
-                               masked=masked_model)
+                               filter=model_filter_func)
         sec_model_offset = None
         if len(model_offset_list):
-            (sec_model_offset, new_peak) = model_offset_list[0]
+            (sec_model_offset, new_peak, new_corr_details) = model_offset_list[0]
         if sec_model_offset is None:
             logger.info('Secondary model correlation FAILED - ending attempts')
             if attempt == 0:
-                return None, 0
+                return None, 0, None
             confidence_factor *= 0.25
             break
+        logger.info('Secondary model correlation dU,dV %d,%d '+
+                     'CORR %f', sec_model_offset[0], sec_model_offset[1], 
+                     new_peak)
         if model_rings_radial_only:
-            logger.info('Secondary raw correlation before ring '+
-                        'radial reprojection dU,dV %d,%d',
-                        sec_model_offset[0], sec_model_offset[1])
             (sec_model_offset, _) = rings_offset_radial_projection(
                                               obs, sec_model_offset,
                                               extend_fov=extend_fov,
                                               rings_config=rings_config)
-        logger.info('Secondary model correlation dU,dV %d,%d '+
-                     'CORR %f', sec_model_offset[0], sec_model_offset[1], 
-                     new_peak)
+            logger.info('Secondary model correlation after radial reprojection'+
+                        ' dU,dV %.2f,%.2f', 
+                        sec_model_offset[0], sec_model_offset[1]) 
         if new_peak < peak*sec_frac:
             logger.info('Secondary model correlation offset does '+
                         'not meet peak criteria - ending attempts')
             if attempt == 0:
-                return None, 0
+                return None, 0, None
             confidence_factor *= 0.25
             break
         model_offset = (model_offset[0]+sec_model_offset[0],
@@ -161,15 +161,21 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
             logger.info('Resulting offset is beyond maximum '+
                         'allowable offset - ending attempts')
             if attempt == 0:
-                return None, 0
+                return None, 0, None
             confidence_factor *= 0.25
             break
         if (abs(sec_model_offset[0]) < sec_threshold and
             abs(sec_model_offset[1]) < sec_threshold):
             logger.info('Secondary correlation succeeded')
-            return model_offset, confidence_factor
+            new_corr_psf_details = corr_analyze_peak(*new_corr_details)
+            if new_corr_psf_details is None:
+                logger.info('Correlation peak analysis failed')
+            else:
+                corr_log_sigma(logger, new_corr_psf_details)
+            return model_offset, confidence_factor, new_corr_psf_details
         offset_x_list.append(model_offset[0])
         offset_y_list.append(model_offset[1])
+        offset_corr_list.append(new_corr_details)
         min_corr = min(min_corr, new_peak)
         confidence_factor *= 0.9
         
@@ -179,7 +185,15 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
     offset_y_max = np.max(offset_y_list)
     
     if offset_x_min == offset_x_max and offset_y_min == offset_y_max:
-        return (offset_x_min, offset_y_min), confidence_factor
+        # They are all the same, so might as well arbitrarily choose the first
+        # one to analyze the PSF.
+        new_corr_psf_details = corr_analyze_peak(*off_corr_list[0])
+        if new_corr_psf_details is None:
+            logger.info('Correlation peak analysis failed')
+        else:
+            corr_log_sigma(logger, new_corr_psf_details)
+        return ((offset_x_min, offset_y_min), confidence_factor, 
+                new_corr_psf_details)
     
     logger.info('No convergence - trying exhaustive search U %d to %d, '+
                 'V %d to %d', offset_x_min, offset_x_max, offset_y_min,
@@ -193,7 +207,8 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
         return None, 0
     
     best_offset = None
-    best_corr = -1e38
+    best_corr = None
+    best_corr_val = -1e38
 
     image_filtered = model_filter_func(obs.data)
         
@@ -208,18 +223,24 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
                                          extend_fov[0]-offset_x+
                                            obs.data.shape[1]]
             model_filtered = model_filter_func(d_offset_model)
-            corr = correlate2d(image_filtered, model_filtered, normalize=True)[0,0]
-            if corr < 0 or corr < min_corr*tweak_frac:
+            corr = correlate2d(image_filtered, model_filtered, 
+                               normalize=True, retile=True)
+            corr_val = corr[corr.shape[0]//2, corr.shape[1]//2]
+            if corr_val < 0 or corr_val < min_corr*tweak_frac:
                 logger.debug('Tweaking offset U,V %d,%d CORR %.16f - Correlation too small',
-                             offset_x, offset_y, corr)
+                             offset_x, offset_y, corr_val)
                 continue
             logger.debug('Tweaking offset U,V %d,%d CORR %.16f - OK',
-                         offset_x, offset_y, corr)
-            if corr > best_corr:
+                         offset_x, offset_y, corr_val)
+            if corr_val > best_corr_val:
+                best_corr_val = corr_val
                 best_corr = corr
                 best_offset = (offset_x, offset_y)
+
+    details = corr_analyze_peak(best_corr, 
+                                best_corr.shape[0]//2, best_corr.shape[1]//2)
     
-    return best_offset, confidence_factor
+    return best_offset, confidence_factor, details
         
 def master_find_offset(obs, 
                    offset_config=None,
@@ -321,6 +342,8 @@ def master_find_offset(obs,
                                set by external drivers.
             'offset'           The final (U,V) offset. None if offset finding
                                failed.
+            'corr_psf_details' The details of the 2-D Gaussian fit to the 
+                               correlation peak for the final offset.
             'confidence'       The confidence 0-1 of the final offset.
             'model_confidence' The confidence 0-1 of the model offset.
             'model_blur_amount' The amount the model was blurred before 
@@ -342,6 +365,9 @@ def master_find_offset(obs,
                                matching failed.
             'model_offset'     The offset from model (rings and bodies) 
                                matching. None is model matching failed.
+            'model_corr_psf_details'
+                               The details of the 2-D Gaussian fit to the 
+                               correlation peak for the model offset.
             'titan_offset'     The offset from Titan photometric navigation.
                                None if navigation failed.
             'large_bodies'     A list of the large bodies present in the image
@@ -433,8 +459,6 @@ def master_find_offset(obs,
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
         
-    masked_model = False
-    
     extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
     search_size_max_u, search_size_max_v = extend_fov
     
@@ -667,6 +691,7 @@ def master_find_offset(obs,
 
     stars_offset = None
     stars_confidence = 0.
+    stars_corr_psf_details = None
     stars_metadata = None
     
     if (not entirely_body and
@@ -683,6 +708,7 @@ def master_find_offset(obs,
         metadata['stars_offset'] = stars_offset
         stars_confidence = stars_metadata['confidence']
         metadata['stars_confidence'] = stars_confidence
+        stars_corr_psf_details = stars_metadata['corr_psf_details']
         if stars_offset is None:
             logger.info('Final star offset N/A')
         else:
@@ -876,6 +902,7 @@ def master_find_offset(obs,
                 #####################################################
 
     model_offset = None
+    model_corr_psf_details = None
     model_confidence = 0.
     model_blur_amount = None
 
@@ -1291,11 +1318,9 @@ def master_find_offset(obs,
             assert use_rings_model
             final_model = _normalize(rings_model)
         else:
-            final_model = _combine_models(body_model_list, solid=True,
-                                          masked=masked_model)
+            final_model = _combine_models(body_model_list, solid=True)
             if use_rings_model:
-                final_model = _combine_models([final_model, rings_model],
-                                              masked=masked_model)
+                final_model = _combine_models([final_model, rings_model])
 
         gaussian_blur = offset_config['default_gaussian_blur']
         if model_blur_amount is not None:
@@ -1316,31 +1341,30 @@ def master_find_offset(obs,
                                    search_size_max=(search_size_max_u, 
                                                     search_size_max_v),
                                    extend_fov=extend_fov,
-                                   filter=model_filter_func,
-                                   masked=masked_model)
+                                   filter=model_filter_func)
         model_offset = None
+        model_corr_psf_details = None
         peak = None
         if len(model_offset_list) > 0:
-            (model_offset, peak) = model_offset_list[0]
+            (model_offset, peak, model_corr_psf_details) = model_offset_list[0]
         
-        if model_offset is not None and not masked_model:
+        if model_offset is not None:
+            logger.info('Primary correlation U,V %d,%d',
+                        model_offset[0], model_offset[1])
             if model_rings_radial_only:
-                logger.info('Primary raw correlation before ring '+
-                            'radial reprojection U,V %d,%d',
-                            model_offset[0], model_offset[1])
                 (model_offset, 
                  model_rings_radial_gradient) = rings_offset_radial_projection(
                                                   obs, model_offset,
                                                   extend_fov=extend_fov,
                                                   rings_config=rings_config)
+                logger.info('Correlation after ring '+
+                            'radial reprojection U,V %.2f,%.2f',
+                            model_offset[0], model_offset[1])
                 if (abs(model_offset[0]) >= extend_fov[0] or
                     abs(model_offset[1]) >= extend_fov[1]):
                     logger.info('Radially reprojected offset is larger than search limits')
                     model_offset = None
-            else:
-                logger.info('Primary correlation U,V %d,%d',
-                            model_offset[0], model_offset[1])
-        if model_offset is not None and not masked_model:
+        if model_offset is not None:
             model_offset_int = (int(np.round(model_offset[0])),
                                 int(np.round(model_offset[1])))
             # Run it again to make sure it works with a fully sliced
@@ -1351,11 +1375,12 @@ def master_find_offset(obs,
             if model_rings_radial_only:
                 sec_search_size = (search_size_max_u, 
                                    search_size_max_v)
-            model_offset, secc_conf_factor = _iterate_secondary_correlation(
+            (model_offset, secc_conf_factor, 
+             model_corr_psf_details) = _iterate_secondary_correlation(
                  obs, final_model, model_offset_int, peak,
                  0, sec_search_size,
                  model_filter_func, model_rings_radial_only,
-                 masked_model, extend_fov, offset_config, rings_config)
+                 extend_fov, offset_config, rings_config)
             if model_offset is None:
                 metadata['secondary_corr_ok'] = False
             else:
@@ -1370,7 +1395,9 @@ def master_find_offset(obs,
             logger.info('Resulting model offset N/A')
         else:
             logger.info('Resulting model offset U,V %.2f,%.2f', 
-                         model_offset[0], model_offset[1])
+                        model_offset[0], model_offset[1])
+            if model_corr_psf_details is not None:
+                corr_log_sigma(logger, model_corr_psf_details)
     
             shifted_model = shift_image(final_model, model_offset_int[0], 
                                         model_offset_int[1])
@@ -1390,6 +1417,7 @@ def master_find_offset(obs,
         if model_confidence < offset_config['lowest_confidence']:
             logger.info('Resulting confidence is absurdly low - aborting')
             model_offset = None
+            model_corr_psf_details = None
     
         if model_offset is not None:
             break
@@ -1427,12 +1455,15 @@ def master_find_offset(obs,
             model_confidence *= 0.25
 
     metadata['model_offset'] = model_offset
+    metadata['model_corr_psf_details'] = model_corr_psf_details
     
     if model_offset is None:
         logger.info('Final model offset N/A')
     else:   
-        logger.info('Final model offset U,V %.2f,%.2f (%.2f)',
+        logger.info('Final model offset U,V %.2f,%.2f (conf %.2f)',
                     model_offset[0], model_offset[1], model_confidence)
+        if model_corr_psf_details is not None:
+            corr_log_sigma(logger, model_corr_psf_details)
 
 
                 #####################################
@@ -1463,6 +1494,7 @@ def master_find_offset(obs,
                 ########################################
 
     offset = None
+    corr_psf_details = None
     # BOTSIM offset wins over everything
     if botsim_offset is not None:
         offset = botsim_offset
@@ -1479,10 +1511,12 @@ def master_find_offset(obs,
           (model_offset is None or stars_confidence > model_confidence) and
           (titan_offset is None or stars_confidence > titan_confidence)):
         offset = stars_offset
+        corr_psf_details = stars_corr_psf_details
         metadata['offset_winner'] = 'STARS'
         metadata['confidence'] = stars_confidence
     elif model_offset is not None:
         offset = model_offset
+        corr_psf_details = model_corr_psf_details
         metadata['offset_winner'] = 'MODEL'
         metadata['confidence'] = model_confidence
     else:
@@ -1509,32 +1543,34 @@ def master_find_offset(obs,
                               extend_fov=extend_fov,
                               stars_config=stars_config)
                     offset = model_offset
+                    corr_psf_details = model_corr_psf_details
 
     if (offset is not None and
         (abs(offset[0]) > extend_fov[0] or 
          abs(offset[1]) > extend_fov[1])):
         logger.info('Final offset is beyond maximum allowable offset!')
         offset = None
+        corr_psf_details = None
         metadata['offset_winner'] = None 
         
     logger.info('Summary:')
     if stars_offset is None:
         logger.info('  Final star offset     N/A')
     else:
-        logger.info('  Final star offset     U,V %.2f,%.2f (%.2f) good stars %d', 
+        logger.info('  Final star offset     U,V %.2f,%.2f (conf %.2f) good stars %d', 
                     stars_offset[0], stars_offset[1],
                     stars_confidence, stars_metadata['num_good_stars'])
 
     if model_offset is None:
         logger.info('  Final model offset    N/A')
     else:
-        logger.info('  Final model offset    U,V %.2f,%.2f (%.2f)', 
+        logger.info('  Final model offset    U,V %.2f,%.2f (conf %.2f)', 
                     model_offset[0], model_offset[1], model_confidence)
 
     if titan_offset is None:
         logger.info('  Final Titan offset    N/A')
     else:
-        logger.info('  Final Titan offset    U,V %d,%d (%.2f)', 
+        logger.info('  Final Titan offset    U,V %d,%d (conf %.2f)', 
                     titan_offset[0], titan_offset[1], titan_confidence)
 
     if botsim_offset is not None:
@@ -1543,10 +1579,13 @@ def master_find_offset(obs,
     if offset is None:
         logger.info('  Final combined offset FAILED')
     else:
-        logger.info('  Final combined offset U,V %.2f,%.2f (%.2f)', 
+        logger.info('  Final combined offset U,V %.2f,%.2f (conf %.2f)', 
                     offset[0], offset[1], metadata['confidence'])
+    if corr_psf_details is not None:
+        corr_log_sigma(logger, corr_psf_details)
 
     metadata['offset'] = offset
+    metadata['corr_psf_details'] = corr_psf_details
 
     if offset is not None:
         orig_fov = obs.fov
@@ -1572,8 +1611,7 @@ def master_find_offset(obs,
         label_avoid_mask = np.zeros(obs.data.shape, dtype=np.bool)
         if len(o_bodies_model_list) > 0:
             o_bodies_model_list.reverse()
-            bodies_combined = _combine_models(o_bodies_model_list, solid=True,
-                                              masked=masked_model)
+            bodies_combined = _combine_models(o_bodies_model_list, solid=True)
             bodies_overlay = _normalize(bodies_combined) * 255
             bodies_overlay_text = _combine_text(o_bodies_text_list)
             if offset is not None:
