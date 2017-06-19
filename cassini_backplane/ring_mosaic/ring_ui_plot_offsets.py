@@ -1,23 +1,17 @@
-'''
-Created on Sep 19, 2011
-
-@author: rfrench
-'''
-
-from optparse import OptionParser
-import fring_util
+import argparse
 import os
 import os.path
 import sys
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+
+import ring_util
+
 from cb_util_file import *
 from cb_config import *
 
-POSTER = False
-
-DIR_ROOT = os.path.join(RESULTS_ROOT, 'f-ring', 'offset-plots')
+POSTER = True
 
 color_background = (1,1,1)
 color_foreground = (0,0,0)
@@ -39,38 +33,32 @@ if POSTER:
 cmd_line = sys.argv[1:]
 
 if len(cmd_line) == 0:
-    cmd_line = ['--verbose',
+    cmd_line = ['--ring-type', 'BRING_MOUNTAINS', '--all-obsid']
 #                 '-a',
 #'ISS_115RF_FMOVIEEQX001_PRIME',
-                'ISS_029RF_FMOVIE001_VIMS',
+#                 'ISS_029RF_FMOVIE001_VIMS',
 #                 'ISS_044RF_FMOVIE001_VIMS',
 #                'ISS_106RF_FMOVIE002_PRIME',
 #                'ISS_132RI_FMOVIE001_VIMS',
 #                'ISS_029RF_FMOVIE002_VIMS',
-                ]
 
-parser = OptionParser()
+parser = argparse.ArgumentParser()
 
-#
-# The default behavior is to check the timestamps
-# on the input file and the output file and recompute if the output file is out of date.
-# Several options change this behavior:
-#   --no-xxx: Don't recompute no matter what; this may leave you without an output file at all
-#   --no-update: Don't recompute if the output file exists, but do compute if the output file doesn't exist at all
-#   --recompute-xxx: Force recompute even if the output file exists and is current
-#
+ring_util.ring_add_parser_options(parser)
 
+parser.add_argument('--include-stars', action='store_true', default=False,
+                  help='Include # of stars subplot')
 
-##
-## General options
-##
-parser.add_option('--allow-exception', dest='allow_exception',
-                  action='store_true', default=False,
-                  help="Allow exceptions to be thrown")
+arguments = parser.parse_args(cmd_line)
 
-fring_util.add_parser_options(parser)
+ring_util.ring_init(arguments)
 
-options, args = parser.parse_args(cmd_line)
+DIR_ROOT = os.path.join(CB_RESULTS_ROOT, 'ring_mosaic', 'offset_plots_'+arguments.ring_type)
+
+try:
+    os.mkdir(DIR_ROOT)
+except:
+    pass
 
 #####################################################################################
 #
@@ -92,7 +80,7 @@ def plot_obsid(obsid, image_path_list):
     offset_v_list = []
     num_stars_list = []
     num_good_stars_list = []
-    used_objects_type_list = []
+    offset_winner_list = []
 
     global g_num_images
     global g_num_no_attempt
@@ -111,30 +99,31 @@ def plot_obsid(obsid, image_path_list):
     for image_path in image_path_list:
         metadata = file_read_offset_metadata(image_path)
         num_images += 1
-        if metadata is None or 'error' in metadata:
+        status = metadata['status']
+        if status != 'ok':
             num_no_attempt += 1
             continue
-        auto_offset = metadata['offset']
+        offset = metadata['offset']
         object_type = None
         stars_metadata = metadata['stars_metadata']
-        if auto_offset is None:
+        if offset is None:
             num_no_offset += 1
             offset_u_list.append(None)
             offset_v_list.append(None)
             num_stars_list.append(-1)
             num_good_stars_list.append(-1)
-            used_objects_type_list.append('stars')
+            offset_winner_list.append('STARS')
         else:
-            offset_u_list.append(auto_offset[0])
-            offset_v_list.append(auto_offset[1])
-            print image_path, stars_metadata.keys()
-            num_stars_list.append(stars_metadata['num_stars'])
-            num_good_stars_list.append(stars_metadata['num_good_stars'])
-            object_type = metadata['used_objects_type']
-            if metadata['model_overrides_stars']:
-                object_type = 'override'
-                num_model_overrides += 1
-            used_objects_type_list.append(object_type)
+            offset_u_list.append(offset[0])
+            offset_v_list.append(offset[1])
+            if stars_metadata is not None:
+                num_stars_list.append(stars_metadata['num_stars'])
+                num_good_stars_list.append(stars_metadata['num_good_stars'])
+            else:
+                num_stars_list.append(-1)
+                num_good_stars_list.append(-1)
+            winner = metadata['offset_winner']
+            offset_winner_list.append(winner)
     
     if len(offset_u_list) == 0:
         return
@@ -143,68 +132,74 @@ def plot_obsid(obsid, image_path_list):
     x_max = len(offset_u_list)-0.5
     
     if POSTER:
-        fig = plt.figure(figsize=(11.55,5))
+        fig = plt.figure(figsize=(9,5))
     else:
         fig = plt.figure(figsize=(17,11))
     
     u_color = '#3399ff'
     v_color = '#0000cc'
+
+    if arguments.include_stars:        
+        ax = fig.add_subplot(211)
+    else:
+        ax = fig.add_subplot(111)
     
-    ax = fig.add_subplot(211)
     plt.plot(offset_u_list, '-', color=u_color, ms=5)
     plt.plot(offset_v_list, '-', color=v_color, ms=5)
     for i in xrange(len(offset_u_list)):
         if offset_u_list[i] is not None and offset_v_list[i] is not None:
-            if used_objects_type_list[i] == 'stars':
+            if offset_winner_list[i] == 'STARS':
                 num_used_stars += 1
                 plt.plot(i, offset_u_list[i], '*', mec=u_color, mfc=u_color, ms=markersize*1.25)
                 plt.plot(i, offset_v_list[i], '*', mec=v_color, mfc=v_color, ms=markersize*1.25)
-            elif used_objects_type_list[i] == 'model':
+            elif offset_winner_list[i] == 'MODEL':
                 num_used_model += 1
                 plt.plot(i, offset_u_list[i], 'o', mec=u_color, mfc='none', ms=markersize, mew=1)
                 plt.plot(i, offset_v_list[i], 'o', mec=v_color, mfc='none', ms=markersize, mew=1)
-            elif used_objects_type_list[i] == 'override':
-                num_used_model += 1
-                plt.plot(i, offset_u_list[i], 'o', mec=u_color, mfc=u_color, ms=markersize, mew=1)
-                plt.plot(i, offset_v_list[i], 'o', mec=v_color, mfc=v_color, ms=markersize, mew=1)
             else:
                 plt.plot(i, offset_u_list[i], '^', mec=u_color, mfc='none', ms=markersize*1.5, mew=2)
                 plt.plot(i, offset_v_list[i], '^', mec=v_color, mfc='none', ms=markersize*1.5, mew=2)
     plt.xlim(x_min, x_max)
     ax.set_xticklabels('')
-    if POSTER:
-        ax.get_yaxis().set_ticks([-30,-20,-10,0,10])
+#     if POSTER:
+#         ax.get_yaxis().set_ticks([-30,-20,-10,0,10])
     plt.ylabel('Pixel Offset')
+    if not arguments.include_stars:
+        plt.xlabel('Image Number')
 
     if not POSTER:
         plt.title('X/Y Offset')
     
+#     if not arguments.include_stars:
+#         plt.title(obsid)
+        
     ax.yaxis.set_label_coords(-0.055, 0.5)
     
     stars_color = '#ff8000'
     good_color = '#336600'
     
-    ax = fig.add_subplot(212)
-    plt.plot(num_stars_list, '-o', color=stars_color, mec=stars_color, mfc=stars_color, ms=markersize*.5)
-    plt.plot(num_good_stars_list, '-o', color=good_color, mec=good_color, mfc=good_color, ms=markersize*.55)
-    plt.xlim(x_min, x_max)
-    plt.ylim(-0.5, max(np.max(num_good_stars_list),
-                       np.max(num_stars_list))+0.5)
-    plt.ylabel('# of Good Stars')
-    plt.xlabel('Image Number')
-    if POSTER:
-        ax.get_xaxis().set_ticks([0,174])
-        ax.get_yaxis().set_ticks([0,10,20,30])
-        plt.xticks([0,174],['1','175'])
-    if not POSTER:
-        plt.title('Total Stars vs. Good Stars')
-
-    ax.yaxis.set_label_coords(-0.055, 0.5)
+    if arguments.include_stars:
+        ax = fig.add_subplot(212)
+        plt.plot(num_stars_list, '-o', color=stars_color, mec=stars_color, mfc=stars_color, ms=markersize*.5)
+        plt.plot(num_good_stars_list, '-o', color=good_color, mec=good_color, mfc=good_color, ms=markersize*.55)
+        plt.xlim(x_min, x_max)
+        plt.ylim(-0.5, max(np.max(num_good_stars_list),
+                           np.max(num_stars_list))+0.5)
+        plt.ylabel('# of Good Stars')
+        plt.xlabel('Image Number')
+        if POSTER:
+            ax.get_xaxis().set_ticks([0,174])
+            ax.get_yaxis().set_ticks([0,10,20,30])
+            plt.xticks([0,174],['1','175'])
+        if not POSTER:
+            plt.title('Total Stars vs. Good Stars')
     
+        ax.yaxis.set_label_coords(-0.055, 0.5)
+        
     if not POSTER:
         plt.suptitle(obsid)
     
-    plt.subplots_adjust(left=0.025, right=0.975, top=1, bottom=0.0, hspace=0.18)
+    plt.subplots_adjust(left=0.025, right=0.975, top=1., bottom=0.0, hspace=0.18)
     filename = os.path.join(DIR_ROOT, obsid+'.png')
     if POSTER:
         plt.savefig(filename, bbox_inches='tight', dpi=300)
@@ -234,7 +229,7 @@ print '%-40s #IMG  ERR NOFF STAR MODL OVER' % ('OBSID')
 
 cur_obsid = None
 image_path_list = []
-for obsid, image_name, image_path in fring_util.enumerate_files(options, args):
+for obsid, image_name, image_path in ring_util.ring_enumerate_files(arguments):
 #    print obsid, image_name
     if cur_obsid is None:
         cur_obsid = obsid

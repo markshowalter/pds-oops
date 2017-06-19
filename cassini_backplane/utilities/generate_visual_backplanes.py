@@ -53,6 +53,7 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
     filename = file_clean_name(image_path)
     print filename
     obs = file_read_iss_file(image_path)
+    obs.data[obs.data < 0] = 0
     save_image(obs.data, filename)
     offset_metadata = file_read_offset_metadata(image_path, overlay=False)
     offset = offset_metadata['offset']
@@ -65,7 +66,10 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
     large_bodies_by_range.sort(key=lambda x: -x[1]['range'])
     for body_bp_name, body_bp_func in [
         ('longitude', bp.longitude),
-        ('latitude', bp.latitude)]:
+        ('latitude', bp.latitude),
+        ('phase_angle', bp.phase_angle),
+        ('emission_angle', bp.emission_angle),
+        ('incidence_angle', bp.incidence_angle)]:
         total_data = None
         for range, inv in large_bodies_by_range:
             body_name = inv['name']
