@@ -30,7 +30,7 @@ from cb_util_image import *
 command_list = sys.argv[1:]
 
 if len(command_list) == 0:
-    command_line_str = '--body-name ENCELADUS N1637472791_1 --display-reprojection --image-logfile-level debug'
+    command_line_str = '--body-name ENCELADUS N1637472791_1 --image-logfile-level debug'
 
     command_list = command_line_str.split()
 
@@ -110,7 +110,7 @@ def reproject_image(image_path, body_name, bootstrap_pref):
                                               arguments.latlon_type,
                                               arguments.lon_direction)
     if not arguments.force_reproject and os.path.exists(repro_path):
-        main_logger.info('Reproject already exists %s', image_path)
+        main_logger.info('Reproject file already exists %s', image_path)
         return
     
     main_logger.info('Reprojecting %s', image_path)
@@ -121,7 +121,8 @@ def reproject_image(image_path, body_name, bootstrap_pref):
                                          overlay=False)
 
     if metadata is None:
-        main_logger.error('No offset file found')
+        main_logger.error('%s - No offset file found',
+                          file_clean_name(image_path))
         return
     
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
@@ -139,7 +140,7 @@ def reproject_image(image_path, body_name, bootstrap_pref):
     else:
         image_log_filehandler = None
 
-    image_logger.info('Reprojecting %s', image_path)
+    image_logger.info('Reprojecting %s body %s', image_path, body_name)
 
     image_logger.info('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
                       'SAMPLING %s / GAIN %d',
@@ -149,16 +150,37 @@ def reproject_image(image_path, body_name, bootstrap_pref):
                       obs.gain_mode)
 
     image_logger.info('Offset file %s', metadata['offset_path'])
-    
+
+    status = metadata['status']
+    if status != 'ok':
+        image_logger.info('%s - Skipping due to offset file error') 
+        main_logger.info('%s - Skipping due to offset file error', 
+                          file_clean_name(image_path))
+        repro_metadata = {'status': 'offset file error',
+                          'body_name': body_name,
+                          'lat_resolution': arguments.lat_resolution*oops.RPD,
+                          'lon_resolution': arguments.lat_resolution*oops.RPD,
+                          'latlon_type': arguments.latlon_type,
+                          'lon_direction': arguments.lon_direction}
+        file_write_reproj_body(image_path, repro_metadata)
+        return
+
     data = image_interpolate_missing_stripes(obs.data)
     offset = metadata['offset']
     
-    navigation_uncertainty = metadata['model_blur_amount']
+    navigation_uncertainty = metadata['model_blur_amount'] # XXX Change to Sigma
     if navigation_uncertainty is None or navigation_uncertainty < 1.:
         navigation_uncertainty = 1.
     image_logger.info('Navigation uncertainty %.2f', navigation_uncertainty)
     if offset is None:
         image_logger.error('No valid offset in offset file')
+        repro_metadata = {'status': 'no offset',
+                          'body_name': body_name,
+                          'lat_resolution': arguments.lat_resolution*oops.RPD,
+                          'lon_resolution': arguments.lat_resolution*oops.RPD,
+                          'latlon_type': arguments.latlon_type,
+                          'lon_direction': arguments.lon_direction}
+        file_write_reproj_body(image_path, repro_metadata)
     else:
         repro_metadata = bodies_reproject(
               obs, body_name, data=data, offset=offset,
@@ -170,6 +192,8 @@ def reproject_image(image_path, body_name, bootstrap_pref):
               lon_direction=arguments.lon_direction,
               mask_bad_areas=True)
     
+        repro_metadata['status'] = 'ok'
+        
         file_write_reproj_body(image_path, repro_metadata)
 
         if arguments.display_reprojection:
@@ -180,7 +204,7 @@ def reproject_image(image_path, body_name, bootstrap_pref):
                   lon_direction=arguments.lon_direction)
             bodies_mosaic_add(mosaic_metadata, repro_metadata) 
             display_body_mosaic(mosaic_metadata, title=file_clean_name(image_path))
-        
+
     cb_logging.log_remove_file_handler(image_log_filehandler)
 
     

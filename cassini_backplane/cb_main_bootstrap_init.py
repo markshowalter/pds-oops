@@ -60,34 +60,7 @@ parser.add_argument(
     '--no-write', action='store_true',
     help="Don't write the output file")
 
-# Arguments about the bootstrap process
-# parser.add_argument(
-#     '--bootstrap', dest='bootstrap', action='store_true', default=True,
-#     help='Perform a bootstrap pass (default)')
-
-
 arguments = parser.parse_args(command_list)
-
-
-#===============================================================================
-# 
-#===============================================================================
-
-if arguments.profile:
-    # Only do image offset profiling if we're going to do the actual work in 
-    # this process
-    pr = cProfile.Profile()
-    pr.enable()
-
-main_logger, image_logger = log_setup_main_logging(
-               'cb_main_bootstrap_init', arguments.main_logfile_level, 
-               arguments.main_console_level, arguments.main_logfile,
-               None, None)
-
-# if bootstrap_config is None:
-bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
-        
-
 
 
 ###############################################################################
@@ -96,26 +69,18 @@ bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
 #
 ###############################################################################
 
-def check_add_one_image(image_path, last_image_path):
+def check_add_one_image(image_path, bootstrap_config):
     image_filename = file_clean_name(image_path)
 
-    metadata = file_read_offset_metadata(image_path, overlay=False,
-                                         bootstrap_pref='no')
+    offset_metadata = file_read_offset_metadata(image_path, overlay=False,
+                                                bootstrap_pref='no')
 
-    if metadata is None:
+    if offset_metadata is None:
         main_logger.debug('%s - No offset file', image_filename)
         return
 
-    botsim_available = False
-    last_image_filename = file_clean_name(last_image_path)
-    if (last_image_filename is not None and
-        last_image_filename[0] == 'N' and
-        image_filename[0] == 'W' and
-        image_filename[1:] == last_image_filename[1:]):
-        botsim_available = True
-
-    status = metadata['status']
-    if status == 'error' or status == 'skipped':
+    status = offset_metadata['status']
+    if status != 'ok':
         main_logger.debug('%s - Skipping due to offset file error', 
                           image_filename)
         return
@@ -123,8 +88,8 @@ def check_add_one_image(image_path, last_image_path):
     # For right now, we're just going to do the simple thing and handle
     # the front-most body. There might be obscure cases where this doesn't
     # work.    
-    bodies_metadata = metadata['bodies_metadata']
-    large_body_list = metadata['large_bodies']
+    bodies_metadata = offset_metadata['bodies_metadata']
+    large_body_list = offset_metadata['large_bodies']
     if len(large_body_list) == 0:
         main_logger.debug('%s - Skipping due to no large bodies',
                           image_filename)
@@ -132,38 +97,46 @@ def check_add_one_image(image_path, last_image_path):
     
     body_name = large_body_list[0]     
     if (body_name not in bootstrap_config['body_list'] or
-        body_name in FUZZY_BODY_LIST or
-        body_name == 'TITAN' or
         body_name not in bodies_metadata):
         main_logger.debug('%s - Skipping due to bad body %s',
                           image_filename, body_name)
         return
+
     body_metadata = bodies_metadata[body_name]
+    
     if not body_metadata['size_ok']:
         main_logger.debug('%s - Skipping due to bad body size %s',
                           image_filename, body_name)
         return
-    if body_metadata['latlon_mask'] is None:
-        main_logger.debug('%s - Skipping due to bad body latlon mask %s',
+    
+    if body_metadata['reproj'] is None:
+        main_logger.debug('%s - Skipping due to bad body trial reprojection %s',
                           image_filename, body_name)
         return
-    
-    if metadata['offset'] is None or metadata['offset_winner'] == 'BOTSIM':
+
+    body_metadata['image_path'] = image_path
+    body_metadata['image_filename'] = image_filename
+    body_metadata['midtime'] = offset_metadata['midtime']
+    body_metadata['filter1'] = offset_metadata['filter1']
+    body_metadata['filter2'] = offset_metadata['filter2']
+    body_metadata['offset'] = offset_metadata['offset']
+    body_metadata['model_corr_psf_details'] = offset_metadata[
+                                                  'model_corr_psf_details']
+    body_metadata['confidence'] = offset_metadata['confidence']
+    body_metadata['offset_winner'] = offset_metadata['offset_winner']
+
+    if offset_metadata['offset'] is None:
         check_add_one_image_candidate(image_path, image_filename, 
-                                      metadata, body_metadata, 
-                                      botsim_available)
+                                      offset_metadata, body_metadata,
+                                      bootstrap_config) 
     else:
-        if ('description' in metadata and
-            metadata['description'] != 'N/A'):
-            main_logger.debug('%s - Skipping good image due to image description',
-                              image_filename)
-            return
         check_add_one_image_good(image_path, image_filename, 
-                                 metadata, body_metadata)
+                                 offset_metadata, body_metadata,
+                                 bootstrap_config)
     
 def check_add_one_image_candidate(image_path, image_filename, 
                                   offset_metadata, body_metadata,
-                                  botsim_available): 
+                                  bootstrap_config):
     if not offset_metadata['bootstrap_candidate']:
         main_logger.debug('%s - No offset and not bootstrap candidate',
                           file_clean_name(image_path))
@@ -171,39 +144,36 @@ def check_add_one_image_candidate(image_path, image_filename,
 
     body_name = body_metadata['body_name']
     filter = simple_filter_name_metadata(offset_metadata,
-                                         consolidate_pol=True)
+                                         consolidate_pol=False)
 
     inventory = body_metadata['inventory']
+    resolution_uv = inventory['resolution']
+    resolution = (resolution_uv[0]+resolution_uv[1])/2
     sub_solar_lon = body_metadata['sub_solar_lon']
     sub_solar_lat = body_metadata['sub_solar_lat']
     sub_obs_lon = body_metadata['sub_observer_lon']
     sub_obs_lat = body_metadata['sub_observer_lat']
     phase_angle = body_metadata['phase_angle']
-    resolution_uv = inventory['resolution']
-    resolution = (resolution_uv[0]+resolution_uv[1])/2
 
     main_logger.info('%s - %s - %s - CAND Subsolar %6.2f %6.2f / '+
-                     'Subobs %6.2f %6.2f / Res %7.2f / %s / BOTSIM AVAIL %s',
+                     'Subobs %6.2f %6.2f / Res %7.2f / %s',
                      image_filename, 
                      cspice.et2utc(offset_metadata['midtime'], 'C', 0),
                      body_name,
                      sub_solar_lon*oops.DPR, sub_solar_lat*oops.DPR,
                      sub_obs_lon*oops.DPR, sub_obs_lat*oops.DPR,
-                     resolution, filter,
-                     str(botsim_available))
+                     resolution, filter)
     
     if body_name not in CAND_IMAGE_BY_BODY_DB:
         GOOD_IMAGE_BY_BODY_DB[body_name] = []
         CAND_IMAGE_BY_BODY_DB[body_name] = []
-        
-    entry = (image_path, sub_solar_lat, sub_solar_lon, sub_obs_lat, sub_obs_lon, 
-             phase_angle, resolution, filter, botsim_available)
-
-    CAND_IMAGE_BY_BODY_DB[body_name].append(entry)
+    
+    CAND_IMAGE_BY_BODY_DB[body_name].append(body_metadata)
 
         
 def check_add_one_image_good(image_path, image_filename, 
-                             offset_metadata, body_metadata):
+                             offset_metadata, body_metadata,
+                             bootstrap_config):
     body_name = body_metadata['body_name']
     
     offset_winner = offset_metadata['offset_winner']
@@ -213,10 +183,11 @@ def check_add_one_image_good(image_path, image_filename,
         return
     
     offset_confidence = offset_metadata['confidence']
-    if offset_confidence < 0.1:
+    if offset_confidence < bootstrap_config['min_confidence']:
         main_logger.debug('%s - Skipping due to low confidence %.2f', 
                           image_filename, offset_confidence)
         return
+    
     already_bootstrapped = ('bootstrapped' in offset_metadata and 
                             offset_metadata['bootstrapped'])
     if already_bootstrapped:
@@ -227,29 +198,17 @@ def check_add_one_image_good(image_path, image_filename,
         main_logger.error('%s - Has offset and also bootstrap candidate - '+
                           'something is very wrong!')
         return
-    
-    filter = simple_filter_name_metadata(offset_metadata, consolidate_pol=True)
+
+    if ('description' in offset_metadata and
+        offset_metadata['description'] != 'N/A'):
+        main_logger.debug('%s - Skipping good image due to non-null '+
+                          'image description', image_filename)
+        return
     
     if body_metadata['in_saturn_shadow']:
         main_logger.debug('%s - %s - In Saturn\'s shadow',
                           image_filename, body_name)
         return
-        
-    inventory = body_metadata['inventory']
-    
-    sub_solar_lon = body_metadata['sub_solar_lon']
-    sub_solar_lat = body_metadata['sub_solar_lat']
-    sub_obs_lon = body_metadata['sub_observer_lon']
-    sub_obs_lat = body_metadata['sub_observer_lat']
-    phase_angle = body_metadata['phase_angle']
-    resolution_uv = inventory['resolution']
-    resolution = (resolution_uv[0]+resolution_uv[1])/2
-
-    bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
-    if bb_area < bootstrap_config['min_area']:
-        main_logger.debug('%s - %s - Too small', 
-                          image_filename, body_name)
-        return            
 
     if (body_metadata['occulted_by'] is not None and
         len(body_metadata['occulted_by']) > 0):
@@ -258,6 +217,22 @@ def check_add_one_image_good(image_path, image_filename,
                           str(body_metadata['occulted_by']))
         return
         
+    filter = simple_filter_name_metadata(offset_metadata, consolidate_pol=False)    
+    inventory = body_metadata['inventory']
+    resolution_uv = inventory['resolution']
+    resolution = (resolution_uv[0]+resolution_uv[1])/2
+    sub_solar_lon = body_metadata['sub_solar_lon']
+    sub_solar_lat = body_metadata['sub_solar_lat']
+    sub_obs_lon = body_metadata['sub_observer_lon']
+    sub_obs_lat = body_metadata['sub_observer_lat']
+    phase_angle = body_metadata['phase_angle']
+
+    bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
+    if bb_area < bootstrap_config['min_area']:
+        main_logger.debug('%s - %s - Too small', 
+                          image_filename, body_name)
+        return            
+
     if phase_angle > bootstrap_config['max_phase_angle']:
         main_logger.debug('%s - %s - Phase angle %.2f too large', 
                           image_filename, body_name, phase_angle*oops.DPR)
@@ -276,17 +251,24 @@ def check_add_one_image_good(image_path, image_filename,
         GOOD_IMAGE_BY_BODY_DB[body_name] = []
         CAND_IMAGE_BY_BODY_DB[body_name] = []
         
-    entry = (image_path, sub_solar_lat, sub_solar_lon, sub_obs_lat, sub_obs_lon, 
-             phase_angle, resolution, filter)
-    
-    GOOD_IMAGE_BY_BODY_DB[body_name].append(entry)
+    GOOD_IMAGE_BY_BODY_DB[body_name].append(body_metadata)
 
-
-start_time = time.time()
+#===============================================================================
+# 
+#===============================================================================
 
 if arguments.profile:
     pr = cProfile.Profile()
     pr.enable()
+
+main_logger, image_logger = log_setup_main_logging(
+               'cb_main_bootstrap_init', arguments.main_logfile_level, 
+               arguments.main_console_level, arguments.main_logfile,
+               None, None)
+
+bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
+
+start_time = time.time()
 
 GOOD_IMAGE_BY_BODY_DB = {}
 CAND_IMAGE_BY_BODY_DB = {}
@@ -298,18 +280,8 @@ main_logger.info('')
 main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
 
-last_image_path = None
-image_path_done = False
-
 for image_path in file_yield_image_filenames_from_arguments(arguments):
-    image_path_done = False
-    if last_image_path is not None:
-        check_add_one_image(image_path, last_image_path)
-        image_path_done = True
-    last_image_path = image_path
-
-if image_path is not None and not image_path_done:
-    check_add_one_image(image_path, last_image_path)
+    check_add_one_image(image_path)
 
 if not arguments.no_write:
     for body_name in GOOD_IMAGE_BY_BODY_DB:

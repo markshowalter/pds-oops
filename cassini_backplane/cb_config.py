@@ -221,10 +221,6 @@ BODIES_DEFAULT_CONFIG = {
     # size. This allows nice anti-aliasing of edges.
     'oversample_edge_limit': 128,
     
-    # The minimum number of pixels in the bounding box surrounding the body
-    # in order to compute the latlon mask for bootstrapping.
-    'min_latlon_mask_area': 10*10,
-    
     # The fraction of the width/height of a body that must be visible on either
     # side of the center in order for the curvature to be sufficient for 
     # correlation.
@@ -281,15 +277,26 @@ BODIES_DEFAULT_CONFIG = {
     # available.
     'use_lambert': True,
     
-    # The resolution in longitude and latitude (radians) for the metadata
-    # latlon mask.
-    'mask_lon_resolution': 1. * oops.RPD,
-    'mask_lat_resolution': 1. * oops.RPD,
+    # The minimum number of pixels in the bounding box surrounding the body
+    # in order to compute the reprojection for bootstrapping if this is going
+    # to be a seed image (and thus we need pretty good resolution in the data).
+    'min_reproj_seed_area': 200*200,
+    
+    # The minimum number of pixels in the bounding box surrounding the body
+    # in order to compute the reprojection for bootstrapping if this is going
+    # to be a candidate image (and thus we don't need very good resolution
+    # but it has to be big enough to be worth the effort).
+    'min_reproj_candidate_area': 50*50,
+    
+    # The resolution in longitude and latitude (radians) for the bootstrap
+    # reprojection.
+    'reproj_lon_resolution': 1. * oops.RPD,
+    'reproj_lat_resolution': 1. * oops.RPD,
 
-    # The latlon coordinate type and direction for the metadata latlon mask
+    # The latlon coordinate type and direction for the metadata reprojection
     # and sub-solar and sub-observer longitudes.
-    'mask_latlon_type': 'centric',
-    'mask_lon_direction': 'east',
+    'reproj_latlon_type': 'centric',
+    'reproj_lon_direction': 'east',
     
     # A body has to take up at least this many pixels in order to be labeled.
     'min_text_area': 0.5,
@@ -459,30 +466,29 @@ BOOTSTRAP_DEFAULT_CONFIG = {
     # These bodies can be used for bootstrapping.
     'body_list': ['DIONE', 'ENCELADUS', 'IAPETUS', 'MIMAS', 'RHEA', 'TETHYS'],
 
-    # The maximum phase angle that can be used to create part of a mosaic.
-    'max_phase_angle': 135. * oops.RPD,
+    # The minimum offset confidence for an image to be considered good.
+    'min_confidence': 0.1,
     
-    # The minimum square size of a moon to be used to create part of a mosaic.
+    # The minimum square size of a moon to be used to be considered good.
     'min_area': 128*128,
 
-    # The size of the longitude and latitude bins used to create multiple
+    # The maximum phase angle that can be used to be considered good.
+    'max_phase_angle': 135. * oops.RPD,
+    
+    # The resolution in longitude and latitude (radians) for reprojections and
     # mosaics.
-    'mosaic_lon_bin_size': 30. * oops.RPD,
-    'mosaic_lat_bin_size': 30. * oops.RPD,
-        
-    # The resolution in longitude and latitude (radians) for the mosaic.
     'lon_resolution': 0.5 * oops.RPD,
     'lat_resolution': 0.5 * oops.RPD,
 
-    # The latlon coordinate type and direction for the mosaic.
+    # The latlon coordinate type and direction for reprojections and mosaics.
     'latlon_type': 'centric',
     'lon_direction': 'east',
     
-    # The minimum fraction of of moon that is available from cartographic
-    # data in order for a bootstrapped offset to be attempted.
-    'min_coverage_frac': 0.25,
+    # The minimum fraction of a moon's pixels in an image that are available
+    # from cartographic data in order for a bootstrapped offset to be attempted.
+    'min_coverage_frac': 0.1,
     
     # The maximum difference in resolution allowable between the mosaic
     # and the image to be bootstrapped.
-    'max_res_factor': 10000, # XXX
+    'max_res_factor': 3,
 }

@@ -29,6 +29,8 @@
 #    file_write_predicted_metadata
 #    file_bootstrap_good_image_path
 #    file_bootstrap_candidate_image_path
+#    file_bootstrap_shadow_to_str
+#    file_bootstrap_status_image_path
 #    file_img_to_reproj_body_path
 #    file_read_reproj_body_path
 #    file_read_reproj_body
@@ -614,8 +616,6 @@ def _compress_bool(a):
     if a is None:
         return None
     flat = a.astype('bool').flatten()
-    assert (flat.shape[0] % 8) == 0
-
     res = zlib.compress(flat.data)
     return (a.shape, res)
 
@@ -671,14 +671,26 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
                 new_list.append(new_star)
             metadata['stars_metadata']['full_star_list'] = new_list
 
-    # Uncompress all body latlon_masks
+    # Uncompress all body reprojection data
     if 'bodies_metadata' in metadata:
         bodies_metadata = metadata['bodies_metadata']
-        for key in bodies_metadata:
-            mask = bodies_metadata[key]['latlon_mask']
-            mask = _uncompress_bool(mask)
-            bodies_metadata[key]['latlon_mask'] = mask
-
+        for body_name in bodies_metadata:
+            if 'reproj' not in bodies_metadata[body_name]:
+                continue
+            reproj = bodies_metadata[body_name]['reproj']
+            if reproj is None:
+                continue
+            mask = _uncompress_bool(reproj['full_mask'])
+            reproj['full_mask'] = mask
+            for data_type in ['eff_resolution', 'phase', 
+                              'emission', 'incidence']:
+                data = reproj[data_type]
+                if data_type in ['phase', 'emission', 'incidence']:
+                    data = data.astype('float')*oops.RPD
+                new_data = np.zeros(mask.shape, dtype='float32')
+                new_data[mask] = data
+                reproj[data_type] = new_data
+                
     if overlay:
         bootstrap = offset_path.find('-BOOTSTRAP') != -1
         overlay_path = file_img_to_overlay_path(
@@ -753,13 +765,23 @@ def file_write_offset_metadata_path(offset_path, metadata, overlay_path=None,
                 new_list.append(new_star)
             metadata['stars_metadata']['full_star_list'] = new_list
 
-    # Compress all body latlon_masks
+    # Compress all body reprojection data
     if 'bodies_metadata' in metadata:
         bodies_metadata = metadata['bodies_metadata']
-        for key in bodies_metadata:
-            mask = bodies_metadata[key]['latlon_mask']
-            mask = _compress_bool(mask)
-            bodies_metadata[key]['latlon_mask'] = mask
+        for body_name in bodies_metadata:
+            if 'reproj' not in bodies_metadata[body_name]:
+                continue
+            reproj = bodies_metadata[body_name]['reproj']
+            if reproj is None:
+                continue
+            mask = reproj['full_mask']
+            reproj['full_mask'] = _compress_bool(mask)
+            for data_type in ['eff_resolution', 'phase', 
+                              'emission', 'incidence']:
+                data = reproj[data_type]
+                if data_type in ['phase', 'emission', 'incidence']:
+                    data = (data*oops.DPR).astype('int8')
+                reproj[data_type] = data[mask]
             
     offset_fp = open(offset_path, 'wb')
     offset_fp.write(msgpack.packb(metadata, 
@@ -853,7 +875,7 @@ def file_bootstrap_good_image_path(body_name, make_dirs=False):
         except OSError:
             pass
 
-    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-good.data')
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-good.dat')
 
 def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
     assert os.path.exists(CB_RESULTS_ROOT)
@@ -864,7 +886,33 @@ def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
         except OSError:
             pass
 
-    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-candidate.data')
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', 
+                           body_name+'-candidate.dat')
+
+def file_bootstrap_shadow_to_str(lat_shadow_dir, lon_shadow_dir):    
+    ew = 'EAST'
+    if lon_shadow_dir:
+        ew = 'WEST'
+    ns = 'SOUTH'
+    if lat_shadow_dir:
+        ns = 'NORTH'
+        
+    return ns, ew
+
+def file_bootstrap_status_image_path(body_name, lat_shadow_dir, 
+                                     lon_shadow_dir, make_dirs=False):
+    assert os.path.exists(CB_RESULTS_ROOT)
+    root = file_clean_join(CB_RESULTS_ROOT, 'bootstrap')
+    if make_dirs and not os.path.exists(root):
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
+
+    ns, ew = file_bootstrap_shadow_to_str(lat_shadow_dir, lon_shadow_dir)
+    
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', 
+                           body_name+'-'+ns+'-'+ew+'-status.dat')
     
     
 ### REPROJECTED BODIES

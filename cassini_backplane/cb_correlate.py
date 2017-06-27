@@ -201,9 +201,6 @@ def corr_analyze_peak(corr, offset_u, offset_v):
                 'leastsq_ier']:
         details[key] = psf_ret[2][key]
 
-    plt.imshow(details['subimg'])
-    plt.show()
-
     sigma_x = details['sigma_x']
     sigma_y = details['sigma_y']
     rho = details['rho']

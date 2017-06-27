@@ -204,7 +204,7 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
         offset_config['secondary_max_num_exhaustive']):
         logger.info('Range of offsets exceeds maximum allowable - '+
                     'giving up')
-        return None, 0
+        return None, 0, None
     
     best_offset = None
     best_corr = None
@@ -746,10 +746,10 @@ def master_find_offset(obs,
                 continue
             # If the whole image is a single unobstructed body, then
             # we will want to bootstrap later, so don't bother making
-            # fancy models, just make the latlon mask.
-            mask_only = (entirely_body == body_name and
-                         (bodies_cartographic_data is None or
-                          body_name not in bodies_cartographic_data))
+            # fancy models.
+            no_model = (entirely_body == body_name and
+                        (bodies_cartographic_data is None or
+                         body_name not in bodies_cartographic_data))
             body_model, body_metadata, body_overlay_text = bodies_create_model(
                     obs, body_name, inventory=inv,
                     extend_fov=extend_fov,
@@ -757,7 +757,7 @@ def master_find_offset(obs,
                     always_create_model=create_overlay,
                     label_avoid_mask=label_avoid_mask,
                     bodies_config=bodies_config,
-                    mask_only=mask_only)
+                    no_model=no_model)
             bodies_metadata[body_name] = body_metadata
             if body_model is not None:
                 bodies_model_list.append((body_model, body_metadata, 
@@ -1596,6 +1596,11 @@ def master_find_offset(obs,
         metadata['ra_dec_center_offset'] = (ra.vals,dec.vals)
         obs.fov = orig_fov
         set_obs_center_bp(obs, force=True)
+
+    # Go through and update all the body metadata
+    for body_name in bodies_metadata:
+        bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                  offset, bodies_config=bodies_config)
 
 
                 ######################
