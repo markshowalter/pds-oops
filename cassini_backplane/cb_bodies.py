@@ -616,10 +616,10 @@ def bodies_create_model(obs, body_name, inventory,
                              t_moon, t_edge, b_moon, b_edge)
                 if (l_moon >= l_edge and r_moon <= r_edge and 
                     t_moon >= t_edge and b_moon <= b_edge):
-                    l_moon_clip = np.clip(l_moon-u_min, 0, inc_r_edge)
-                    r_moon_clip = np.clip(r_moon-u_min, 0, inc_r_edge)
-                    t_moon_clip = np.clip(t_moon-v_min, 0, inc_b_edge)
-                    b_moon_clip = np.clip(b_moon-v_min, 0, inc_b_edge)
+                    l_moon_clip = int(np.clip(l_moon-u_min, 0, inc_r_edge))
+                    r_moon_clip = int(np.clip(r_moon-u_min, 0, inc_r_edge))
+                    t_moon_clip = int(np.clip(t_moon-v_min, 0, inc_b_edge))
+                    b_moon_clip = int(np.clip(b_moon-v_min, 0, inc_b_edge))
                     sub_inc = masked_restr_incidence[
                                          t_moon_clip:b_moon_clip+1,
                                          l_moon_clip:r_moon_clip+1].mvals

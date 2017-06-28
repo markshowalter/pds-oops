@@ -23,6 +23,7 @@ import oops
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
+from cb_util_aws import *
 from cb_util_file import *
 
 
@@ -119,13 +120,8 @@ if arguments.results_in_s3:
 #
 ###############################################################################
 
-def copy_file_to_s3(src, dest):
-    main_logger.debug('Copying S3 %s to %s:%s', src, 
-                      arguments.aws_results_bucket, dest)
-    S3_CLIENT.upload_file(src, arguments.aws_results_bucket, dest)
-
 def approximate_number_of_messages():
-    attributes = SQS_CLIENT.get_queue_attributes(
+    attributes = AWS_SQS_CLIENT.get_queue_attributes(
                      QueueUrl=SQS_QUEUE_URL,
                      AttributeNames=['ApproximateNumberOfMessages',
                                      'ApproximateNumberOfMessagesNotVisible'])
@@ -166,14 +162,12 @@ QUEUE_LOW_WATER_MARK = arguments.low_water_mark
 
 QUEUE_FEED_BEFORE_CHECKING = QUEUE_HIGH_WATER_MARK
 
-S3_CLIENT = boto3.client('s3')
-SQS_RESOURCE = boto3.resource('sqs')
-SQS_CLIENT = boto3.client('sqs')
-SQS_QUEUE = SQS_RESOURCE.create_queue(QueueName=QUEUE_NAME,
-                                      Attributes={'MessageRetentionPeriod': str(14*86400),
-                                                  'VisibilityTimeout': str(60*10), # 10 minutes
-#                                                   'FifoQueue': 'true',
-                                                  })
+SQS_QUEUE = AWS_SQS_RESOURCE.create_queue(QueueName=QUEUE_NAME,
+                                          Attributes={'MessageRetentionPeriod': 
+                                                      str(14*86400),
+                                                      'VisibilityTimeout': 
+                                                      str(60*10), # 10 minutes
+                                                     })
 SQS_QUEUE_URL = SQS_QUEUE.url
 
 main_log_path = arguments.main_logfile
@@ -199,42 +193,22 @@ main_logger.info('******************************')
 main_logger.info('*** BEGINNING MAIN RUN AWS ***')
 main_logger.info('******************************')
 main_logger.info('')
+main_logger.info('GIT Status:   %s', current_git_version())   
+main_logger.info('')
 main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
-
 main_logger.info('SQS Queue URL: %s', SQS_QUEUE_URL)
 
 if arguments.retrieve_from_pds and not arguments.no_update_indexes:
-    main_logger.info('Downloading PDS index files')
-    index_no = 2001
-    while True:
-        index_file = os.path.join(COISS_2XXX_DERIVED_ROOT,
-                                  'COISS_%04d-index.tab' % index_no)
-        if not os.path.exists(index_file):
-            url = PDS_RINGS_VOLUMES_ROOT + (
-                            'COISS_%04d/index/index.tab' % index_no)
-            main_logger.debug('Trying %s', url)
-            try:
-                url_fp = urllib2.urlopen(url)
-                index_fp = open(index_file, 'w')
-                index_fp.write(url_fp.read())
-                index_fp.close()
-                url_fp.close()
-            except urllib2.HTTPError, e:
-                main_logger.info('Failed to retrieve %s: %s', url, e)
-                break
-            except urllib2.URLError, e:
-                main_logger.info('Failed to retrieve %s: %s', url, e)
-                break
-        index_no += 1
-        
+    update_index_files_from_pds(main_logger)
+
 main_logger.info('')
 file_log_arguments(arguments, main_logger.info)
 main_logger.info('')
 
 if arguments.purge_first:
     main_logger.info('Purging queue')
-    SQS_CLIENT.purge_queue(QueueUrl=SQS_QUEUE_URL)
+    AWS_SQS_CLIENT.purge_queue(QueueUrl=SQS_QUEUE_URL)
     time.sleep(90) # Wait for the purge to finish
     
 for image_path in file_yield_image_filenames_from_arguments(
@@ -260,7 +234,9 @@ end_time = time.time()
 main_logger.info('Total files processed %d', num_files_processed)
 main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
 
-log_close_main_logging('cb_main_run_aws')
-
 if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
-    copy_file_to_s3(main_log_path_local, main_log_path)
+    copy_file_to_s3(main_log_path_local, 
+                    arguments.aws_results_bucket, main_log_path,
+                    main_logger)
+
+log_close_main_logging('cb_main_run_aws')

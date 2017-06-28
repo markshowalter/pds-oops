@@ -37,7 +37,9 @@ import oops
 from cb_config import *
 from cb_gui_offset_data import *
 from cb_offset import *
+from cb_util_aws import *
 from cb_util_file import *
+from cb_util_misc import *
 
 
 command_list = sys.argv[1:]
@@ -448,62 +450,6 @@ file_add_selection_arguments(parser)
 
 arguments = parser.parse_args(command_list)
 
-AWS_PROCESSORS = {
-    't2.nano': 1,
-    't2.micro': 1,
-    't2.small': 1,
-    't2.medium': 2,
-    't2.large': 2,
-    't2.xlarge': 4,
-    't2.2xlarge': 8,
-    'm4.large': 2,
-    'm4.xlarge': 4,
-    'm4.2xlarge': 8,
-    'm4.4xlarge': 16,
-    'm4.10xlarge': 40,
-    'm4.16xlarge': 64,
-    'm3.medium': 1,
-    'm3.large': 2,
-    'm3.xlarge': 4,
-    'm3.2xlarge': 8,
-    'c4.large': 2,
-    'c4.xlarge': 4,
-    'c4.2xlarge': 8,
-    'c4.4xlarge': 16,
-    'c4.8xlarge': 36,
-    'c3.large': 2,
-    'c3.xlarge': 4,
-    'c3.2xlarge': 8,
-    'c3.4xlarge': 16,
-    'c3.8xlarge': 32,
-    'x1.16xlarge': 64,      # OK but expensive
-    'x1.32xlarge': 128,     # OK but expensive
-    'r4.large': 2,          # Preferred
-    'r4.xlarge': 4,         # Preferred
-    'r4.2xlarge': 8,        # Preferred
-    'r4.4xlarge': 16,       # Preferred
-    'r4.8xlarge': 32,       # Preferred
-    'r4.16xlarge': 64,      # Preferred
-    'r3.large': 2,          # Preferred
-    'r3.xlarge': 4,         # Preferred
-    'r3.2xlarge': 8,        # Preferred
-    'r3.4xlarge': 16,       # Preferred
-    'r3.8xlarge': 32,       # Preferred
-    'i2.xlarge': 4,         # OK
-    'i2.2xlarge': 8,        # OK
-    'i2.4xlarge': 16,       # OK
-    'i2.8xlarge': 32,       # OK
-    'd2.xlarge': 4,         # OK
-    'd2.2xlarge': 8,        # OK
-    'd2.4xlarge': 16,       # OK
-    'd2.8xlarge': 36,       # OK
-    'p2.xlarge': 4,
-    'p2.8xlarge': 32,
-    'p2.16xlarge': 164,
-    'g2.2xlarge': 8,
-    'g2.8xlarge': 32
-}
-
 RESULTS_DIR = CB_RESULTS_ROOT
 if arguments.aws:
     arguments.retrieve_from_pds = True
@@ -516,35 +462,9 @@ if arguments.aws:
 if arguments.results_in_s3:
     RESULTS_DIR = ''
 
-def read_url(url):
-    try:
-        url_fp = urllib2.urlopen(url)
-        ret = url_fp.read()
-        url_fp.close()
-        return ret
-    except urllib2.HTTPError, e:
-        return 'READ FAILURE'
-    except urllib2.URLError, e:
-        return 'READ FAILURE'
-
-HOST_FQDN = socket.getfqdn()
-ON_EC2_INSTANCE = HOST_FQDN.endswith('.compute.internal')
-if ON_EC2_INSTANCE:
-    HOST_AMI_ID = read_url('http://169.254.169.254/latest/meta-data/ami-id')
-    HOST_PUBLIC_NAME = read_url('http://169.254.169.254/latest/meta-data/public-hostname')
-    HOST_PUBLIC_IPV4 = read_url('http://169.254.169.254/latest/meta-data/public-ipv4')
-    HOST_INSTANCE_ID = read_url('http://169.254.169.254/latest/meta-data/instance-id')
-    HOST_INSTANCE_TYPE = read_url('http://169.254.169.254/latest/meta-data/instance-type')
-    HOST_ZONE = read_url('http://169.254.169.254/latest/meta-data/placement/availability-zone')
+if AWS_ON_EC2_INSTANCE:
     if arguments.deduce_aws_processors:
-        arguments.max_subprocesses = AWS_PROCESSORS[HOST_INSTANCE_TYPE]
-else:
-    HOST_AMI_ID = None
-    HOST_PUBLIC_NAME = None
-    HOST_PUBLIC_IPV4 = None
-    HOST_INSTANCE_ID = None
-    HOST_INSTANCE_TYPE = None
-    HOST_ZONE = None
+        arguments.max_subprocesses = AWS_PROCESSORS[AWS_HOST_INSTANCE_TYPE]
 
 TMP_DIR = '/tmp'
 
@@ -615,7 +535,12 @@ def wait_for_subprocess(all=False):
     while len(SUBPROCESS_LIST) > 0:
         if ec2_termination_count == 5: # Check every 5 seconds
             ec2_termination_count = 0
-            check_for_ec2_termination()
+            term = aws_check_for_ec2_termination()
+            if term:
+                # Termination notice! We have two minutes
+                main_logger.error('Termination notice received - shutdown at %s',
+                                  term)
+                exit_processing()
         else:
             ec2_termination_count += 1
         for i in xrange(len(SUBPROCESS_LIST)):
@@ -669,11 +594,6 @@ def run_and_maybe_wait(args, image_path, bootstrapped, sqs_handle):
 #
 ###############################################################################
 
-def copy_file_to_s3(src, dest):
-    main_logger.debug('Copying S3 %s to %s:%s', src, 
-                      arguments.aws_results_bucket, dest)
-    S3_CLIENT.upload_file(src, arguments.aws_results_bucket, dest)
-    
 def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                              allow_moons=True, allow_saturn=True,
                              botsim_offset=None, cartographic_data=None,
@@ -694,12 +614,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                     offset_metadata = file_read_offset_metadata(
                                                 image_path, overlay=False,
                                                 bootstrap_pref=bootstrap_pref)
-                    if 'error' in offset_metadata: # Old format XXX
-                        offset_metadata['status'] = 'error'
-                        offset_metadata['status_detail1'] = offset_metadata['error']
-                        offset_metadata['status_detail2'] = offset_metadata['error_traceback']
-                    elif 'status' not in offset_metadata:
-                        offset_metadata['status'] = 'ok'
                     status = offset_metadata['status']
                     if status != 'error':
                         main_logger.debug(
@@ -756,29 +670,17 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         if short_path.find('_CALIB') == -1:
             short_path = short_path.replace('.IMG', '_CALIB.IMG')
         url = PDS_RINGS_CALIB_ROOT + short_path
-        try:
-            image_path_local = file_clean_join(TMP_DIR, image_name+'.IMG')
-            local_fp = open(image_path_local, 'wb')
-            main_logger.debug('Retrieving %s to %s', url, image_path_local)
-            url_fp = urllib2.urlopen(url)
-            local_fp.write(url_fp.read())
-            url_fp.close()
-            local_fp.close()
-        except urllib2.HTTPError, e:
-            main_logger.error('Failed to retrieve %s: %s', url, e)
+        image_path_local = file_clean_join(TMP_DIR, image_name+'.IMG')
+        main_logger.debug('Retrieving %s to %s', url, image_path_local)
+        err = copy_url_to_file(url, image_path_local)
+        if err is not None:
+            main_logger.error(err)
             try:
                 os.remove(image_path_local)
             except:
                 pass
             return False
-        except urllib2.URLError, e:
-            main_logger.error('Failed to retrieve %s: %s', url, e)
-            try:
-                os.remove(image_path_local)
-            except:
-                pass
-            return False
-        
+
     image_log_path_local = None
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
@@ -805,6 +707,7 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     image_logger = logging.getLogger('cb')
     
     image_logger.info('Command line: %s', ' '.join(command_list))
+    image_logger.info('GIT Status:   %s', current_git_version())
 
     offset_path = file_img_to_offset_path(
                               image_path, 
@@ -836,14 +739,18 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             except:
                 pass
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
+            aws_copy_file_to_s3(offset_path_local, 
+                                arguments.aws_results_bucket, offset_path,
+                                main_logger)
             if not arguments.is_subprocess:
                 try:
                     os.remove(offset_path_local)
                 except:
                     pass
             if image_log_path_local is not None:
-                copy_file_to_s3(image_log_path_local, image_log_path)
+                aws_copy_file_to_s3(image_log_path_local, 
+                                    arguments.aws_results_bucket, image_log_path,
+                                    main_logger)
                 try:
                     os.remove(image_log_path_local)
                 except:
@@ -880,14 +787,18 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                                         overlay=False)
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
+            aws_copy_file_to_s3(offset_path_local, 
+                                arguments.aws_results_bucket, offset_path,
+                                main_logger)
             if not arguments.is_subprocess:
                 try:
                     os.remove(offset_path_local)
                 except:
                     pass
             if image_log_path_local is not None:
-                copy_file_to_s3(image_log_path_local, image_log_path)
+                aws_copy_file_to_s3(image_log_path_local, 
+                                    arguments.aws_results_bucket, image_log_path,
+                                    main_logger)
                 try:
                     os.remove(image_log_path_local)
                 except:
@@ -937,26 +848,30 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
+            aws_copy_file_to_s3(offset_path_local, 
+                                arguments.aws_results_bucket, offset_path,
+                                main_logger)
             if not arguments.is_subprocess:
                 try:
                     os.remove(offset_path_local)
                 except:
                     pass
             if image_log_path_local is not None:
-                copy_file_to_s3(image_log_path_local, image_log_path)
+                aws_copy_file_to_s3(image_log_path_local, 
+                                    arguments.aws_results_bucket, image_log_path,
+                                    main_logger)
                 try:
                     os.remove(image_log_path_local)
                 except:
                     pass
         return True
 
-    metadata['host_ami_id'] = HOST_AMI_ID
-    metadata['host_public_name'] = HOST_PUBLIC_NAME
-    metadata['host_public_ipv4'] = HOST_PUBLIC_IPV4
-    metadata['host_instance_id'] = HOST_INSTANCE_ID
-    metadata['host_instance_type'] = HOST_INSTANCE_TYPE
-    metadata['host_zone'] = HOST_ZONE
+    metadata['AWS_HOST_AMI_ID'] = AWS_HOST_AMI_ID
+    metadata['AWS_HOST_PUBLIC_NAME'] = AWS_HOST_PUBLIC_NAME
+    metadata['AWS_HOST_PUBLIC_IPV4'] = AWS_HOST_PUBLIC_IPV4
+    metadata['AWS_HOST_INSTANCE_ID'] = AWS_HOST_INSTANCE_ID
+    metadata['AWS_HOST_INSTANCE_TYPE'] = AWS_HOST_INSTANCE_TYPE
+    metadata['AWS_HOST_ZONE'] = AWS_HOST_ZONE
     
     overlay_path_local = None
     if not arguments.no_overlay_file:
@@ -1001,14 +916,18 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             image_logger.info('Profile results:\n%s', s.getvalue())
         cb_logging.log_remove_file_handler(image_log_filehandler)
         if arguments.results_in_s3:
-            copy_file_to_s3(offset_path_local, offset_path)
+            aws_copy_file_to_s3(offset_path_local, 
+                                arguments.aws_results_bucket, offset_path,
+                                main_logger)
             if not arguments.is_subprocess:
                 try:
                     os.remove(offset_path_local)
                 except:
                     pass
             if image_log_path_local is not None:
-                copy_file_to_s3(image_log_path_local, image_log_path)
+                aws_copy_file_to_s3(image_log_path_local, 
+                                    arguments.aws_results_bucket, image_log_path,
+                                    main_logger)
                 try:
                     os.remove(image_log_path_local)
                 except:
@@ -1060,19 +979,25 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     cb_logging.log_remove_file_handler(image_log_filehandler)
 
     if arguments.results_in_s3:
-        copy_file_to_s3(offset_path_local, offset_path)
+        aws_copy_file_to_s3(offset_path_local, 
+                            arguments.aws_results_bucket, offset_path,
+                            main_logger)
         if not arguments.is_subprocess:
             try:
                 os.remove(offset_path_local)
             except:
                 pass
         if image_log_path_local is not None:
-            copy_file_to_s3(image_log_path_local, image_log_path)
+            aws_copy_file_to_s3(image_log_path_local, 
+                                arguments.aws_results_bucket, image_log_path,
+                                main_logger)
             try:
                 os.remove(image_log_path_local)
             except:
                 pass
-        copy_file_to_s3(png_path_local, png_path)
+        aws_copy_file_to_s3(png_path_local, 
+                            arguments.aws_results_bucket, png_path,
+                            main_logger)
         if not arguments.no_overlay_file:
             try:
                 os.remove(overlay_path_local)
@@ -1084,15 +1009,6 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
             pass
 
     return True
-
-def check_for_ec2_termination():
-    if ON_EC2_INSTANCE:
-        term = read_url('http://169.254.169.254/latest/meta-data/spot/termination-time')
-        if term != 'READ FAILURE' and term.find('Not Found') == -1:
-            # Termination notice! We have two minutes
-            main_logger.error('Termination notice received - shutdown at %s',
-                              term)
-            exit_processing()
 
 def exit_processing():
     end_time = time.time()
@@ -1113,7 +1029,9 @@ def exit_processing():
     log_close_main_logging('cb_main_offset')
     
     if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
-        copy_file_to_s3(main_log_path_local, main_log_path)
+        aws_copy_file_to_s3(main_log_path_local, 
+                            arguments.aws_results_bucket, main_log_path,
+                            main_logger)
         
     sys.exit(0)
 
@@ -1132,15 +1050,6 @@ if arguments.display_offset_results:
     root = tk.Tk()
     root.withdraw()
 
-if arguments.results_in_s3:
-    assert _BOTO3_AVAILABLE
-    S3_CLIENT = boto3.client('s3')
-
-if arguments.use_sqs:
-    assert _BOTO3_AVAILABLE
-    SQS_RESOURCE = boto3.resource('sqs')
-    SQS_CLIENT = boto3.client('sqs')
-    
 kernel_type = 'reconstructed'
 if arguments.use_predicted_kernels:
     kernel_type = 'predicted'
@@ -1156,8 +1065,8 @@ if (arguments.results_in_s3 and
     main_log_datetime = datetime.datetime.now().isoformat()[:-7]
     main_log_datetime = main_log_datetime.replace(':','-')
     main_log_path = 'logs/cb_main_offset/'+main_log_datetime+'-'
-    if HOST_INSTANCE_ID is not None:
-        main_log_path += HOST_INSTANCE_ID
+    if AWS_HOST_INSTANCE_ID is not None:
+        main_log_path += AWS_HOST_INSTANCE_ID
     else:
         main_log_path += '-'+str(os.getpid())
     main_log_path += '.log'
@@ -1225,14 +1134,14 @@ main_logger.info('**********************************')
 main_logger.info('*** BEGINNING MAIN OFFSET PASS ***')
 main_logger.info('**********************************')
 main_logger.info('')
-main_logger.info('Host Local Name: %s', HOST_FQDN)
-if ON_EC2_INSTANCE:
-    main_logger.info('Host Public Name: %s (%s) in %s', HOST_PUBLIC_NAME, 
-                     HOST_PUBLIC_IPV4, HOST_ZONE)
-    main_logger.info('Host AMI ID: %s', HOST_AMI_ID)
-    main_logger.info('Host Instance Type: %s', HOST_INSTANCE_TYPE)
-    main_logger.info('Host Instance ID: %s', HOST_INSTANCE_ID)
-    
+main_logger.info('Host Local Name: %s', AWS_HOST_FQDN)
+if AWS_ON_EC2_INSTANCE:
+    main_logger.info('Host Public Name: %s (%s) in %s', AWS_HOST_PUBLIC_NAME, 
+                     AWS_HOST_PUBLIC_IPV4, AWS_HOST_ZONE)
+    main_logger.info('Host AMI ID: %s', AWS_HOST_AMI_ID)
+    main_logger.info('Host Instance Type: %s', AWS_HOST_INSTANCE_TYPE)
+    main_logger.info('Host Instance ID: %s', AWS_HOST_INSTANCE_ID)
+main_logger.info('GIT Status:   %s', current_git_version())   
 main_logger.info('')
 main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
@@ -1273,28 +1182,7 @@ if arguments.body_cartographic_data:
 bootstrapped = len(cartographic_data) > 0
 
 if arguments.retrieve_from_pds and not arguments.no_update_indexes:
-    main_logger.info('Downloading PDS index files')
-    index_no = 2001
-    while True:
-        index_file = file_clean_join(COISS_2XXX_DERIVED_ROOT,
-                                     'COISS_%04d-index.tab' % index_no)
-        if not os.path.exists(index_file):
-            url = PDS_RINGS_VOLUMES_ROOT + (
-                            'COISS_%04d/index/index.tab' % index_no)
-            main_logger.debug('Trying %s', url)
-            try:
-                url_fp = urllib2.urlopen(url)
-                index_fp = open(index_file, 'w')
-                index_fp.write(url_fp.read())
-                index_fp.close()
-                url_fp.close()
-            except urllib2.HTTPError, e:
-                main_logger.info('Failed to retrieve %s: %s', url, e)
-                break
-            except urllib2.URLError, e:
-                main_logger.info('Failed to retrieve %s: %s', url, e)
-                break
-        index_no += 1
+    update_index_files_from_pds(main_logger)
         
 if arguments.use_sqs:
     main_logger.info('')
@@ -1302,7 +1190,7 @@ if arguments.use_sqs:
     main_logger.info('')
     SQS_QUEUE = None
     try:
-        SQS_QUEUE = SQS_RESOURCE.get_queue_by_name(
+        SQS_QUEUE = AWS_SQS_RESOURCE.get_queue_by_name(
                                            QueueName=arguments.sqs_queue_name)
     except:
         main_logger.error('Failed to retrieve SQS queue "%s"',
@@ -1310,22 +1198,24 @@ if arguments.use_sqs:
         exit_processing()
     SQS_QUEUE_URL = SQS_QUEUE.url
     while True:
-        check_for_ec2_termination()
+        term = aws_check_for_ec2_termination()
+        if term:
+            # Termination notice! We have two minutes
+            main_logger.error('Termination notice received - shutdown at %s',
+                              term)
+            exit_processing()
         if arguments.max_subprocesses > 0:
             wait_for_subprocess()
         messages = SQS_QUEUE.receive_messages(
                       MaxNumberOfMessages=1,
                       WaitTimeSeconds=10)
-#             if len(messages) == 0:
-#                 main_logger.info('No new image names in the queue - exiting')
-#                 break
         for message in messages:
             image_path = message.body
             receipt_handle = message.receipt_handle
             if image_path == 'DONE':
                 # Delete it and send it again to the next instance
-                SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                          ReceiptHandle=receipt_handle)
+                AWS_SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=receipt_handle)
                 SQS_QUEUE.send_message(MessageBody='DONE')
                 main_logger.info('DONE message received - exiting')
                 wait_for_subprocess(all=True)
@@ -1342,12 +1232,12 @@ if arguments.use_sqs:
                             sqs_handle=receipt_handle):
                 num_files_processed += 1
                 if arguments.max_subprocesses == 0:
-                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                              ReceiptHandle=receipt_handle)
+                    AWS_SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                                  ReceiptHandle=receipt_handle)
             else:
                 num_files_skipped += 1
-                SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
-                                          ReceiptHandle=receipt_handle)
+                AWS_SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                                              ReceiptHandle=receipt_handle)
 else:
     main_logger.info('')
     file_log_arguments(arguments, main_logger.info)
