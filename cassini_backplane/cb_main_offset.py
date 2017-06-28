@@ -572,7 +572,7 @@ def wait_for_subprocess(all=False):
                 main_logger.info(results)
                 del SUBPROCESS_LIST[i]
                 if old_sqs_handle is not None:
-                    SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
+                    AWS_SQS_CLIENT.delete_message(QueueUrl=SQS_QUEUE_URL,
                                               ReceiptHandle=old_sqs_handle)
                 break
         if len(SUBPROCESS_LIST) <= subprocess_count:

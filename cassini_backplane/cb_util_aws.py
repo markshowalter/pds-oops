@@ -19,6 +19,8 @@ try:
 except ImportError:
     _BOTO3_AVAILABLE = False
 
+from cb_util_misc import *
+
 _LOGGING_NAME = 'cb.' + __name__
 
 
@@ -115,6 +117,6 @@ def aws_copy_file_to_s3(src, bucket, dest, logger):
 def aws_check_for_ec2_termination():
     if AWS_ON_EC2_INSTANCE:
         term = read_url('http://169.254.169.254/latest/meta-data/spot/termination-time')
-        if term != 'READ FAILURE' and term.find('Not Found') == -1:
+        if term is not none and term.find('Not Found') == -1:
             return term
     return False
