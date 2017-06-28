@@ -109,7 +109,7 @@ def check_add_one_image(image_path, bootstrap_config):
                           image_filename, body_name)
         return
     
-    if body_metadata['reproj'] is None:
+    if 'reproj' not in body_metadata or body_metadata['reproj'] is None:
         main_logger.debug('%s - Skipping due to bad body trial reprojection %s',
                           image_filename, body_name)
         return
@@ -281,7 +281,7 @@ main_logger.info('Command line: %s', ' '.join(command_list))
 main_logger.info('')
 
 for image_path in file_yield_image_filenames_from_arguments(arguments):
-    check_add_one_image(image_path)
+    check_add_one_image(image_path, bootstrap_config)
 
 if not arguments.no_write:
     for body_name in GOOD_IMAGE_BY_BODY_DB:

@@ -237,6 +237,10 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
                 best_corr = corr
                 best_offset = (offset_x, offset_y)
 
+    if best_corr is None:
+        logger.info('Tweaking failed - giving up')
+        return None, 0, None
+
     details = corr_analyze_peak(best_corr, 
                                 best_corr.shape[0]//2, best_corr.shape[1]//2)
     
@@ -260,6 +264,8 @@ def master_find_offset(obs,
                        rings_model_source='voyager',
                        rings_config=None,
 
+                   bootstrap_config=None,
+                   
                    botsim_offset=None,
                    force_bootstrap_candidate=False,
                    
@@ -288,6 +294,7 @@ def master_find_offset(obs,
         allow_rings              True to allow finding the offset based on
                                  rings.
         rings_config             Config parameters for rings.
+        bootstrap_config         Config parameters for bootstrapping.
 
         botsim_offset            None to find the offset automatically or
                                  a tuple (U,V) to force the result offset.
@@ -458,6 +465,9 @@ def master_find_offset(obs,
         
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
+        
+    if bootstrap_config is None:
+        bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
         
     extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
     search_size_max_u, search_size_max_v = extend_fov
@@ -814,6 +824,12 @@ def master_find_offset(obs,
             metadata['bootstrap_candidate'] = True
             logger.info('Single body without cartographic data - '+
                         'bootstrap candidate and returning')
+            # Go through and update all the body metadata
+            for body_name in bodies_metadata:
+                if body_name in bootstrap_config['body_list']: 
+                    bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                              None, 
+                                              bodies_config=bodies_config)
             metadata['end_time'] = time.time()
             return metadata
 
@@ -893,6 +909,12 @@ def master_find_offset(obs,
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
         logger.info('Forcing bootstrap candidate and returning')
+        # Go through and update all the body metadata
+        for body_name in bodies_metadata:
+            if body_name in bootstrap_config['body_list']: 
+                bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                          None, 
+                                          bodies_config=bodies_config)
         metadata['end_time'] = time.time()
         return metadata
         
@@ -1599,8 +1621,9 @@ def master_find_offset(obs,
 
     # Go through and update all the body metadata
     for body_name in bodies_metadata:
-        bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                  offset, bodies_config=bodies_config)
+        if body_name in bootstrap_config['body_list']: 
+            bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                      offset, bodies_config=bodies_config)
 
 
                 ######################

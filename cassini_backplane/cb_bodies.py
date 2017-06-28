@@ -835,20 +835,20 @@ def bodies_add_bootstrap_info(obs, metadata, offset, bodies_config=None):
                          'is too small',
                          body_name)
             return
-        img_u_min = 0
-        img_u_max = obs.data.shape[1]-1
-        img_v_min = 0
-        img_v_max = obs.data.shape[0]-1
+        img_u_min, img_v_min = MAX_POINTING_ERROR[(obs.data.shape, 
+                                                   obs.detector)]
+        img_u_max = obs.data.shape[1]-img_u_min-1
+        img_v_max = obs.data.shape[0]-img_v_min-1
     else:
         if bb_area < bodies_config['min_reproj_seed_area']:
             logger.debug('Skipping bootstrap info for seed %s because BB '+
                          'is too small',
                          body_name)
             return
-        img_u_min, img_v_min = MAX_POINTING_ERROR[(obs.data.shape, 
-                                                   obs.detector)]
-        img_u_max = obs.data.shape[1]-img_u_min-1
-        img_v_max = obs.data.shape[0]-img_v_min-1
+        img_u_min = 0
+        img_u_max = obs.data.shape[1]-1
+        img_v_min = 0
+        img_v_max = obs.data.shape[0]-1
          
     logger.info('Adding bootstrap info for %s', body_name)
 
@@ -869,13 +869,13 @@ def bodies_add_bootstrap_info(obs, metadata, offset, bodies_config=None):
     
     # Things break if the moon is only a single pixel wide or tall
     # This really shouldn't be an issue here, but just in case...
-    if u_min == u_max and u_min == obs.data.shape[1]-1:
+    if u_min == u_max and u_min == img_u_max:
         u_min -= 1
-    if u_min == u_max and u_min == 0:
+    if u_min == u_max and u_min == img_u_min:
         u_max += 1
-    if v_min == v_max and v_min == obs.data.shape[0]-1:
+    if v_min == v_max and v_min == img_v_max:
         v_min -= 1
-    if v_min == v_max and v_min == 0:
+    if v_min == v_max and v_min == img_v_min:
         v_max += 1
         
     logger.debug('Image size %d %d subrect U %d to %d V %d to %d',
