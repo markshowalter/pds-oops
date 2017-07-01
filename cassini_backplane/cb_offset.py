@@ -245,557 +245,115 @@ def _iterate_secondary_correlation(obs, final_model, model_offset, peak,
                                 best_corr.shape[0]//2, best_corr.shape[1]//2)
     
     return best_offset, confidence_factor, details
-        
-def master_find_offset(obs, 
-                   offset_config=None,
-                   create_overlay=False,
-                   
-                   allow_stars=True,
-                       stars_show_streaks=False,
-                       stars_config=None,
-                        
-                   allow_saturn=True,
-                   allow_moons=True,
-                       bodies_cartographic_data=None,
-                       bodies_config=None,
-                       titan_config=None,
-                   
-                   allow_rings=True,
-                       rings_model_source='voyager',
-                       rings_config=None,
-
-                   bootstrap_config=None,
-                   
-                   botsim_offset=None,
-                   force_bootstrap_candidate=False,
-                   
-                   bootstrapped=False):
-    """Reproject the moon into a rectangular latitude/longitude space.
-    
-    Inputs:
-        obs                      The Observation.
-        offset_config            Config parameters for master offset.
-        create_overlay           True to create a visual overlay.
-
-        allow_stars              True to allow finding the offset based on
-                                 stars.
-        stars_show_streaks       Include streaks in the overlay.
-        stars_config             Config parameters for stars.
-
-        allow_saturn             True to allow finding the offset based on
-                                 Saturn.
-        allow_moons              True to allow finding the offset based on
-                                 moons.
-        bodies_cartographic_data The metadata to use for cartographic
-                                 surfaces (see cb_bodies).
-        bodies_config            Config parameters for bodies.
-        titan_config             Config parameters for Titan navigation.
-
-        allow_rings              True to allow finding the offset based on
-                                 rings.
-        rings_config             Config parameters for rings.
-        bootstrap_config         Config parameters for bootstrapping.
-
-        botsim_offset            None to find the offset automatically or
-                                 a tuple (U,V) to force the result offset.
-                                 This is useful for creating an overlay 
-                                 with a known offset, such as when processing
-                                 pairs of BOTSIM images.
-        force_bootstrap_candidate  True to force this image to be a bootstrap
-                                 candidate even if we really could find a
-                                 viable offset.
-                                 
-        bootstrapped             True if this offset pass is the result of
-                                 bootstrapping.
-                                 
-    Returns:
-        metadata           A dictionary containing information about the
-                           offset result:
-
-          Data about the image:
-
-            'full_path'        The full path of the source image.
-            'camera'           The name of the camera: 'NAC' or 'WAC'.
-            'filter1'          The names of the filters used.
-            'filter2'
-            'image_shape'      A tuple indicating the shape (in pixels) of the
-                               image.
-            'midtime'          The midtime of the observation.
-            'scet_midtime'     The SCET midtime of the observation.
-            'texp'             The exposure duration of the observation.
-            'description'      The DESCRIPTION field from the VICAR header.
-            'ra_dec_corner_orig'
-                               A tuple (ra_min, ra_max, dec_min, dec_max)
-                               giving the corners of the FOV-extended image
-                               (apparent) with the original SPICE navigation at
-                               the image midtime.
-            'ra_dec_center_pred'
-                               A tuple (ra,dec,dra/dt,ddec/dt) for the center 
-                               of the image (apparent) with the original SPICE 
-                               predicted kernels at the image midtime.
-            'ra_dec_center_orig'
-                               A tuple (ra,dec) for the center of the image
-                               (apparent) with the original SPICE navigation
-                               at the image midtime.
-            'ra_dec_center_offset'
-                               A tuple (ra,dec) for the center of the image
-                               (apparent) with the new navigation at the
-                               image midtime.
-
-          Data about the offset process:
-          
-            'status'           'ok' if the process went to completion (whether
-                               or not an offset was found). Other values are
-                               set by external drivers.
-            'offset'           The final (U,V) offset. None if offset finding
-                               failed.
-            'corr_psf_details' The details of the 2-D Gaussian fit to the 
-                               correlation peak for the final offset.
-            'confidence'       The confidence 0-1 of the final offset.
-            'model_confidence' The confidence 0-1 of the model offset.
-            'model_blur_amount' The amount the model was blurred before 
-                               correlating.
-            'model_override_bodies_curvature'
-            'model_override_bodies_limb'
-            'model_override_rings_curvature'
-            'model_override_fiducial_features'
-            'model_rings_blur'
-            'model_bodies_blur'
-                               The assumptions that were broken in order to
-                               create the model offset, if any.
-            'model_rings_radial_gradient'
-                               The direction of the rings radial gradient
-                               if the model offset was projected onto
-                               the radial direction vector due to insufficient
-                               ring curvature. None otherwise.
-            'stars_offset'     The offset from star matching. None is star
-                               matching failed.
-            'model_offset'     The offset from model (rings and bodies) 
-                               matching. None is model matching failed.
-            'model_corr_psf_details'
-                               The details of the 2-D Gaussian fit to the 
-                               correlation peak for the model offset.
-            'titan_offset'     The offset from Titan photometric navigation.
-                               None if navigation failed.
-            'large_bodies'     A list of the large bodies present in the image
-                               sorted in ascending order by range.
-            'body_only'        False if the image doesn't consist entirely of
-                               a single body and nothing else.
-                               Otherwise the name of the body.
-            'rings_only'       True if the image consists entirely of the main
-                               rings and nothing else.
-            'model_contents'   A list of objects used to create the
-                               non-star model: 'RINGS' and body names.
-                               If the contents is only "TITAN", then the
-                               special photometry-based Titan navigation
-                               was performed.
-            'offset_winner'    Which method won for the final offset:
-                                   None, STARS, MODEL, or TITAN.
-            'stars_metadata'   The metadata from star matching. None if star
-                               matching not performed. The star-matching offset
-                               is included here.
-            'bodies_metadata'  A dictionary containing the metadata for each
-                               body in the large_bodies list.
-            'rings_metadata'   The metadata from ring modeling. None if ring
-                               modeling not performed.
-            'secondary_corr_ok' True if secondary model correlation was
-                               successful. None if it wasn't performed.
-            'offset_path'      The path to the offset filename - filled in by
-                               the top-level program.
-            'start_time'       The start time (s) of the entire offset process.
-            'end_time'         The end time (s) of the entire offset process.
-            
-          Data for bootstrapping:
-            
-            'bootstrap_candidate'
-                               True if the image is a good candidate for 
-                               future bootstrapping attempts.
-            'bootstrapped'     True if the image was navigated using 
-                               bootstrapping.
-            'bootstrap_status' A string describing attempts at bootstrapping:
-                                   None        Bootstrapping not attempted
-                               
-          Large data that might be too big to store in an offset file:
-            
-            'ext_data'         The original obs.data extended by the maximum
-                               search size.
-            'stars_overlay'    The 2-D stars overlay (no text).
-            'stars_overlay_text'
-                               The 2-D stars overlay (text only).
-            'bodies_overlay'   The 2-D bodies overlay (no text).
-            'bodies_overlay_text'
-                               The 2-D bodies overlay (text only).
-            'rings_overlay'    The 2-D rings overlay (no text).
-            'rings_overlay_text'
-                               The 2-D rings overlay (text only).
-            'overlay'          The visual overlay (if create_overlay is True).
-            'ext_overlay'      The visual overlay extended by the maximum
-                               search size (if create_overlay is True).
-            
-    """
-    
-                ##################
-                # INITIALIZATION #
-                ##################
-    
-    start_time = time.time()
-    
-    logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
-    
-    logger.info('Processing %s', obs.full_path)
-    logger.info('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
-                'SAMPLING %s / GAIN %d',
-                cspice.et2utc(obs.midtime, 'C', 0),
-                obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
-                obs.filter1, obs.filter2, obs.sampling,
-                obs.gain_mode)
-    logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
-                 'allow_rings %d',
-                 allow_stars, allow_saturn, allow_moons, allow_rings)
-    if botsim_offset is not None:
-        logger.info('BOTSIM offset U,V %d,%d', botsim_offset[0],
-                    botsim_offset[1])
-    if bodies_cartographic_data is None:
-        logger.info('No cartographic data provided')
-    else:
-        for body_name in sorted(bodies_cartographic_data.keys()):
-            logger.info('Cartographic data provided for: %s = %s',
-                         body_name.upper(),
-                         bodies_cartographic_data[body_name]['full_path'])
-        
-    if offset_config is None:
-        offset_config = OFFSET_DEFAULT_CONFIG
-        
-    if bootstrap_config is None:
-        bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
-        
-    extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
-    search_size_max_u, search_size_max_v = extend_fov
-    
-    set_obs_ext_data(obs, extend_fov)
-    obs.ext_data = image_interpolate_missing_stripes(obs.ext_data)
-    set_obs_ext_corner_bp(obs, extend_fov)
-    set_obs_ext_bp(obs, extend_fov)
-    
-    bodies_model_list = []
-    rings_model = None
-    rings_overlay_text = None
-    titan_body_metadata = None
-    final_model = None
-    
-    if create_overlay:
-        color_overlay = np.zeros(obs.ext_data.shape + (3,), dtype=np.uint8)
-        label_avoid_mask = np.zeros(obs.ext_data.shape, dtype=np.bool)
-    else:
-        color_overlay = None
-        label_avoid_mask = None
-    stars_overlay = None
-    stars_overlay_text = None
-    bodies_overlay_text = None
-    rings_overlay_text = None
-        
-    offset = None
-    
-    # Initialize the metadata to at least have something for each key
-    metadata = {}
-    metadata['status'] = 'ok'
-    # Image
-    metadata['full_path'] = obs.full_path
-    metadata['camera'] = obs.detector
-    metadata['filter1'] = obs.filter1
-    metadata['filter2'] = obs.filter2
-    metadata['image_shape'] = tuple(obs.data.shape)
-    metadata['midtime'] = obs.midtime
-    scet_start = float(obs.dict['SPACECRAFT_CLOCK_START_COUNT'])
-    scet_end = float(obs.dict['SPACECRAFT_CLOCK_STOP_COUNT'])
-    metadata['scet_midtime'] = (scet_start+scet_end)/2
-    metadata['texp'] = obs.texp
-    metadata['description'] = obs.dict['DESCRIPTION']
-    logger.info('Image description: %s', metadata['description'])
-    metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
-                                           obs, extend_fov=extend_fov)
-    set_obs_center_bp(obs)
-    ra = obs.center_bp.right_ascension()
-    dec = obs.center_bp.declination()
-    metadata['ra_dec_center_orig'] = (ra.vals,dec.vals)
-    pred_metadata = file_read_predicted_metadata(obs.full_path)
-    if pred_metadata is None:
-        metadata['ra_dec_center_pred'] = None
-        logger.warn('No predicted kernel information available')
-    else:
-        metadata['ra_dec_center_pred'] = (
-                  pred_metadata['ra_center_midtime'],
-                  pred_metadata['dec_center_midtime'],
-                  pred_metadata['dra_dt'],
-                  pred_metadata['ddec_dt'])
-    metadata['ra_dec_center_offset'] = None
-    # Offset process
-    metadata['start_time'] = start_time
-    metadata['end_time'] = None
-    metadata['offset'] = None
-    metadata['confidence'] = 0.
-    metadata['model_override_bodies_curvature'] = None
-    metadata['model_override_bodies_limb'] = None
-    metadata['model_override_rings_curvature'] = None
-    metadata['model_override_fiducial_features'] = None
-    metadata['model_rings_blur'] = None
-    metadata['model_bodies_blur'] = None
-    metadata['model_rings_radial_gradient'] = None
-    metadata['stars_offset'] = None
-    metadata['stars_confidence'] = 0.
-    metadata['model_offset'] = None
-    metadata['model_confidence'] = 0.
-    metadata['model_blur_amount'] = None
-    metadata['titan_offset'] = None
-    metadata['titan_confidence'] = 0.
-    metadata['body_only'] = False
-    metadata['rings_only'] = False
-    metadata['model_contents'] = []
-    metadata['offset_winner'] = None
-    metadata['stars_metadata'] = None
-    bodies_metadata = {}
-    metadata['bodies_metadata'] = bodies_metadata
-    metadata['rings_metadata'] = None
-    metadata['titan_metadata'] = None
-    metadata['secondary_corr_ok'] = None
-    # Large
-    metadata['ext_data'] = obs.ext_data
-    metadata['ext_overlay'] = color_overlay
-    if create_overlay:
-        metadata['overlay'] = unpad_image(color_overlay, extend_fov)
-    else:
-        metadata['overlay'] = None
-    metadata['stars_overlay'] = None
-    metadata['stars_overlay_text'] = None
-    metadata['bodies_overlay'] = None
-    metadata['bodies_overlay_text'] = None
-    metadata['rings_overlay'] = None
-    metadata['rings_overlay_text'] = None
-    # Bootstrapping
-    metadata['bootstrap_candidate'] = False
-    metadata['bootstrapped'] = bootstrapped
-    metadata['bootstrap_status'] = None
-    
-    
-                ###########################
-                # IMAGE CONTENTS ANALYSIS #
-                ###########################
-    
-    #
-    # FIGURE OUT WHAT KINDS OF THINGS ARE IN THIS IMAGE
-    #
-    # - Bodies; a single body completely covers the image
-    # - Rings; the main rings completely cover the image
-    #
-
-    # Always compute the inventory so we can see if the entire image is a
-    # closeup of a single body and so the metadata has this information
-    
-    large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
-    # Make a list sorted by range, with the closest body first
-    large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
-    large_bodies_by_range.sort(key=lambda x: x[1]['range'])
-
-    logger.info('Large body inventory by increasing range: %s',
-                 [x[0] for x in large_bodies_by_range])
-
-    # Now find the ring radii and distance for the main rings
-    # We use this in various places below
-    rings_radii = obs.ext_bp.ring_radius('saturn:ring')
-    main_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS)
-    main_rings_radii = main_rings_radii.mask_where(rings_radii > 
-                                                   RINGS_MAX_RADIUS)
-    main_rings_radii = main_rings_radii.mvals
-    df_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS_D)
-    df_rings_radii = df_rings_radii.mask_where(rings_radii > 
-                                               RINGS_MAX_RADIUS_F)
-    df_rings_radii = df_rings_radii.mvals
-
-    rings_dist = obs.ext_bp.distance('saturn:ring')
-    rings_dist = rings_dist.mask_where(main_rings_radii.mask).mvals
-    min_rings_dist = np.min(rings_dist)
-
-    # See if the main rings take up the entire image AND are in front of
-    # all bodies.
-    # It could make sense in this case to empty the body list, but the rings
-    # are sometimes transparent and we want to be able to handle things like
-    # Pan and Daphnis embedded in the rings.
-    entirely_rings = False
-    has_df_rings = False
-    if not np.any(main_rings_radii.mask): # All radii valid
-        has_df_rings = True
-        found_front_body = False
-        if len(large_bodies_by_range) > 0:
-            inv = large_bodies_by_range[0][1]
-            if inv['range'] < min_rings_dist:
-                found_front_body = True
-        if found_front_body:
-            logger.debug('Image is entirely rings but %s is in front',
-                         inv['name'])
-        else:
-            logger.debug('Image is entirely main rings')
-            entirely_rings = True
-            metadata['rings_only'] = True
-    else:
-        logger.debug('Image is not entirely main rings')
-        if not np.all(df_rings_radii.mask): # At least some radii valid
-            logger.debug('... but image has at least some rings between D and F')
-            has_df_rings = True
-
-    front_body_name = None
-    if len(large_bodies_by_range) > 0:
-        body_name, inv = large_bodies_by_range[0]
-        size = (inv['u_max']-inv['u_min'])*(inv['v_max']-inv['v_min']) 
-        if size >= offset_config['min_body_area']:
-            front_body_name = body_name
-            logger.debug('Front body %s is sufficiently large', 
-                         front_body_name)
-
-    if front_body_name in FUZZY_BODY_LIST:
-        front_body_name = None
-        logger.debug('... but front body %s is fuzzy', front_body_name)
-
-    entirely_body = False
-        
-    if front_body_name is not None:
-        # See if the front-most actually visible body takes up the entire image
-        set_obs_corner_bp(obs)    
-        corner_body_mask = (
-            obs.ext_corner_bp.where_intercepted(front_body_name).
-                mvals.filled(0))
-        if np.all(corner_body_mask):
-            inv = large_body_dict[front_body_name]
-            if np.any(rings_dist < inv['range']):
-                logger.info(
-                  'Image is covered by %s, which is hidden by rings', 
-                  front_body_name)
-                front_body_name = None
-                # In this case there's no point at all in still having a body
-                # list since the closest body fills the whole frame and is
-                # also hidden by the rings. There won't be anything to see or
-                # anything to navigate on. This should really only happen
-                # with Saturn.
-                large_bodies_by_range = []
-            else:
-                entirely_body = front_body_name
-                metadata['body_only'] = front_body_name
-                logger.info('Image is covered by %s, which is not occulted '+
-                            'by anything', front_body_name)
-
-    if entirely_body and len(large_bodies_by_range) != 1:
-        logger.warn('Something is very wrong - image is entirely %s but there '+
-                    'are additional bodies in the body list!', entirely_body)
-
-    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
 
 
+###############################
+# MAIN OFFSET ROUTINE HELPERS #
+###############################
+
+def _offset_stars(logger, obs, 
+                  extend_fov, 
+                  stars_config, 
+                  metadata, 
+                  create_overlay, 
+                  stars_show_streaks, 
+                  label_avoid_mask, 
+                  large_bodies_by_range, 
+                  has_df_rings):
                     ######################
                     # OFFSET USING STARS #
                     ######################
+    stars_only = len(large_bodies_by_range) == 0 and not has_df_rings
+    stars_metadata = stars_find_offset(obs, metadata['ra_dec_center_pred'], 
+                                       stars_only=stars_only, 
+                                       extend_fov=extend_fov, 
+                                       stars_config=stars_config)
+    metadata['stars_metadata'] = stars_metadata
+    stars_offset = stars_metadata['offset']
+    metadata['stars_offset'] = stars_offset
+    stars_confidence = stars_metadata['confidence']
+    metadata['stars_confidence'] = stars_confidence
+    stars_corr_psf_details = stars_metadata['corr_psf_details']
+    if stars_offset is None:
+        logger.info('Final star offset N/A')
+    else:
+        logger.info('Final star offset U,V %.2f,%.2f good stars %d', stars_offset[0], stars_offset[1], stars_metadata['num_good_stars'])
+    if create_overlay:
+    # Make the extended overlay with no offset because we shift the
+    # overlay later
+        stars_overlay, stars_overlay_text = stars_make_good_bad_overlay(obs, 
+            stars_metadata['full_star_list'], (0, 0), 
+            show_streaks=stars_show_streaks, 
+            extend_fov=extend_fov, 
+            label_avoid_mask=label_avoid_mask, 
+            stars_config=stars_config)
+        if label_avoid_mask is not None:
+            label_avoid_mask = np.logical_or(label_avoid_mask, 
+                stars_overlay_text)
     
-    #
-    # TRY TO FIND THE OFFSET USING STARS ONLY.
-    #    XXX EVEN IF STAR PHOTOMETRY FAILS, WE COULD COMBINE THE STAR MODEL 
-    #    XXX WITH LATER MODELS!
-    #
-
-    stars_offset = None
-    stars_confidence = 0.
-    stars_corr_psf_details = None
-    stars_metadata = None
+    return (stars_offset, stars_confidence, stars_corr_psf_details,
+            stars_metadata, label_avoid_mask, stars_overlay,
+            stars_overlay_text)
     
-    if (not entirely_body and
-        allow_stars and (not botsim_offset or create_overlay) and
-        not force_bootstrap_candidate):
-        stars_only = (len(large_bodies_by_range) == 0 and
-                      not has_df_rings)
-        stars_metadata = stars_find_offset(obs, metadata['ra_dec_center_pred'],
-                                           stars_only=stars_only,
-                                           extend_fov=extend_fov,
-                                           stars_config=stars_config)
-        metadata['stars_metadata'] = stars_metadata
-        stars_offset = stars_metadata['offset']
-        metadata['stars_offset'] = stars_offset
-        stars_confidence = stars_metadata['confidence']
-        metadata['stars_confidence'] = stars_confidence
-        stars_corr_psf_details = stars_metadata['corr_psf_details']
-        if stars_offset is None:
-            logger.info('Final star offset N/A')
-        else:
-            logger.info('Final star offset U,V %.2f,%.2f good stars %d', 
-                        stars_offset[0], stars_offset[1],
-                        stars_metadata['num_good_stars'])
-        if create_overlay:
-            # Make the extended overlay with no offset because we shift the 
-            # overlay later
-            stars_overlay, stars_overlay_text = stars_make_good_bad_overlay(
-                              obs,
-                              stars_metadata['full_star_list'], (0,0),
-                              show_streaks=stars_show_streaks,
-                              extend_fov=extend_fov,
-                              label_avoid_mask=label_avoid_mask,
-                              stars_config=stars_config)
-            if label_avoid_mask is not None:
-                label_avoid_mask = np.logical_or(label_avoid_mask, 
-                                                 stars_overlay_text)
 
-
-                    ######################
-                    # CREATE BODY MODELS #
-                    ######################
+def _offset_create_body_models(logger, obs, 
+                               extend_fov,
+                               bodies_config,
+                               bodies_metadata,
+                               create_overlay, 
+                               allow_saturn, 
+                               allow_moons, 
+                               bodies_cartographic_data, 
+                               label_avoid_mask,
+                               large_bodies_by_range, 
+                               rings_dist,
+                               entirely_body):
+    bodies_model_list = []
+    titan_body_metadata = None
     
-    #
-    # MAKE MODELS FOR THE BODIES IN THE IMAGE, EVEN THE FUZZY ONES
-    # (BECAUSE WE'LL WANT THEM IN THE OVERLAY LATER)
-    #
     if (allow_saturn or allow_moons):
         for body_name, inv in large_bodies_by_range:
             if body_name == 'SATURN' and not allow_saturn:
                 continue
             if body_name != 'SATURN' and not allow_moons:
-                continue
-            # If the whole image is a single unobstructed body, then
+                continue # If the whole image is a single unobstructed body, then
             # we will want to bootstrap later, so don't bother making
             # fancy models.
-            no_model = (entirely_body == body_name and
-                        (bodies_cartographic_data is None or
-                         body_name not in bodies_cartographic_data))
+            no_model = entirely_body == body_name and (bodies_cartographic_data is None or 
+                body_name not in bodies_cartographic_data)
             body_model, body_metadata, body_overlay_text = bodies_create_model(
-                    obs, body_name, inventory=inv,
-                    extend_fov=extend_fov,
-                    cartographic_data=bodies_cartographic_data,
-                    always_create_model=create_overlay,
-                    label_avoid_mask=label_avoid_mask,
-                    bodies_config=bodies_config,
-                    no_model=no_model)
+                obs, body_name, inventory=inv, 
+                extend_fov=extend_fov, 
+                cartographic_data=bodies_cartographic_data, 
+                always_create_model=create_overlay, 
+                label_avoid_mask=label_avoid_mask, 
+                bodies_config=bodies_config, 
+                no_model=no_model)
             bodies_metadata[body_name] = body_metadata
             if body_model is not None:
-                bodies_model_list.append((body_model, body_metadata, 
-                                          body_overlay_text))
+                bodies_model_list.append((body_model, body_metadata, body_overlay_text))
             if label_avoid_mask is not None:
-                label_avoid_mask = np.logical_or(label_avoid_mask,
-                                                 body_overlay_text)
-
-    # We have all the body models and all the rings information. Go through
-    # the bodies and see if they are partially occulted by anything else
-    # and mark appropriately.
-    # Note that this includes being occulted by a moon or rings that will
-    # actually be outside the image once the final offset is found. It's
-    # a pain to get around this behavior, and it's unlikely to ever matter.
-    for body_idx in xrange(len(bodies_model_list)-1, -1, -1):
-        # Start with the backmost body and work forward
-        (body_model, body_metadata, 
-         body_overlay_text) = bodies_model_list[body_idx]
+                label_avoid_mask = np.logical_or(label_avoid_mask, 
+                    body_overlay_text)
+    
+# We have all the body models and all the rings information. Go through
+# the bodies and see if they are partially occulted by anything else
+# and mark appropriately.
+# Note that this includes being occulted by a moon or rings that will
+# actually be outside the image once the final offset is found. It's
+# a pain to get around this behavior, and it's unlikely to ever matter.
+    for body_idx in xrange(len(bodies_model_list)-1, -1, -1): # Start with the backmost body and work forward
+        body_model, body_metadata, body_overlay_text = bodies_model_list[body_idx]
         body_metadata['occulted_by'] = None
         if body_idx > 0: # Not the frontmost body
-            # See if any bodies in front occult this body
+    # See if any bodies in front occult this body
             for body_idx2 in xrange(body_idx):
-                (body_model2, body_metadata2, 
-                 body_overlay_text2) = bodies_model_list[body_idx2]
+                body_model2, body_metadata2, body_overlay_text2 = bodies_model_list[body_idx2]
                 if np.any(np.logical_and(body_model != 0, body_model2 != 0)):
                     if body_metadata['occulted_by'] is None:
                         body_metadata['occulted_by'] = []
                     body_metadata['occulted_by'].append(body_metadata2['body_name'])
+            
             # See if the rings occult this body
             body_rings_dist = rings_dist[body_model != 0]
             inv = body_metadata['inventory']
@@ -804,37 +362,14 @@ def master_find_offset(obs,
                     body_metadata['occulted_by'] = []
                 body_metadata['occulted_by'].append('RINGS')
         if body_metadata['occulted_by'] is not None:
-            logger.info('%s is occulted by %s', body_metadata['body_name'],
-                        str(body_metadata['occulted_by']))                
+            logger.info('%s is occulted by %s', body_metadata['body_name'], str(body_metadata['occulted_by']))
     
     if (entirely_body and 
         bodies_metadata[entirely_body]['occulted_by'] is not None):
-        logger.warn('Something is very wrong - Image marked as entirely body '+
-                    'but body is occulted by something!')
-        logger.debug('Marking as not entirely body %s due to occulting body',
-                     entirely_body)
+        logger.warn('Something is very wrong - Image marked as entirely body ' + 'but body is occulted by something!')
+        logger.debug('Marking as not entirely body %s due to occulting body', entirely_body)
         entirely_body = None
- 
-    if entirely_body:
-        if (botsim_offset is None and
-            entirely_body not in FUZZY_BODY_LIST and
-            (bodies_cartographic_data is None or
-             entirely_body not in bodies_cartographic_data)):
-            # Nothing we can do here except bootstrap
-            metadata['bootstrap_candidate'] = True
-            logger.info('Single body without cartographic data - '+
-                        'bootstrap candidate and returning')
-            # Go through and update all the body metadata
-            for body_name in bodies_metadata:
-                if body_name in bootstrap_config['body_list']: 
-                    bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                              None, 
-                                              bodies_config=bodies_config)
-            metadata['end_time'] = time.time()
-            return metadata
-
     bad_body = False
-    
     navigable_bodies_model_list = []
     for body_model, body_metadata, body_text in bodies_model_list:
         body_name = body_metadata['body_name']
@@ -843,32 +378,28 @@ def master_find_offset(obs,
             # later to create the overlay
             logger.debug('Model: %s is fuzzy - ignoring', body_name)
             continue
-        if body_name == 'TITAN':
-            # Titan can't be used for primary model navigation
+        if body_name == 'TITAN': # Titan can't be used for primary model navigation
             logger.debug('Model: %s - ignoring', body_name)
             titan_body_metadata = body_metadata
             continue
-        navigable_bodies_model_list.append(
-                           (body_model, body_metadata, body_text))
-        if ((bodies_cartographic_data is None or
-             body_name not in bodies_cartographic_data) and
-            body_metadata['size_ok'] and
-            (not body_metadata['curvature_ok'] or
-             not body_metadata['limb_ok'])):
+        navigable_bodies_model_list.append((body_model, body_metadata, body_text))
+        if ((bodies_cartographic_data is None or 
+                body_name not in bodies_cartographic_data) and 
+            body_metadata['size_ok'] and 
+            (not body_metadata['curvature_ok'] or 
+                not body_metadata['limb_ok'])):
             bad_body = True
-
-    # See if Saturn is behind everything and takes up the whole image. This
-    # means the background will be bright, not black, which affects navigation
-    # using bodies with bad limbs later (since the limbs are now actually
-    # visible).
+    
+# See if Saturn is behind everything and takes up the whole image. This
+# means the background will be bright, not black, which affects navigation
+# using bodies with bad limbs later (since the limbs are now actually
+# visible).
     saturn_behind_body_model = None
     saturn_behind_body_metadata = None
-    if (len(large_bodies_by_range) > 1 and         # More than just Saturn
-        large_bodies_by_range[-1][0] == 'SATURN'): # Saturn in back
-        set_obs_corner_bp(obs)    
-        corner_body_mask = (
-            obs.ext_corner_bp.where_intercepted('SATURN').
-                mvals.filled(0))
+    if (len(large_bodies_by_range) > 1 # More than just Saturn
+        and large_bodies_by_range[-1][0] == 'SATURN'): # Saturn in back
+        set_obs_corner_bp(obs)
+        corner_body_mask = obs.ext_corner_bp.where_intercepted('SATURN').mvals.filled(0)
         if np.all(corner_body_mask):
             for body_model, body_metadata, body_text in navigable_bodies_model_list:
                 body_name = body_metadata['body_name']
@@ -876,49 +407,24 @@ def master_find_offset(obs,
                     saturn_behind_body_model = body_model
                     saturn_behind_body_metadata = body_metadata
                     break
-        
-
-                    #####################
-                    # CREATE RING MODEL #
-                    #####################
     
-    if allow_rings:
-        rings_model, rings_metadata, rings_overlay_text = rings_create_model(
-                                         obs, extend_fov=extend_fov,
-                                         always_create_model=True,
-                                         label_avoid_mask=label_avoid_mask,
-                                         bodies_model_list=bodies_model_list,
-                                         rings_config=rings_config)
-        metadata['rings_metadata'] = rings_metadata
-        if label_avoid_mask is not None:
-            label_avoid_mask = np.logical_or(label_avoid_mask,
-                                             rings_overlay_text)
+    return (label_avoid_mask, bodies_model_list, navigable_bodies_model_list, 
+            saturn_behind_body_model, titan_body_metadata, bad_body)
 
-    rings_curvature_ok = (rings_metadata is not None and
-                          rings_metadata['curvature_ok'])
-    rings_features_ok = (rings_metadata is not None and
-                         rings_metadata['fiducial_features_ok'])
-    rings_any_features = (rings_metadata is not None and
-                          len(rings_metadata['fiducial_features'])>0)
-    rings_features_blurred = None
-    if (rings_metadata is not None and 
-        rings_metadata['fiducial_blur'] is not None and
-        rings_metadata['fiducial_blur'] != 1.):
-        rings_features_blurred = rings_metadata['fiducial_blur']
-    
-    if force_bootstrap_candidate:
-        metadata['bootstrap_candidate'] = True
-        logger.info('Forcing bootstrap candidate and returning')
-        # Go through and update all the body metadata
-        for body_name in bodies_metadata:
-            if body_name in bootstrap_config['body_list']: 
-                bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                          None, 
-                                          bodies_config=bodies_config)
-        metadata['end_time'] = time.time()
-        return metadata
-        
-        
+def _offset_rings_bodies_model(logger, obs, 
+                               extend_fov, 
+                               search_size_max_u, search_size_max_v,
+                               offset_config, rings_config,
+                               bodies_cartographic_data,
+                               metadata,
+                               rings_model,
+                               rings_metadata,
+                               rings_curvature_ok,
+                               rings_features_ok,
+                               rings_any_features,
+                               rings_features_blurred,
+                               navigable_bodies_model_list,
+                               saturn_behind_body_model):
                 #####################################################
                 # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET #
                 #####################################################
@@ -1165,11 +671,6 @@ def master_find_offset(obs,
          rings_allow_blur,
          allow_saturn_behind) = model_phase_info
 
-        if botsim_offset is not None:
-            # This is inside the loop simply because I don't want to add 
-            # another level of indentation!
-            break
-        
         if bodies_allow_blur and not bodies_allow_blur:
             # If no body blurring is required, then skip over assumptions that
             # include body blurring
@@ -1487,6 +988,609 @@ def master_find_offset(obs,
         if model_corr_psf_details is not None:
             corr_log_sigma(logger, model_corr_psf_details)
 
+    return model_offset, model_confidence, model_corr_psf_details
+
+
+#==============================================================================
+#    
+# THE MASTER ENTRY POINT FOR OFFSET FINDING
+#
+#==============================================================================
+
+def master_find_offset(obs, 
+                       offset_config=None,
+                       create_overlay=False,
+                   
+                       allow_stars=True,
+                           stars_show_streaks=False,
+                           stars_config=None,
+                        
+                       allow_saturn=True,
+                       allow_moons=True,
+                           bodies_cartographic_data=None,
+                           bodies_config=None,
+                           titan_config=None,
+                   
+                       allow_rings=True,
+                           rings_config=None,
+
+                       bootstrap_config=None,
+                   
+                       botsim_offset=None,
+                       force_bootstrap_candidate=False,
+                   
+                       bootstrapped=False):
+    """Primary entry point for offset finding.
+    
+    Inputs:
+        obs                      The Observation.
+        offset_config            Config parameters for master offset.
+        create_overlay           True to create a visual overlay.
+
+        allow_stars              True to allow finding the offset based on
+                                 stars.
+        stars_show_streaks       Include streaks in the overlay.
+        stars_config             Config parameters for stars.
+
+        allow_saturn             True to allow finding the offset based on
+                                 Saturn.
+        allow_moons              True to allow finding the offset based on
+                                 moons.
+        bodies_cartographic_data The metadata to use for cartographic
+                                 surfaces (see cb_bodies).
+        bodies_config            Config parameters for bodies.
+        titan_config             Config parameters for Titan navigation.
+
+        allow_rings              True to allow finding the offset based on
+                                 rings.
+        rings_config             Config parameters for rings.
+        bootstrap_config         Config parameters for bootstrapping.
+
+        botsim_offset            None to find the offset automatically or
+                                 a tuple (U,V) to force the result offset.
+                                 This is useful for creating an overlay 
+                                 with a known offset, such as when processing
+                                 pairs of BOTSIM images.
+        force_bootstrap_candidate  True to force this image to be a bootstrap
+                                 candidate even if we really could find a
+                                 viable offset.
+                                 
+        bootstrapped             True if this offset pass is the result of
+                                 bootstrapping.
+                                 
+    Returns:
+        metadata           A dictionary containing information about the
+                           offset result:
+
+          Data about the image:
+
+            'full_path'        The full path of the source image.
+            'camera'           The name of the camera: 'NAC' or 'WAC'.
+            'filter1'          The names of the filters used.
+            'filter2'
+            'image_shape'      A tuple indicating the shape (in pixels) of the
+                               image.
+            'midtime'          The midtime of the observation.
+            'scet_midtime'     The SCET midtime of the observation.
+            'texp'             The exposure duration of the observation.
+            'description'      The DESCRIPTION field from the VICAR header.
+            'ra_dec_corner_orig'
+                               A tuple (ra_min, ra_max, dec_min, dec_max)
+                               giving the corners of the FOV-extended image
+                               (apparent) with the original SPICE navigation at
+                               the image midtime.
+            'ra_dec_center_pred'
+                               A tuple (ra,dec,dra/dt,ddec/dt) for the center 
+                               of the image (apparent) with the original SPICE 
+                               predicted kernels at the image midtime.
+            'ra_dec_center_orig'
+                               A tuple (ra,dec) for the center of the image
+                               (apparent) with the original SPICE navigation
+                               at the image midtime.
+            'ra_dec_center_offset'
+                               A tuple (ra,dec) for the center of the image
+                               (apparent) with the new navigation at the
+                               image midtime.
+
+          Data about the offset process:
+          
+            'status'           'ok' if the process went to completion (whether
+                               or not an offset was found). Other values are
+                               set by external drivers.
+            'offset'           The final (U,V) offset. None if offset finding
+                               failed.
+            'corr_psf_details' The details of the 2-D Gaussian fit to the 
+                               correlation peak for the final offset.
+            'confidence'       The confidence 0-1 of the final offset.
+            'model_confidence' The confidence 0-1 of the model offset.
+            'model_blur_amount' The amount the model was blurred before 
+                               correlating.
+            'model_override_bodies_curvature'
+            'model_override_bodies_limb'
+            'model_override_rings_curvature'
+            'model_override_fiducial_features'
+            'model_rings_blur'
+            'model_bodies_blur'
+                               The assumptions that were broken in order to
+                               create the model offset, if any.
+            'model_rings_radial_gradient'
+                               The direction of the rings radial gradient
+                               if the model offset was projected onto
+                               the radial direction vector due to insufficient
+                               ring curvature. None otherwise.
+            'stars_offset'     The offset from star matching. None is star
+                               matching failed.
+            'model_offset'     The offset from model (rings and bodies) 
+                               matching. None is model matching failed.
+            'model_corr_psf_details'
+                               The details of the 2-D Gaussian fit to the 
+                               correlation peak for the model offset.
+            'titan_offset'     The offset from Titan photometric navigation.
+                               None if navigation failed.
+            'large_bodies'     A list of the large bodies present in the image
+                               sorted in ascending order by range.
+            'body_only'        False if the image doesn't consist entirely of
+                               a single body and nothing else.
+                               Otherwise the name of the body.
+            'rings_only'       True if the image consists entirely of the main
+                               rings and nothing else.
+            'model_contents'   A list of objects used to create the
+                               non-star model: 'RINGS' and body names.
+                               If the contents is only "TITAN", then the
+                               special photometry-based Titan navigation
+                               was performed.
+            'offset_winner'    Which method won for the final offset:
+                                   None, STARS, MODEL, or TITAN.
+            'stars_metadata'   The metadata from star matching. None if star
+                               matching not performed. The star-matching offset
+                               is included here.
+            'bodies_metadata'  A dictionary containing the metadata for each
+                               body in the large_bodies list.
+            'rings_metadata'   The metadata from ring modeling. None if ring
+                               modeling not performed.
+            'secondary_corr_ok' True if secondary model correlation was
+                               successful. None if it wasn't performed.
+            'offset_path'      The path to the offset filename - filled in by
+                               the top-level program.
+            'start_time'       The start time (s) of the entire offset process.
+            'end_time'         The end time (s) of the entire offset process.
+            
+          Data for bootstrapping:
+            
+            'bootstrap_candidate'
+                               True if the image is a good candidate for 
+                               future bootstrapping attempts.
+            'bootstrapped'     True if the image was navigated using 
+                               bootstrapping.
+            'bootstrap_status' A string describing attempts at bootstrapping:
+                                   None        Bootstrapping not attempted
+                               
+          Large data that might be too big to store in an offset file:
+            
+            'ext_data'         The original obs.data extended by the maximum
+                               search size.
+            'stars_overlay'    The 2-D stars overlay (no text).
+            'stars_overlay_text'
+                               The 2-D stars overlay (text only).
+            'bodies_overlay'   The 2-D bodies overlay (no text).
+            'bodies_overlay_text'
+                               The 2-D bodies overlay (text only).
+            'rings_overlay'    The 2-D rings overlay (no text).
+            'rings_overlay_text'
+                               The 2-D rings overlay (text only).
+            'overlay'          The visual overlay (if create_overlay is True).
+            'ext_overlay'      The visual overlay extended by the maximum
+                               search size (if create_overlay is True).
+            
+    """
+    
+                ##################
+                # INITIALIZATION #
+                ##################
+    
+    start_time = time.time()
+    
+    logger = logging.getLogger(_LOGGING_NAME+'.master_find_offset')
+    
+    logger.info('Processing %s', obs.full_path)
+    logger.info('Taken %s / %s / Size %d x %d / TEXP %.3f / %s+%s / '+
+                'SAMPLING %s / GAIN %d',
+                cspice.et2utc(obs.midtime, 'C', 0),
+                obs.detector, obs.data.shape[1], obs.data.shape[0], obs.texp,
+                obs.filter1, obs.filter2, obs.sampling,
+                obs.gain_mode)
+    logger.debug('allow_stars %d, allow_saturn %d, allow_moons %d, '+
+                 'allow_rings %d',
+                 allow_stars, allow_saturn, allow_moons, allow_rings)
+    if botsim_offset is not None:
+        logger.info('BOTSIM offset U,V %d,%d', botsim_offset[0],
+                    botsim_offset[1])
+    if bodies_cartographic_data is None:
+        logger.info('No cartographic data provided')
+    else:
+        for body_name in sorted(bodies_cartographic_data.keys()):
+            logger.info('Cartographic data provided for: %s = %s',
+                         body_name.upper(),
+                         bodies_cartographic_data[body_name]['full_path'])
+        
+    if offset_config is None:
+        offset_config = OFFSET_DEFAULT_CONFIG
+        
+    if bootstrap_config is None:
+        bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
+        
+    extend_fov = MAX_POINTING_ERROR[obs.data.shape, obs.detector]
+    search_size_max_u, search_size_max_v = extend_fov
+    
+    set_obs_ext_data(obs, extend_fov)
+    obs.ext_data = image_interpolate_missing_stripes(obs.ext_data)
+    set_obs_ext_corner_bp(obs, extend_fov)
+    set_obs_ext_bp(obs, extend_fov)
+    
+    rings_model = None
+    rings_overlay_text = None
+    titan_body_metadata = None
+    final_model = None
+    
+    if create_overlay:
+        color_overlay = np.zeros(obs.ext_data.shape + (3,), dtype=np.uint8)
+        label_avoid_mask = np.zeros(obs.ext_data.shape, dtype=np.bool)
+    else:
+        color_overlay = None
+        label_avoid_mask = None
+    stars_overlay = None
+    stars_overlay_text = None
+    bodies_overlay_text = None
+    rings_overlay_text = None
+        
+    offset = None
+    
+    # Initialize the metadata to at least have something for each key
+    metadata = {}
+    metadata['status'] = 'ok'
+    # Image
+    metadata['full_path'] = obs.full_path
+    metadata['camera'] = obs.detector
+    metadata['filter1'] = obs.filter1
+    metadata['filter2'] = obs.filter2
+    metadata['image_shape'] = tuple(obs.data.shape)
+    metadata['midtime'] = obs.midtime
+    scet_start = float(obs.dict['SPACECRAFT_CLOCK_START_COUNT'])
+    scet_end = float(obs.dict['SPACECRAFT_CLOCK_STOP_COUNT'])
+    metadata['scet_midtime'] = (scet_start+scet_end)/2
+    metadata['texp'] = obs.texp
+    metadata['description'] = obs.dict['DESCRIPTION']
+    logger.info('Image description: %s', metadata['description'])
+    metadata['ra_dec_corner_orig'] = compute_ra_dec_limits(
+                                           obs, extend_fov=extend_fov)
+    set_obs_center_bp(obs)
+    ra = obs.center_bp.right_ascension()
+    dec = obs.center_bp.declination()
+    metadata['ra_dec_center_orig'] = (ra.vals,dec.vals)
+    pred_metadata = file_read_predicted_metadata(obs.full_path)
+    if pred_metadata is None:
+        metadata['ra_dec_center_pred'] = None
+        logger.warn('No predicted kernel information available')
+    else:
+        metadata['ra_dec_center_pred'] = (
+                  pred_metadata['ra_center_midtime'],
+                  pred_metadata['dec_center_midtime'],
+                  pred_metadata['dra_dt'],
+                  pred_metadata['ddec_dt'])
+    metadata['ra_dec_center_offset'] = None
+    # Offset process
+    metadata['start_time'] = start_time
+    metadata['end_time'] = None
+    metadata['offset'] = None
+    metadata['model_corr_psf_details'] = None
+    metadata['confidence'] = 0.
+    metadata['model_override_bodies_curvature'] = None
+    metadata['model_override_bodies_limb'] = None
+    metadata['model_override_rings_curvature'] = None
+    metadata['model_override_fiducial_features'] = None
+    metadata['model_rings_blur'] = None
+    metadata['model_bodies_blur'] = None
+    metadata['model_rings_radial_gradient'] = None
+    metadata['stars_offset'] = None
+    metadata['stars_confidence'] = 0.
+    metadata['model_offset'] = None
+    metadata['model_confidence'] = 0.
+    metadata['model_blur_amount'] = None
+    metadata['titan_offset'] = None
+    metadata['titan_confidence'] = 0.
+    metadata['body_only'] = False
+    metadata['rings_only'] = False
+    metadata['model_contents'] = []
+    metadata['offset_winner'] = None
+    metadata['stars_metadata'] = None
+    bodies_metadata = {}
+    metadata['bodies_metadata'] = {}
+    metadata['rings_metadata'] = None
+    metadata['titan_metadata'] = None
+    metadata['secondary_corr_ok'] = None
+    # Large
+    metadata['ext_data'] = obs.ext_data
+    metadata['ext_overlay'] = color_overlay
+    if create_overlay:
+        metadata['overlay'] = unpad_image(color_overlay, extend_fov)
+    else:
+        metadata['overlay'] = None
+    metadata['stars_overlay'] = None
+    metadata['stars_overlay_text'] = None
+    metadata['bodies_overlay'] = None
+    metadata['bodies_overlay_text'] = None
+    metadata['rings_overlay'] = None
+    metadata['rings_overlay_text'] = None
+    # Bootstrapping
+    metadata['bootstrap_candidate'] = False
+    metadata['bootstrapped'] = bootstrapped
+    metadata['bootstrap_status'] = None
+    
+    
+                ###########################
+                # IMAGE CONTENTS ANALYSIS #
+                ###########################
+    
+    #
+    # FIGURE OUT WHAT KINDS OF THINGS ARE IN THIS IMAGE
+    #
+    # - Bodies; a single body completely covers the image
+    # - Rings; the main rings completely cover the image
+    #
+
+    # Always compute the inventory so we can see if the entire image is a
+    # closeup of a single body and so the metadata has this information
+    
+    large_body_dict = obs.inventory(LARGE_BODY_LIST, return_type='full')
+    # Make a list sorted by range, with the closest body first
+    large_bodies_by_range = [(x, large_body_dict[x]) for x in large_body_dict]
+    large_bodies_by_range.sort(key=lambda x: x[1]['range'])
+
+    logger.info('Large body inventory by increasing range: %s',
+                 [x[0] for x in large_bodies_by_range])
+
+    # Now find the ring radii and distance for the main rings
+    # We use this in various places below
+    rings_radii = obs.ext_bp.ring_radius('saturn:ring')
+    main_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS)
+    main_rings_radii = main_rings_radii.mask_where(rings_radii > 
+                                                   RINGS_MAX_RADIUS)
+    main_rings_radii = main_rings_radii.mvals
+    df_rings_radii = rings_radii.mask_where(rings_radii < RINGS_MIN_RADIUS_D)
+    df_rings_radii = df_rings_radii.mask_where(rings_radii > 
+                                               RINGS_MAX_RADIUS_F)
+    df_rings_radii = df_rings_radii.mvals
+
+    rings_dist = obs.ext_bp.distance('saturn:ring')
+    rings_dist = rings_dist.mask_where(main_rings_radii.mask).mvals
+    min_rings_dist = np.min(rings_dist)
+
+    # See if the main rings take up the entire image AND are in front of
+    # all bodies.
+    # It could make sense in this case to empty the body list, but the rings
+    # are sometimes transparent and we want to be able to handle things like
+    # Pan and Daphnis embedded in the rings.
+    entirely_rings = False
+    has_df_rings = False
+    if not np.any(main_rings_radii.mask): # All radii valid
+        has_df_rings = True
+        found_front_body = False
+        if len(large_bodies_by_range) > 0:
+            inv = large_bodies_by_range[0][1]
+            if inv['range'] < min_rings_dist:
+                found_front_body = True
+        if found_front_body:
+            logger.debug('Image is entirely rings but %s is in front',
+                         inv['name'])
+        else:
+            logger.debug('Image is entirely main rings')
+            entirely_rings = True
+            metadata['rings_only'] = True
+    else:
+        logger.debug('Image is not entirely main rings')
+        if not np.all(df_rings_radii.mask): # At least some radii valid
+            logger.debug('... but image has at least some rings between D and F')
+            has_df_rings = True
+
+    front_body_name = None
+    if len(large_bodies_by_range) > 0:
+        body_name, inv = large_bodies_by_range[0]
+        size = (inv['u_max']-inv['u_min'])*(inv['v_max']-inv['v_min']) 
+        if size >= offset_config['min_body_area']:
+            front_body_name = body_name
+            logger.debug('Front body %s is sufficiently large', 
+                         front_body_name)
+
+    if front_body_name in FUZZY_BODY_LIST:
+        front_body_name = None
+        logger.debug('... but front body %s is fuzzy', front_body_name)
+
+    entirely_body = False
+        
+    if front_body_name is not None:
+        # See if the front-most actually visible body takes up the entire image
+        set_obs_corner_bp(obs)    
+        corner_body_mask = (
+            obs.ext_corner_bp.where_intercepted(front_body_name).
+                mvals.filled(0))
+        if np.all(corner_body_mask):
+            inv = large_body_dict[front_body_name]
+            if np.any(rings_dist < inv['range']):
+                logger.info(
+                  'Image is covered by %s, which is hidden by rings', 
+                  front_body_name)
+                front_body_name = None
+                # In this case there's no point at all in still having a body
+                # list since the closest body fills the whole frame and is
+                # also hidden by the rings. There won't be anything to see or
+                # anything to navigate on. This should really only happen
+                # with Saturn.
+                large_bodies_by_range = []
+            else:
+                entirely_body = front_body_name
+                metadata['body_only'] = front_body_name
+                logger.info('Image is covered by %s, which is not occulted '+
+                            'by anything', front_body_name)
+
+    if entirely_body and len(large_bodies_by_range) != 1:
+        logger.warn('Something is very wrong - image is entirely %s but there '+
+                    'are additional bodies in the body list!', entirely_body)
+
+    metadata['large_bodies'] = [x[0] for x in large_bodies_by_range]
+
+
+                    ######################
+                    # OFFSET USING STARS #
+                    ######################
+    
+    #
+    # TRY TO FIND THE OFFSET USING STARS ONLY.
+    #    XXX EVEN IF STAR PHOTOMETRY FAILS, WE COULD COMBINE THE STAR MODEL 
+    #    XXX WITH LATER MODELS!
+    #
+
+    stars_offset = None
+    stars_confidence = 0.
+    stars_corr_psf_details = None
+    stars_metadata = None
+    stars_overlay = None
+    stars_overlay_text = None
+
+    if (not entirely_body and 
+        allow_stars and (not botsim_offset or create_overlay) and 
+        not force_bootstrap_candidate):
+        (stars_offset,
+         stars_confidence,
+         stars_corr_psf_details,
+         stars_metadata, 
+         label_avoid_mask,
+         stars_overlay, 
+         stars_overlay_text) = _offset_stars(logger, obs, 
+                                             extend_fov, 
+                                             stars_config, 
+                                             metadata, 
+                                             create_overlay, 
+                                             stars_show_streaks, 
+                                             label_avoid_mask, 
+                                             large_bodies_by_range, 
+                                             has_df_rings)
+
+
+                    ######################
+                    # CREATE BODY MODELS #
+                    ######################
+    
+    #
+    # MAKE MODELS FOR THE BODIES IN THE IMAGE, EVEN THE FUZZY ONES
+    # (BECAUSE WE'LL WANT THEM IN THE OVERLAY LATER)
+    #
+    (label_avoid_mask, 
+     bodies_model_list,
+     navigable_bodies_model_list, 
+     saturn_behind_body_model, 
+     titan_body_metadata, 
+     bad_body) = _offset_create_body_models(logger, obs, 
+                               extend_fov,
+                               bodies_config,
+                               bodies_metadata,
+                               create_overlay, 
+                               allow_saturn, 
+                               allow_moons, 
+                               bodies_cartographic_data, 
+                               label_avoid_mask,
+                               large_bodies_by_range, 
+                               rings_dist,
+                               entirely_body)
+
+    if entirely_body:
+        if (botsim_offset is None and
+            entirely_body not in FUZZY_BODY_LIST and
+            (bodies_cartographic_data is None or
+             entirely_body not in bodies_cartographic_data)):
+            # Nothing we can do here except bootstrap
+            metadata['bootstrap_candidate'] = True
+            logger.info('Single body without cartographic data - '+
+                        'bootstrap candidate and returning')
+            # Go through and update all the body metadata
+            for body_name in bodies_metadata:
+                if body_name in bootstrap_config['body_list']: 
+                    bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                              None, 
+                                              bodies_config=bodies_config)
+            metadata['end_time'] = time.time()
+            return metadata
+
+
+                    #####################
+                    # CREATE RING MODEL #
+                    #####################
+    
+    if allow_rings:
+        rings_model, rings_metadata, rings_overlay_text = rings_create_model(
+                                         obs, extend_fov=extend_fov,
+                                         always_create_model=True,
+                                         label_avoid_mask=label_avoid_mask,
+                                         bodies_model_list=bodies_model_list,
+                                         rings_config=rings_config)
+        metadata['rings_metadata'] = rings_metadata
+        if label_avoid_mask is not None:
+            label_avoid_mask = np.logical_or(label_avoid_mask,
+                                             rings_overlay_text)
+
+    rings_curvature_ok = (rings_metadata is not None and
+                          rings_metadata['curvature_ok'])
+    rings_features_ok = (rings_metadata is not None and
+                         rings_metadata['fiducial_features_ok'])
+    rings_any_features = (rings_metadata is not None and
+                          len(rings_metadata['fiducial_features'])>0)
+    rings_features_blurred = None
+    if (rings_metadata is not None and 
+        rings_metadata['fiducial_blur'] is not None and
+        rings_metadata['fiducial_blur'] != 1.):
+        rings_features_blurred = rings_metadata['fiducial_blur']
+    
+    if force_bootstrap_candidate:
+        metadata['bootstrap_candidate'] = True
+        logger.info('Forcing bootstrap candidate and returning')
+        # Go through and update all the body metadata
+        for body_name in bodies_metadata:
+            if body_name in bootstrap_config['body_list']: 
+                bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                          None, 
+                                          bodies_config=bodies_config)
+        metadata['end_time'] = time.time()
+        return metadata
+        
+        
+                #####################################################
+                # MERGE ALL THE MODELS TOGETHER AND FIND THE OFFSET #
+                #####################################################
+
+    model_offset = None
+    model_confidence = 0.
+    model_corr_psf_details = None
+    
+    if botsim_offset is None:
+        (model_offset, 
+         model_confidence, 
+         model_corr_psf_details) = _offset_rings_bodies_model(
+                                                  logger, obs, 
+                                                  extend_fov, 
+                                                  search_size_max_u, 
+                                                  search_size_max_v,
+                                                  offset_config,
+                                                  rings_config,
+                                                  bodies_cartographic_data,
+                                                  metadata,
+                                                  rings_model,
+                                                  rings_metadata,
+                                                  rings_curvature_ok,
+                                                  rings_features_ok,
+                                                  rings_any_features,
+                                                  rings_features_blurred,
+                                                  navigable_bodies_model_list,
+                                                  saturn_behind_body_model)
+ 
 
                 #####################################
                 # DEAL WITH TITAN AS A SPECIAL CASE #
@@ -1743,6 +1847,7 @@ def master_find_offset(obs,
                 metadata['end_time']-metadata['start_time'])
     
     return metadata
+
 
 def _scale_image(img, blackpoint, whitepoint, gamma):
     """Scale a 2-D image based on blackpoint, whitepoint, and gamma.
