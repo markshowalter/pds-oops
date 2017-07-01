@@ -123,7 +123,7 @@ if AWS_ON_EC2_INSTANCE:
 #
 ###############################################################################
 
-def collect_cmd_line(image_path, body_name):
+def collect_cmd_line(image_path, body_name, offset):
     ret = []
     ret += ['--is-subprocess']
     ret += ['--main-logfile-level', 'none']
@@ -134,7 +134,9 @@ def collect_cmd_line(image_path, body_name):
     if arguments.profile:
         ret += ['--profile']
     if arguments.offset is not None and arguments.offset != '':
-        ret += ['--offset', arguments.offset]
+        offset = arguments.offset
+    if offset is not None:
+        ret += ['--offset', '"'+offset.replace(',', ';')+'"']
     ret += ['--no-update-indexes']
     if arguments.retrieve_from_pds:
         ret += ['--retrieve-from-pds']
@@ -240,7 +242,8 @@ def reproject_image(image_path, body_name, bootstrap_pref, sqs_handle=None,
     
     if arguments.max_subprocesses:
         run_and_maybe_wait([PYTHON_EXE, CBMAIN_REPROJECT_BODY_PY] + 
-                           collect_cmd_line(image_path, body_name), 
+                           collect_cmd_line(image_path, body_name, 
+                                            force_offset), 
                            image_path,
                            body_name, sqs_handle) 
         return True
@@ -520,6 +523,8 @@ if arguments.display_reprojection:
     root = tk.Tk()
     root.withdraw()
 
+iss.initialize(planets=(6,))
+
 main_log_path = arguments.main_logfile
 main_log_path_local = main_log_path
 if (arguments.results_in_s3 and
@@ -562,6 +567,9 @@ if arguments.use_sqs:
 if body_name is None and not arguments.use_sqs:
     main_logger.error('No body name specified')
     exit_processing()
+
+if arguments.offset is not None and arguments.offset != '':
+    arguments.offset = arguments.offset.replace('"','').replace(';',',')
     
 main_logger.info('**********************************')
 main_logger.info('*** BEGINNING REPROJECT BODIES ***')
