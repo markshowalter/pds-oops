@@ -79,46 +79,6 @@ def simple_filter_name_metadata(metadata, consolidate_pol=False):
     return _simple_filter_name_helper(metadata['filter1'], metadata['filter2'],
                                       consolidate_pol=consolidate_pol)
 
-def read_url(url):
-    try:
-        url_fp = urllib2.urlopen(url)
-        ret = url_fp.read()
-        url_fp.close()
-        return ret
-    except urllib2.HTTPError, e:
-        return None
-    except urllib2.URLError, e:
-        return None
-
-def copy_url_to_file(url, file_path):
-    try:
-        file_fp = open(file_path, 'wb')
-        url_fp = urllib2.urlopen(url)
-        file_fp.write(url_fp.read())
-        url_fp.close()
-        file_fp.close()
-    except urllib2.HTTPError, e:
-        return 'Failed to retrieve %s: %s' % (url, e)
-    except urllib2.URLError, e:
-        return 'Failed to retrieve %s: %s' % (url, e)
-    return None
-
-def update_index_files_from_pds(logger):
-    logger.info('Downloading PDS index files')
-    index_no = 2001
-    while True:
-        index_file = file_clean_join(COISS_2XXX_DERIVED_ROOT,
-                                     'COISS_%04d-index.tab' % index_no)
-        if not os.path.exists(index_file):
-            url = PDS_RINGS_VOLUMES_ROOT + (
-                            'COISS_%04d/index/index.tab' % index_no)
-            logger.debug('Copying %s', url)
-            err = copy_url_to_file(url, index_file)
-            if err:
-                logger.info(err)
-                return
-        index_no += 1
-
 def current_git_version():
     try:
         return subprocess.check_output(['git', 'describe', '--long', '--dirty', 

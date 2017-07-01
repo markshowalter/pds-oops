@@ -120,8 +120,11 @@ def check_add_one_image(image_path, bootstrap_config):
     body_metadata['filter1'] = offset_metadata['filter1']
     body_metadata['filter2'] = offset_metadata['filter2']
     body_metadata['offset'] = offset_metadata['offset']
-    body_metadata['model_corr_psf_details'] = offset_metadata[
-                                                  'model_corr_psf_details']
+    if 'model_corr_psf_details' in body_metadata:
+        body_metadata['model_corr_psf_details'] = offset_metadata[
+                                                      'model_corr_psf_details']
+    else:
+        body_metadata['model_corr_psf_details'] = None
     body_metadata['confidence'] = offset_metadata['confidence']
     body_metadata['offset_winner'] = offset_metadata['offset_winner']
 

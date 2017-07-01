@@ -246,3 +246,35 @@ def log_close_main_logging(module_name):
     if _MAIN_LOG_FILE_HANDLER is not None:
         _MAIN_LOG_FILE_HANDLER.close()
         _MAIN_LOGGER.removeHandler(_MAIN_LOG_FILE_HANDLER)
+
+def log_add_arguments(parser, default_log_directory, default_log_suffix,
+                      main_only=False):
+    parser.add_argument(
+        '--main-logfile', metavar='FILENAME',
+        help='''The full path of the logfile to write for the main loop; defaults 
+                to $(CB_RESULTS_ROOT)/logs/'''+
+                default_log_directory+'/<datetime>.log')
+    LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
+    parser.add_argument(
+        '--main-logfile-level', metavar='LEVEL', default='info', 
+        choices=LOGGING_LEVEL_CHOICES,
+        help='Choose the logging level to be output to the main loop logfile')
+    parser.add_argument(
+        '--main-console-level', metavar='LEVEL', default='info',
+        choices=LOGGING_LEVEL_CHOICES,
+        help='Choose the logging level to be output to stdout for the main loop')
+    if not main_only:
+        parser.add_argument(
+            '--image-logfile', metavar='FILENAME',
+            help='''The full path of the logfile to write for each image file; 
+                    defaults to 
+                    $(CB_RESULTS_ROOT)/logs/<image-path>/<image_filename>-'''+
+                    default_log_suffix+'-<datetime>.log''')
+        parser.add_argument(
+            '--image-logfile-level', metavar='LEVEL', default='info',
+            choices=LOGGING_LEVEL_CHOICES,
+            help='Choose the logging level to be output to stdout for each image')
+        parser.add_argument(
+            '--image-console-level', metavar='LEVEL', default='info',
+            choices=LOGGING_LEVEL_CHOICES,
+            help='Choose the logging level to be output to stdout for each image')

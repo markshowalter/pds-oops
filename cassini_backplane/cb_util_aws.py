@@ -23,6 +23,9 @@ from cb_util_misc import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
+SQS_OFFSET_QUEUE_NAME = 'cdaps-offset-feeder'
+SQS_REPROJ_BODY_QUEUE_NAME = 'cdaps-reproject-body-feeder'
+
 
 AWS_PROCESSORS = {
     't2.nano': 1,
@@ -120,3 +123,32 @@ def aws_check_for_ec2_termination():
         if term is not None and term.find('Not Found') == -1:
             return term
     return False
+
+def aws_add_arguments(parser, sqs_name_default, feeder=False):
+    parser.add_argument(
+        '--retrieve-from-pds', action='store_true',
+        help='''Retrieve the image file and indexes from pds-rings.seti.org instead of 
+                from the local disk''')
+    parser.add_argument(
+        '--no-update-indexes', action='store_true',
+        help='''Don\'t update the index files from the PDS''')
+    if not feeder:
+        parser.add_argument(
+            '--saturn-kernels-only', action='store_true',
+            help='''Only load Saturn CSPICE kernels''')
+    parser.add_argument(
+        '--results-in-s3', action='store_true',
+        help='''Store all results in the Amazon S3 cloud''')
+    if not feeder:
+        parser.add_argument(
+            '--use-sqs', action='store_true',
+            help='''Retrieve filenames from an SQS queue; ignore all file selection arguments''')
+        parser.add_argument(
+            '--deduce-aws-processors', action='store_true',
+            help='''Deduce the number of available processors from the AMI Instance Type''')
+    parser.add_argument(
+        '--sqs-queue-name', type=str, default=sqs_name_default,
+        help='The name of the SQS queue; defaults to "'+sqs_name_default+'"')
+    parser.add_argument(
+        '--aws-results-bucket', default='seti-cb-results',
+        help='The Amazon S3 bucket to store results files in')

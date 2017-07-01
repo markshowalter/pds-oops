@@ -40,7 +40,9 @@ from cb_offset import *
 from cb_util_aws import *
 from cb_util_file import *
 from cb_util_misc import *
+from cb_util_web import *
 
+MAIN_LOG_NAME = 'cb_main_offset'
 
 command_list = sys.argv[1:]
 
@@ -263,80 +265,7 @@ parser = argparse.ArgumentParser(
     epilog='''Default behavior is to perform an offset pass on all images
               without associated offset files''')
 
-###XXXX####
-# --image-logfile is incompatible with --max-subprocesses > 0
-
-
-###########################
-### Arguments about AWS ###
-###########################
-parser.add_argument(
-    '--retrieve-from-pds', action='store_true',
-    help='''Retrieve the image file and indexes from pds-rings.seti.org instead of 
-            from the local disk''')
-parser.add_argument(
-    '--no-update-indexes', action='store_true',
-    help='''Don\'t update the index files from the PDS''')
-parser.add_argument(
-    '--saturn-kernels-only', action='store_true',
-    help='''Only load Saturn CSPICE kernels''')
-parser.add_argument(
-    '--results-in-s3', action='store_true',
-    help='''Store all results in the Amazon S3 cloud''')
-parser.add_argument(
-    '--use-sqs', action='store_true',
-    help='''Retrieve filenames from an SQS queue; ignore all file selection arguments''')
-parser.add_argument(
-    '--deduce-aws-processors', action='store_true',
-    help='''Deduce the number of available processors from the AMI Instance Type''')
-parser.add_argument(
-    '--sqs-queue-name', type=str, default='cdapsfeeder',
-    help='''The name of the SQS queue; defaults to "cdapsfeeder"''')
-parser.add_argument(
-    '--aws', action='store_true',
-    help='''Set for running on AWS EC2; implies --retrieve-from-pds 
-            --results-in-s3  --use-sqs --saturn-kernels-only --no-overlay-file
-            --no-update-indexes --deduce-aws-processors''')
-parser.add_argument(
-    '--aws-results-bucket', default='seti-cb-results',
-    help='The Amazon S3 bucket to store results files in')
-
-###############################
-### Arguments about logging ###
-###############################
-parser.add_argument(
-    '--main-logfile', metavar='FILENAME',
-    help='''The full path of the logfile to write for the main loop; defaults 
-            to $(CB_RESULTS_ROOT)/logs/cb_main_offset/<datetime>.log''')
-LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
-parser.add_argument(
-    '--main-logfile-level', metavar='LEVEL', default='info', 
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to the main loop logfile')
-parser.add_argument(
-    '--main-console-level', metavar='LEVEL', default='info',
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to stdout for the main loop')
-parser.add_argument(
-    '--image-logfile', metavar='FILENAME',
-    help='''The full path of the logfile to write for each image file; 
-            defaults to 
-            $(CB_RESULTS_ROOT)/logs/<image-path>/<image_filename>-OFFSET-<datetime>.log''')
-parser.add_argument(
-    '--image-logfile-level', metavar='LEVEL', default='info',
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to stdout for each image')
-parser.add_argument(
-    '--image-console-level', metavar='LEVEL', default='none',
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to stdout for each image')
-parser.add_argument(
-    '--profile', action='store_true', 
-    help='Do performance profiling')
-
-####################################
-### Arguments about subprocesses ###
-####################################
+# Arguments about subprocesses
 parser.add_argument(
     '--is-subprocess', action='store_true',
     help='Internal flag used to indicate this process was spawned by a parent')
@@ -344,9 +273,7 @@ parser.add_argument(
     '--max-subprocesses', type=int, default=0, metavar='NUM',
     help='The maximum number jobs to perform in parallel')
 
-##########################################
-### Arguments about the offset process ###
-##########################################
+# Arguments about the offset process
 parser.add_argument(
     '--force-offset', action='store_true', default=False,
     help='Force offset computation even if the offset file exists')
@@ -415,15 +342,16 @@ parser.add_argument(
     '--no-wac-offset', action='store_true', default=False,
     help='Don\'t use the computed offset between NAC and WAC frames')
 
-#######################################################
-### Arguments about overlay and PNG file generation ###
-#######################################################
+# Arguments about overlay and PNG file generation
 parser.add_argument(
     '--overlay-show-star-streaks', action='store_true', default=False,
     help='Show star streaks in the overlay and PNG files')
 parser.add_argument(
     '--no-overlay-file', action='store_true', default=False,
     help='Don\'t generate an overlay file')
+parser.add_argument(
+    '--no-png-file', action='store_true', default=False,
+    help='Don\'t generate a PNG file')
 parser.add_argument(
     '--png-blackpoint', type=float, default=None,
     help='Set the blackpoint for the PNG file')
@@ -446,7 +374,20 @@ parser.add_argument(
     '--bodies-label-font', type=str, default=None, metavar='FONTFILE,SIZE',
     help='Set the font for body labels')
 
+# Misc arguments
+parser.add_argument(
+    '--profile', action='store_true', 
+    help='Do performance profiling')
+
 file_add_selection_arguments(parser)
+log_add_arguments(parser, MAIN_LOG_NAME, 'OFFSET')
+
+aws_add_arguments(parser, SQS_OFFSET_QUEUE_NAME)
+parser.add_argument(
+    '--aws', action='store_true',
+    help='''Set for running on AWS EC2; implies --retrieve-from-pds 
+            --results-in-s3  --use-sqs --saturn-kernels-only --no-overlay-file
+            --deduce-aws-processors''')
 
 arguments = parser.parse_args(command_list)
 
@@ -454,10 +395,9 @@ RESULTS_DIR = CB_RESULTS_ROOT
 if arguments.aws:
     arguments.retrieve_from_pds = True
     arguments.results_in_s3 = True
+    arguments.use_sqs = True
     arguments.saturn_kernels_only = True
     arguments.no_overlay_file = True
-    arguments.no_update_indexes = True
-    arguments.use_sqs = True
     arguments.deduce_aws_processors = True
 if arguments.results_in_s3:
     RESULTS_DIR = ''
@@ -466,7 +406,6 @@ if AWS_ON_EC2_INSTANCE:
     if arguments.deduce_aws_processors:
         arguments.max_subprocesses = AWS_PROCESSORS[AWS_HOST_INSTANCE_TYPE]
 
-TMP_DIR = '/tmp'
 
 
 ###############################################################################
@@ -492,6 +431,8 @@ def collect_cmd_line(image_path):
         ret += ['--results-in-s3', '--aws-results-bucket', arguments.aws_results_bucket]
     if arguments.no_overlay_file:
         ret += ['--no-overlay-file']
+    if arguments.no_png_file:
+        ret += ['--no-png-file']
     if arguments.profile:
         ret += ['--profile']
     if not arguments.allow_stars:
@@ -557,10 +498,7 @@ def wait_for_subprocess(all=False):
                     offset_path = file_clean_join(TMP_DIR,
                                                   filename+'.off')
                     metadata = file_read_offset_metadata_path(offset_path)
-                    try:
-                        os.remove(offset_path)
-                    except:
-                        pass
+                    file_safe_remove(offset_path)
                 else:
                     metadata = file_read_offset_metadata(
                                                  old_image_path,
@@ -662,26 +600,30 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                            bootstrapped, sqs_handle) 
         return True
 
-    image_path_local = image_path
-    image_name = file_clean_name(image_path)
+    metadata = None
     
-    if arguments.retrieve_from_pds:
-        short_path = file_img_to_short_img_path(image_path)
-        if short_path.find('_CALIB') == -1:
-            short_path = short_path.replace('.IMG', '_CALIB.IMG')
-        url = PDS_RINGS_CALIB_ROOT + short_path
-        image_path_local = file_clean_join(TMP_DIR, image_name+'.IMG')
-        main_logger.debug('Retrieving %s to %s', url, image_path_local)
-        err = copy_url_to_file(url, image_path_local)
-        if err is not None:
-            main_logger.error(err)
-            try:
-                os.remove(image_path_local)
-            except:
-                pass
-            return False
+    image_path_local = image_path
+    image_path_local_cleanup = None
+    image_name = file_clean_name(image_path)
 
+    image_log_path = None
     image_log_path_local = None
+    image_log_path_local_cleanup = None
+
+    offset_path = None
+    offset_path_local = None
+    offset_path_local_cleanup = None
+
+    overlay_path = None
+    overlay_path_local = None
+    overlay_path_local_cleanup = None
+
+    png_path = None
+    png_path_local = None
+    png_path_local_cleanup = None
+    
+    ### Set up logging
+       
     if image_logfile_level != cb_logging.LOGGING_SUPERCRITICAL:
         if arguments.image_logfile is not None:
             image_log_path = arguments.image_logfile
@@ -695,20 +637,41 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         if arguments.results_in_s3:
             image_log_path_local = file_clean_join(TMP_DIR, 
                                                    image_name+'_imglog.txt')
+            image_log_path_local_cleanup = image_log_path_local
         else:
             if os.path.exists(image_log_path_local):
                 os.remove(image_log_path_local) # XXX Need option to not do this
 
         image_log_filehandler = cb_logging.log_add_file_handler(
-                                        image_log_path_local, image_logfile_level)
+                                    image_log_path_local, image_logfile_level)
     else:
         image_log_filehandler = None
+    # >>> image_log_path_local is live
 
     image_logger = logging.getLogger('cb')
     
     image_logger.info('Command line: %s', ' '.join(command_list))
     image_logger.info('GIT Status:   %s', current_git_version())
 
+    ### Download the image file if necessary
+    
+    if arguments.retrieve_from_pds:
+        err, image_path_local = web_retrieve_image_from_pds(image_path,
+                                                            main_logger, 
+                                                            image_logger)
+        image_path_local_cleanup = image_path_local 
+        if err is not None:
+            main_logger.error(err)
+            image_logger.error(err)
+            err = 'Failed to retrieve file from ' + url
+            metadata = {'status':         'error',
+                        'status_detail1': err,
+                        'status_detail2': None}
+    # >>> image_path_local is live
+    # >>> image_log_path_local is live
+
+    ### Set up the offset path
+    
     offset_path = file_img_to_offset_path(
                               image_path, 
                               bootstrap=bootstrapped,
@@ -716,156 +679,93 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
                               make_dirs=not arguments.results_in_s3)
     offset_path_local = offset_path
     if arguments.results_in_s3:
-        offset_path_local = file_clean_join(TMP_DIR, image_name+'.off') 
+        offset_path_local = file_clean_join(TMP_DIR, image_name+'.off')
+        offset_path_local_cleanup = offset_path_local 
+    # >>> image_path_local is live
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
 
-    try:
-        obs = file_read_iss_file(image_path_local, orig_path=image_path)
-    except KeyboardInterrupt:
-        raise
-    except:
-        main_logger.exception('File reading failed - %s', image_path)
-        image_logger.exception('File reading failed - %s', image_path)
-        metadata = {}
-        err = 'File reading failed:\n' + traceback.format_exc()
-        metadata['status'] = 'error'
-        metadata['status_detail1'] = str(sys.exc_value)
-        metadata['status_detail2'] = err
-        file_write_offset_metadata_path(offset_path_local, metadata,
-                                        overlay=False)
-        cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.retrieve_from_pds:
-            try:
-                os.remove(image_path_local)
-            except:
-                pass
-        if arguments.results_in_s3:
-            aws_copy_file_to_s3(offset_path_local, 
-                                arguments.aws_results_bucket, offset_path,
-                                main_logger)
-            if not arguments.is_subprocess:
-                try:
-                    os.remove(offset_path_local)
-                except:
-                    pass
-            if image_log_path_local is not None:
-                aws_copy_file_to_s3(image_log_path_local, 
-                                    arguments.aws_results_bucket, image_log_path,
-                                    main_logger)
-                try:
-                    os.remove(image_log_path_local)
-                except:
-                    pass
-        return True
+    ### Read the image file
     
-    if arguments.retrieve_from_pds:
+    obs = None
+    if metadata is None:
         try:
-            os.remove(image_path_local)
+            obs = file_read_iss_file(image_path_local, orig_path=image_path)
+        except KeyboardInterrupt:
+            raise
         except:
-            pass
+            main_logger.exception('File reading failed - %s', image_path)
+            image_logger.exception('File reading failed - %s', image_path)
+            err = 'File reading failed:\n' + traceback.format_exc()
+            metadata = {'status':         'error',
+                        'status_detail1': str(sys.exc_value),
+                        'status_detail2': err}
 
-    skipped = False
-    if obs.dict['SHUTTER_STATE_ID'] == 'DISABLED':
-        main_logger.info('Skipping because shutter disabled - %s', image_path)
-        image_logger.info('Skipping because shutter disabled - %s', 
-                          image_path)
-        skipped = True
-        metadata = {}
-        metadata['status_detail1'] = 'Shutter disabled'
-        metadata['status_detail2'] = 'Shutter disabled'
-    elif obs.texp < 1e-4: # 5 ms is smallest commandable exposure
-        main_logger.info('Skipping because zero exposure time - %s', image_path)
-        image_logger.info('Skipping because zero exposure time - %s', 
-                          image_path)
-        skipped = True
-        metadata = {}
-        metadata['status_detail1'] = 'Zero exposure time'
-        metadata['status_detail2'] = 'Zero exposure time'
-        
-    if skipped:
-        metadata['status'] = 'skipped'
-        file_write_offset_metadata_path(offset_path_local, metadata,
-                                        overlay=False)
-        cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.results_in_s3:
-            aws_copy_file_to_s3(offset_path_local, 
-                                arguments.aws_results_bucket, offset_path,
-                                main_logger)
-            if not arguments.is_subprocess:
-                try:
-                    os.remove(offset_path_local)
-                except:
-                    pass
-            if image_log_path_local is not None:
-                aws_copy_file_to_s3(image_log_path_local, 
-                                    arguments.aws_results_bucket, image_log_path,
-                                    main_logger)
-                try:
-                    os.remove(image_log_path_local)
-                except:
-                    pass
-        return True
+    ### Then immediately delete the image file if necessary
+    
+    file_safe_remove(image_path_local_cleanup)
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
 
-    if arguments.profile and arguments.is_subprocess:
-        # Per-image profiling
-        image_pr = cProfile.Profile()
-        image_pr.enable()
+    if obs is not None:
+        if obs.dict['SHUTTER_STATE_ID'] == 'DISABLED':
+            main_logger.info('Skipping because shutter disabled - %s', 
+                             image_path)
+            image_logger.info('Skipping because shutter disabled - %s', 
+                              image_path)
+            metadata = {'status':         'skipped',
+                        'status_detail1': 'Shutter disabled',
+                        'status_detail2': 'Shutter disabled'}
+        elif obs.texp < 1e-4: # 5 ms is smallest commandable exposure
+            main_logger.info('Skipping because zero exposure time - %s', 
+                             image_path)
+            image_logger.info('Skipping because zero exposure time - %s', 
+                              image_path)
+            metadata = {'status':         'skipped',
+                        'status_detail1': 'Zero exposure time',
+                        'status_detail2': 'Zero exposure time'}
 
-    try:
-        metadata = master_find_offset(
-                              obs, create_overlay=True,
-                              allow_stars=allow_stars,
-                              allow_rings=allow_rings,
-                              allow_moons=allow_moons,
-                              allow_saturn=allow_saturn,
-                              botsim_offset=botsim_offset,
-                              bodies_cartographic_data=cartographic_data,
-                              bootstrapped=bootstrapped,
-                              stars_show_streaks=
-                                 arguments.overlay_show_star_streaks,
-                              stars_config=stars_config,
-                              rings_config=rings_config,
-                              bodies_config=bodies_config)
-    except KeyboardInterrupt:
-        raise
-    except:
-        main_logger.exception('Offset finding failed - %s', image_path)
-        image_logger.exception('Offset finding failed - %s', image_path)
-        metadata = {}
-        err = 'Offset finding failed:\n' + traceback.format_exc()
-        metadata['bootstrapped'] = bootstrapped
-        metadata['status'] = 'error' 
-        metadata['status_detail1'] = str(sys.exc_value)
-        metadata['status_detail2'] = err
-        file_write_offset_metadata_path(offset_path_local, metadata,
-                                        overlay=False)
+    ### Set up profiling and find the offset
+            
+    image_pr = None
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
+    # >>> image_pr is live
+    
+    if metadata is None and obs is not None:
         if arguments.profile and arguments.is_subprocess:
-            image_pr.disable()
-            s = StringIO.StringIO()
-            sortby = 'cumulative'
-            ps = pstats.Stats(image_pr, stream=s).sort_stats(sortby)
-            ps.print_stats()
-            ps.print_callers()
-            image_logger.info('Profile results:\n%s', s.getvalue())
-        cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.results_in_s3:
-            aws_copy_file_to_s3(offset_path_local, 
-                                arguments.aws_results_bucket, offset_path,
-                                main_logger)
-            if not arguments.is_subprocess:
-                try:
-                    os.remove(offset_path_local)
-                except:
-                    pass
-            if image_log_path_local is not None:
-                aws_copy_file_to_s3(image_log_path_local, 
-                                    arguments.aws_results_bucket, image_log_path,
-                                    main_logger)
-                try:
-                    os.remove(image_log_path_local)
-                except:
-                    pass
-        return True
+            # Per-image profiling
+            image_pr = cProfile.Profile()
+            image_pr.enable()
 
+        try:
+            metadata = master_find_offset(
+                                  obs, create_overlay=True,
+                                  allow_stars=allow_stars,
+                                  allow_rings=allow_rings,
+                                  allow_moons=allow_moons,
+                                  allow_saturn=allow_saturn,
+                                  botsim_offset=botsim_offset,
+                                  bodies_cartographic_data=cartographic_data,
+                                  bootstrapped=bootstrapped,
+                                  stars_show_streaks=
+                                     arguments.overlay_show_star_streaks,
+                                  stars_config=stars_config,
+                                  rings_config=rings_config,
+                                  bodies_config=bodies_config)
+        except KeyboardInterrupt:
+            raise
+        except:
+            main_logger.exception('Offset finding failed - %s', image_path)
+            image_logger.exception('Offset finding failed - %s', image_path)
+            err = 'Offset finding failed:\n' + traceback.format_exc()
+            metadata = {'bootstrapped':   bootstrapped,
+                        'status':         'error', 
+                        'status_detail1': str(sys.exc_value),
+                        'status_detail2': err}
+
+    # At this point we're guaranteed to have a metadata dict
+    
     metadata['AWS_HOST_AMI_ID'] = AWS_HOST_AMI_ID
     metadata['AWS_HOST_PUBLIC_NAME'] = AWS_HOST_PUBLIC_NAME
     metadata['AWS_HOST_PUBLIC_IPV4'] = AWS_HOST_PUBLIC_IPV4
@@ -873,8 +773,9 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
     metadata['AWS_HOST_INSTANCE_TYPE'] = AWS_HOST_INSTANCE_TYPE
     metadata['AWS_HOST_ZONE'] = AWS_HOST_ZONE
     
-    overlay_path_local = None
-    if not arguments.no_overlay_file:
+    ### Create the overlay path
+    
+    if metadata['status'] == 'ok' and not arguments.no_overlay_file:
         overlay_path = file_img_to_overlay_path(
                                     image_path, 
                                     bootstrap=bootstrapped,
@@ -883,11 +784,20 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         overlay_path_local = overlay_path
         if arguments.results_in_s3:
             overlay_path_local = file_clean_join(TMP_DIR, image_name+'.ovr')
+            overlay_path_local_cleanup = overlay_path_local        
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
+    # >>> overlay_path_local is live
+    # >>> image_pr is live
+    
+    ### Write the offset, possibly with an overlay
     
     try:
-        file_write_offset_metadata_path(offset_path_local, metadata,
-                                        overlay=not arguments.no_overlay_file,
-                                        overlay_path=overlay_path_local)
+        file_write_offset_metadata_path(
+                        offset_path_local, metadata,
+                        overlay=(not arguments.no_overlay_file and
+                                 overlay_path_local is not None),
+                        overlay_path=overlay_path_local)
     except KeyboardInterrupt:
         raise
     except:
@@ -895,79 +805,68 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         image_logger.exception('Offset file writing failed - %s', image_path)
         metadata = {}
         err = 'Offset file writing failed:\n' + traceback.format_exc() 
-        metadata['bootstrapped'] = bootstrapped
-        metadata['status'] = 'error'
-        metadata['status_detail1'] = str(sys.exc_value)
-        metadata['status_detail2'] = err
+        metadata = {'bootstrapped':   bootstrapped,
+                    'status':         'error', 
+                    'status_detail1': str(sys.exc_value),
+                    'status_detail2': err}
+
         try:
             # It seems weird to try again, but it might work with less metadata
             file_write_offset_metadata_path(offset_path_local, metadata,
                                             overlay=False)
+        except KeyboardInterrupt:
+            raise
         except:
             main_logger.exception(
-                  'Error offset file writing failed - %s', image_path)
-        if arguments.profile and arguments.is_subprocess:
-            image_pr.disable()
-            s = StringIO.StringIO()
-            sortby = 'cumulative'
-            ps = pstats.Stats(image_pr, stream=s).sort_stats(sortby)
-            ps.print_stats()
-            ps.print_callers()
-            image_logger.info('Profile results:\n%s', s.getvalue())
-        cb_logging.log_remove_file_handler(image_log_filehandler)
-        if arguments.results_in_s3:
-            aws_copy_file_to_s3(offset_path_local, 
-                                arguments.aws_results_bucket, offset_path,
-                                main_logger)
-            if not arguments.is_subprocess:
-                try:
-                    os.remove(offset_path_local)
-                except:
-                    pass
-            if image_log_path_local is not None:
-                aws_copy_file_to_s3(image_log_path_local, 
-                                    arguments.aws_results_bucket, image_log_path,
-                                    main_logger)
-                try:
-                    os.remove(image_log_path_local)
-                except:
-                    pass
-            if not arguments.no_overlay_file:
-                try:
-                    os.remove(overlay_path_local)
-                except:
-                    pass
-        return True
+                  'Offset file writing failed - %s', image_path)
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
+    # >>> overlay_path_local is live
+    # >>> image_pr is live
 
-    png_path = file_img_to_png_path(
-                            image_path, 
-                            bootstrap=bootstrapped,
-                            root=RESULTS_DIR,
-                            make_dirs=not arguments.results_in_s3)
-    png_path_local = png_path
-    if arguments.results_in_s3:
-        png_path_local = file_clean_join(TMP_DIR, image_name+'.png')
-
-    png_image = offset_create_overlay_image(
-                        obs, metadata,
-                        blackpoint=arguments.png_blackpoint,
-                        whitepoint=arguments.png_whitepoint,
-                        gamma=arguments.png_gamma,
-                        font=png_label_font,
-                        interpolate_missing_stripes=True)
-    file_write_png_path(png_path_local, png_image)
+    ### Create the PNG path
     
-    num_files_completed += 1
-    filename = file_clean_name(image_path)
-    results = filename + ' - ' + offset_result_str(metadata)
-    results += ' (%.2f sec/image)' % ((time.time()-start_time)/
-                                      float(num_files_completed))
-    main_logger.info(results)
+    if metadata['status'] == 'ok' and not arguments.no_png_file:
+        png_path = file_img_to_png_path(
+                                image_path, 
+                                bootstrap=bootstrapped,
+                                root=RESULTS_DIR,
+                                make_dirs=not arguments.results_in_s3)
+        png_path_local = png_path
+        if arguments.results_in_s3:
+            png_path_local = file_clean_join(TMP_DIR, image_name+'.png')
+            png_path_local_cleanup = png_path_local
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
+    # >>> overlay_path_local is live
+    # >>> image_pr is live
 
-    if arguments.display_offset_results:
-        display_offset_data(obs, metadata, canvas_size=None)
+    ### Write the PNG file
+    
+        png_image = offset_create_overlay_image(
+                            obs, metadata,
+                            blackpoint=arguments.png_blackpoint,
+                            whitepoint=arguments.png_whitepoint,
+                            gamma=arguments.png_gamma,
+                            font=png_label_font,
+                            interpolate_missing_stripes=True)
+        try:
+            file_write_png_path(png_path_local, png_image)
+        except KeyboardInterrupt:
+            raise
+        except:
+            main_logger.exception(
+                  'PNG file writing failed - %s', image_path)
+    
+    if metadata['status'] == 'ok':
+        num_files_completed += 1
+        filename = file_clean_name(image_path)
+        results = filename + ' - ' + offset_result_str(metadata)
+        results += ' (%.2f sec/image)' % ((time.time()-start_time)/
+                                          float(num_files_completed))
+        main_logger.info(results)
 
-    if arguments.profile and arguments.is_subprocess:
+    if image_pr is not None:
         image_pr.disable()
         s = StringIO.StringIO()
         sortby = 'cumulative'
@@ -975,40 +874,43 @@ def process_offset_one_image(image_path, allow_stars=True, allow_rings=True,
         ps.print_stats()
         ps.print_callers()
         image_logger.info('Profile results:\n%s', s.getvalue())
+    # >>> image_log_path_local is live
+    # >>> offset_path_local is live
+    # >>> overlay_path_local is live
 
     cb_logging.log_remove_file_handler(image_log_filehandler)
 
+    ### Copy results to S3
+    
     if arguments.results_in_s3:
         aws_copy_file_to_s3(offset_path_local, 
                             arguments.aws_results_bucket, offset_path,
                             main_logger)
-        if not arguments.is_subprocess:
-            try:
-                os.remove(offset_path_local)
-            except:
-                pass
         if image_log_path_local is not None:
             aws_copy_file_to_s3(image_log_path_local, 
                                 arguments.aws_results_bucket, image_log_path,
                                 main_logger)
-            try:
-                os.remove(image_log_path_local)
-            except:
-                pass
-        aws_copy_file_to_s3(png_path_local, 
-                            arguments.aws_results_bucket, png_path,
-                            main_logger)
-        if not arguments.no_overlay_file:
-            try:
-                os.remove(overlay_path_local)
-            except:
-                pass
-        try:
-            os.remove(png_path_local)
-        except:
-            pass
+    if metadata['status'] == 'ok':
+        if png_path is not None:
+            aws_copy_file_to_s3(png_path_local, 
+                                arguments.aws_results_bucket, png_path,
+                                main_logger)
+        if overlay_path is not None:
+            aws_copy_file_to_s3(overlay_path_local, 
+                                arguments.aws_results_bucket, overlay_path,
+                                main_logger)
 
-    return True
+    if not arguments.is_subprocess:
+        # Leave this here so it can be seen by the parent process
+        file_safe_remove(offset_path_local_cleanup)
+    file_safe_remove(overlay_path_local_cleanup)
+    file_safe_remove(png_path_local_cleanup)
+    file_safe_remove(image_log_path_local_cleanup)
+
+    if metadata['status'] == 'ok' and arguments.display_offset_results:
+        display_offset_data(obs, metadata, canvas_size=None)
+
+    return metadata['status'] == 'ok'
 
 def exit_processing():
     end_time = time.time()
@@ -1026,12 +928,14 @@ def exit_processing():
         ps.print_callers()
         main_logger.info('Profile results:\n%s', s.getvalue())
     
-    log_close_main_logging('cb_main_offset')
+    log_close_main_logging(MAIN_LOG_NAME)
     
-    if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
+    if (arguments.results_in_s3 and 
+        arguments.main_logfile_level.upper() != 'NONE'):
         aws_copy_file_to_s3(main_log_path_local, 
                             arguments.aws_results_bucket, main_log_path,
                             main_logger)
+        file_safe_remove(main_log_path_local)
         
     sys.exit(0)
 
@@ -1064,7 +968,7 @@ if (arguments.results_in_s3 and
     main_log_path_local = '/tmp/mainlog.txt' # For CloudWatch logs
     main_log_datetime = datetime.datetime.now().isoformat()[:-7]
     main_log_datetime = main_log_datetime.replace(':','-')
-    main_log_path = 'logs/cb_main_offset/'+main_log_datetime+'-'
+    main_log_path = 'logs/'+MAIN_LOG_NAME+'/'+main_log_datetime+'-'
     if AWS_HOST_INSTANCE_ID is not None:
         main_log_path += AWS_HOST_INSTANCE_ID
     else:
@@ -1072,7 +976,7 @@ if (arguments.results_in_s3 and
     main_log_path += '.log'
 
 main_logger, image_logger = log_setup_main_logging(
-               'cb_main_offset', arguments.main_logfile_level, 
+               MAIN_LOG_NAME, arguments.main_logfile_level, 
                arguments.main_console_level, main_log_path_local,
                arguments.image_logfile_level, arguments.image_console_level)
 
@@ -1182,7 +1086,7 @@ if arguments.body_cartographic_data:
 bootstrapped = len(cartographic_data) > 0
 
 if arguments.retrieve_from_pds and not arguments.no_update_indexes:
-    update_index_files_from_pds(main_logger)
+    web_update_index_files_from_pds(main_logger)
         
 if arguments.use_sqs:
     main_logger.info('')

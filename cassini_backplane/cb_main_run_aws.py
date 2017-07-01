@@ -26,6 +26,7 @@ from cb_offset import *
 from cb_util_aws import *
 from cb_util_file import *
 
+MAIN_LOG_NAME = 'cb_main_run_aws'
 
 command_list = sys.argv[1:]
 
@@ -39,23 +40,12 @@ parser = argparse.ArgumentParser(
     on AWS''',
     epilog='''Default behavior is to feed all image names''')
 
-
-###########################
-### Arguments about AWS ###
-###########################
 parser.add_argument(
-    '--retrieve-from-pds', action='store_true',
-    help='''Retrieve the indexes from pds-rings.seti.org instead of 
-            using the local directory structure''')
+    '--offset', action='store_true',
+    help='''Feed filenames to the offset queue''')
 parser.add_argument(
-    '--results-in-s3', action='store_true',
-    help='''Store all results in the Amazon S3 cloud''')
-parser.add_argument(
-    '--no-update-indexes', action='store_true',
-    help='''Don\'t update the index files from the PDS''')
-parser.add_argument(
-    '--sqs-queue-name', type=str, default='cdapsfeeder',
-    help='''The name of the SQS queue; defaults to "cdapsfeeder"''')
+    '--reproject-body', type=str, default=None,
+    help='''Feed filenames to the reproject-body queue''')
 parser.add_argument(
     '--high-water-mark', type=int, default=800,
     help='''The maximum number of entries we allow in the queue''')
@@ -75,33 +65,16 @@ parser.add_argument(
 parser.add_argument(
     '--done-delay', type=int, default=300,
     help='''The number of seconds to wait before sending DONE''')
-parser.add_argument(
-    '--aws-results-bucket', default='seti-cb-results',
-    help='The Amazon S3 bucket to store results files in')
+
+file_add_selection_arguments(parser)
+log_add_arguments(parser, MAIN_LOG_NAME, 'REPROJBODY',
+                  main_only=True)
+aws_add_arguments(parser, '', feeder=True)
+
 parser.add_argument(
     '--aws', action='store_true',
     help='''Set for running on AWS EC2; implies --retrieve-from-pds 
-            --results-in-s3 --saturn-kernels-only --no-overlay-file
-            --no-update-indexes''')
-
-###############################
-### Arguments about logging ###
-###############################
-parser.add_argument(
-    '--main-logfile', metavar='FILENAME',
-    help='''The full path of the logfile to write for the main loop; defaults 
-            to $(CB_RESULTS_ROOT)/logs/cb_main_run_aws/<datetime>.log''')
-LOGGING_LEVEL_CHOICES = ['debug', 'info', 'warning', 'error', 'critical', 'none']
-parser.add_argument(
-    '--main-logfile-level', metavar='LEVEL', default='debug', 
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to the main loop logfile')
-parser.add_argument(
-    '--main-console-level', metavar='LEVEL', default='debug',
-    choices=LOGGING_LEVEL_CHOICES,
-    help='Choose the logging level to be output to stdout for the main loop')
-
-file_add_selection_arguments(parser)
+            --results-in-s3''')
 
 arguments = parser.parse_args(command_list)
 
@@ -109,7 +82,6 @@ RESULTS_DIR = CB_RESULTS_ROOT
 if arguments.aws:
     arguments.retrieve_from_pds = True
     arguments.results_in_s3 = True
-    arguments.no_update_indexes = True
 if arguments.results_in_s3:
     RESULTS_DIR = ''
 
@@ -144,18 +116,49 @@ def feed_one_image(image_path):
             QUEUE_FEED_BEFORE_CHECKING = (QUEUE_HIGH_WATER_MARK - 
                                           QUEUE_LOW_WATER_MARK)
     QUEUE_FEED_BEFORE_CHECKING -= 1
-    short_path = file_img_to_short_img_path(image_path)
-    if short_path.index('_CALIB') == -1:
-        short_path = short_path.replace('.IMG', '_CALIB.IMG')
-    main_logger.info('=> %s', short_path)
-    response = SQS_QUEUE.send_message(MessageBody=image_path)
-#                                       MessageGroupId='fifo')
+    image_filename = file_img_to_short_img_path(image_path)
 
+    if arguments.offset:
+        main_logger.info('OFFSET => %s', image_filename)
+        response = SQS_QUEUE.send_message(MessageBody=image_path)
+#                                       MessageGroupId='fifo')
+    elif arguments.reproject_body:
+        offset_metadata = file_read_offset_metadata(
+                                            image_path, 
+                                            overlay=False)
+        if offset_metadata is None:
+            main_logger.error('%s - no offset file', image_filename)
+        elif offset_metadata['status'] != 'ok':
+            main_logger.error('%s - offset file error', image_filename)
+        elif offset_metadata['offset'] is None:
+            main_logger.error('%s - no valid offset', image_filename)
+        else:
+            offset = offset_metadata['offset']
+            queue_entry = '%s;%s;%s' % (
+                    image_path,
+                    arguments.reproject_body, 
+                    str(int(offset[0]))+','+str(int(offset[1])))
+            main_logger.info('REPROJ => %s %s', image_filename, str(offset))
+            response = SQS_QUEUE.send_message(MessageBody=queue_entry)
+    
 #===============================================================================
 # 
 #===============================================================================
 
-QUEUE_NAME = arguments.sqs_queue_name
+QUEUE_NAME = None
+
+if arguments.offset:
+    assert not arguments.reproject_body
+    QUEUE_NAME = SQS_OFFSET_QUEUE_NAME
+
+if arguments.reproject_body:
+    assert not arguments.offset
+    QUEUE_NAME = SQS_REPROJ_BODY_QUEUE_NAME
+    
+if arguments.sqs_queue_name != '':
+    QUEUE_NAME = arguments.sqs_queue_name
+
+assert QUEUE_NAME is not None
 
 QUEUE_HIGH_WATER_MARK = arguments.high_water_mark
 QUEUE_LOW_WATER_MARK = arguments.low_water_mark
@@ -172,20 +175,24 @@ SQS_QUEUE_URL = SQS_QUEUE.url
 
 main_log_path = arguments.main_logfile
 main_log_path_local = main_log_path
-if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
-    local_fd, main_log_path_local = tempfile.mkstemp(suffix='_mainlog.txt', 
-                                                     prefix='CB_')
-    os.close(local_fd)
+if (arguments.results_in_s3 and
+    arguments.main_logfile_level.upper() != 'NONE' and
+    main_log_path is None):
+    main_log_path_local = '/tmp/mainlog.txt' # For CloudWatch logs
     main_log_datetime = datetime.datetime.now().isoformat()[:-7]
     main_log_datetime = main_log_datetime.replace(':','-')
-    main_log_path = 'logs/cb_main_run_aws/'+main_log_datetime
-    main_log_path += '-'+str(os.getpid())+'.log'
+    main_log_path = 'logs/'+MAIN_LOG_NAME+'/'+main_log_datetime+'-'
+    if AWS_HOST_INSTANCE_ID is not None:
+        main_log_path += AWS_HOST_INSTANCE_ID
+    else:
+        main_log_path += '-'+str(os.getpid())
+    main_log_path += '.log'
 
 main_logger, image_logger = log_setup_main_logging(
-               'cb_main_run_aws', arguments.main_logfile_level, 
+               MAIN_LOG_NAME, arguments.main_logfile_level, 
                arguments.main_console_level, main_log_path_local,
                None, None)
-        
+    
 start_time = time.time()
 num_files_processed = 0
 
@@ -196,6 +203,9 @@ main_logger.info('')
 main_logger.info('GIT Status:   %s', current_git_version())   
 main_logger.info('')
 main_logger.info('Command line: %s', ' '.join(command_list))
+main_logger.info('')
+main_logger.info('Feed offset queue:         %s', str(arguments.offset))
+main_logger.info('Feed reproject body queue: %s', str(arguments.reproject_body))
 main_logger.info('')
 main_logger.info('SQS Queue URL: %s', SQS_QUEUE_URL)
 
@@ -234,9 +244,11 @@ end_time = time.time()
 main_logger.info('Total files processed %d', num_files_processed)
 main_logger.info('Total elapsed time %.2f sec', end_time-start_time)
 
-if arguments.results_in_s3 and arguments.main_logfile_level.upper() != 'NONE':
-    copy_file_to_s3(main_log_path_local, 
-                    arguments.aws_results_bucket, main_log_path,
-                    main_logger)
+log_close_main_logging(MAIN_LOG_NAME)
 
-log_close_main_logging('cb_main_run_aws')
+if (arguments.results_in_s3 and 
+    arguments.main_logfile_level.upper() != 'NONE'):
+    aws_copy_file_to_s3(main_log_path_local, 
+                        arguments.aws_results_bucket, main_log_path,
+                        main_logger)
+    file_safe_remove(main_log_path_local)

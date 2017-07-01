@@ -143,7 +143,7 @@ def _callback_b1press_mosaic(x, y, metadata):
     subprocess.Popen([PYTHON_EXE, DISPLAY_OFFSET_METADATA_PY,
                       '--image-full-path', path])
     
-def display_body_mosaic_metadata(metadata, title=None):
+def display_body_mosaic_metadata(metadata, title=None, canvas_size=None):
     assert _TKINTER_AVAILABLE
 
     metadata = metadata.copy() # Don't mutate the one given to us
@@ -156,7 +156,11 @@ def display_body_mosaic_metadata(metadata, title=None):
     if title is None:
         title = metadata['body_name']
 
-    imgdisp = ImageDisp([metadata['img']], canvas_size=(720,360),
+    if canvas_size is None:
+        canvas_size = (1024, 512)
+
+    print canvas_size
+    imgdisp = ImageDisp([metadata['img']], canvas_size=canvas_size,
                         title=title, allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)
 
@@ -169,9 +173,9 @@ def display_body_mosaic_metadata(metadata, title=None):
     gridrow = 0
     gridcolumn = 0
 
-    label_width = 12
-    val_width = 6
-    val2_width = 18
+    label_width = 16
+    val_width = 8
+    val2_width = 20
     
     addon_control_frame = imgdisp.addon_control_frame
 
@@ -351,7 +355,7 @@ def display_body_mosaic_metadata(metadata, title=None):
     tk.mainloop()
 
 
-def display_body_reproj_metadata(metadata, title=None):
+def display_body_reproj_metadata(metadata, title=None, canvas_size=None):
     mosaic_metadata = bodies_mosaic_init(
                      metadata['body_name'],
                      lat_resolution=metadata['lat_resolution'],
@@ -361,4 +365,5 @@ def display_body_reproj_metadata(metadata, title=None):
 
     bodies_mosaic_add(mosaic_metadata, metadata) 
 
-    display_body_mosaic_metadata(mosaic_metadata, title)
+    display_body_mosaic_metadata(mosaic_metadata, title, 
+                                 canvas_size=canvas_size)

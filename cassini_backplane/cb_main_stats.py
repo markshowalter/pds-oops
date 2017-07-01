@@ -485,16 +485,14 @@ for image_path in file_yield_image_filenames_from_arguments(arguments):
                     # Perhaps in the future we can handle bootstrapping
                     # with multiple bodies in the image.
                     for body_name in metadata['large_bodies'][:1]:
-                        if (body_name not in bootstrap_config['body_list'] or
-                            body_name in FUZZY_BODY_LIST or
-                            body_name == 'TITAN'):
+                        if (body_name not in bootstrap_config['body_list']):
                             continue
                         if body_name not in bodies_metadata:
                             continue
                         body_metadata = bodies_metadata[body_name]
                         if not body_metadata['size_ok']:
                             continue
-                        if body_metadata['latlon_mask'] is None:
+                        if 'reproj' not in body_metadata or body_metadata['reproj'] is None:
                             continue
                         if body_name not in bootstrap_cand_db:
                             cand_count = 0

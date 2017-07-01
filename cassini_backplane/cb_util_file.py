@@ -5,6 +5,7 @@
 #
 # Exported routines:
 #    file_clean_join
+#    file_safe_remove
 #    file_add_selection_arguments
 #    file_log_arguments
 #    file_yield_image_filenames_from_arguments
@@ -77,6 +78,14 @@ def file_clean_join(*args):
     ret = os.path.join(*args)
     return ret.replace('\\', '/')
 
+def file_safe_remove(filename):
+    if filename is None:
+        return
+    try:
+        os.remove(filename)
+    except:
+        pass
+    
 def _validate_image_name(name):
     valid = ((len(name) == 13 or len(name) == 14) and
              name[0] in 'NW' and name[11] == '_')
@@ -919,8 +928,9 @@ def file_bootstrap_status_image_path(body_name, lat_shadow_dir,
 
 def file_img_to_reproj_body_path(img_path, body_name, lat_res, lon_res, 
                                  latlon_type, lon_dir,
+                                 root=CB_RESULTS_ROOT,
                                  make_dirs=False):
-    fn = file_results_path(img_path, 'reproj', make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'reproj', root=root, make_dirs=make_dirs)
     fn += '-%.3f_%.3f-%s-%s-REPROJBODY-%s.dat' % (
               lat_res*oops.DPR, lon_res*oops.DPR, latlon_type, lon_dir,
               body_name.upper())
@@ -938,31 +948,37 @@ def file_read_reproj_body_path(reproj_path):
     return metadata
 
 def file_read_reproj_body(img_path, body_name, lat_res, lon_res, 
-                          latlon_type, lon_dir):
+                          latlon_type, lon_dir, root=CB_RESULTS_ROOT):
     """Read reprojection metadata file for img_path."""
     reproj_path = file_img_to_reproj_body_path(img_path, body_name,
                                                lat_res, lon_res, 
-                                               latlon_type, lon_dir, 
+                                               latlon_type, lon_dir,
+                                               root=root, 
                                                make_dirs=False)
 
+    print reproj_path
     return file_read_reproj_body_path(reproj_path)
 
-def file_write_reproj_body(img_path, metadata):
-    """Write reprojection metadata file for img_path."""
-    logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body')
+def file_write_reproj_body_path(reproj_path, metadata):    
+    """Write reprojection metadata file to reproj_path."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body_path')
 
-    reproj_path = file_img_to_reproj_body_path(img_path, metadata['body_name'],
-                                               metadata['lat_resolution'],
-                                               metadata['lon_resolution'],
-                                               metadata['latlon_type'],
-                                               metadata['lon_direction'],
-                                               make_dirs=True)
     logger.debug('Writing body reprojection file %s', reproj_path)
     
     reproj_fp = open(reproj_path, 'wb')
     reproj_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     reproj_fp.close()
+
+def file_write_reproj_body(img_path, metadata, root=CB_RESULTS_ROOT):
+    reproj_path = file_img_to_reproj_body_path(img_path, metadata['body_name'],
+                                               metadata['lat_resolution'],
+                                               metadata['lon_resolution'],
+                                               metadata['latlon_type'],
+                                               metadata['lon_direction'],
+                                               root=root,
+                                               make_dirs=True)
+    file_write_reproj_body_path(reproj_path, metadata)
 
 ### MOSAICS
     

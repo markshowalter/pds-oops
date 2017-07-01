@@ -48,6 +48,8 @@ STAR_CATALOG_ROOT = os.environ['CB_STAR_CATALOG_ROOT']
 PDS_RINGS_VOLUMES_ROOT = 'http://pds-rings.seti.org/volumes/COISS_2xxx/'
 PDS_RINGS_CALIB_ROOT = 'http://pds-rings.seti.org/derived/COISS_2xxx/'
 
+TMP_DIR = '/tmp'
+
 ####################################
 # EXECUTABLES AND PYTHON PROGRAMS ##
 ####################################
