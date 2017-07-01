@@ -20,6 +20,7 @@ except ImportError:
     _BOTO3_AVAILABLE = False
 
 from cb_util_misc import *
+from cb_util_web import *
 
 _LOGGING_NAME = 'cb.' + __name__
 
@@ -100,12 +101,12 @@ if AWS_HOST_FQDN is None:
     AWS_HOST_FQDN = socket.getfqdn()
     AWS_ON_EC2_INSTANCE = AWS_HOST_FQDN.endswith('.compute.internal')
     if AWS_ON_EC2_INSTANCE:
-        AWS_HOST_AMI_ID = read_url('http://169.254.169.254/latest/meta-data/ami-id')
-        AWS_HOST_PUBLIC_NAME = read_url('http://169.254.169.254/latest/meta-data/public-hostname')
-        AWS_HOST_PUBLIC_IPV4 = read_url('http://169.254.169.254/latest/meta-data/public-ipv4')
-        AWS_HOST_INSTANCE_ID = read_url('http://169.254.169.254/latest/meta-data/instance-id')
-        AWS_HOST_INSTANCE_TYPE = read_url('http://169.254.169.254/latest/meta-data/instance-type')
-        AWS_HOST_ZONE = read_url('http://169.254.169.254/latest/meta-data/placement/availability-zone')
+        AWS_HOST_AMI_ID = web_read_url('http://169.254.169.254/latest/meta-data/ami-id')
+        AWS_HOST_PUBLIC_NAME = web_read_url('http://169.254.169.254/latest/meta-data/public-hostname')
+        AWS_HOST_PUBLIC_IPV4 = web_read_url('http://169.254.169.254/latest/meta-data/public-ipv4')
+        AWS_HOST_INSTANCE_ID = web_read_url('http://169.254.169.254/latest/meta-data/instance-id')
+        AWS_HOST_INSTANCE_TYPE = web_read_url('http://169.254.169.254/latest/meta-data/instance-type')
+        AWS_HOST_ZONE = web_read_url('http://169.254.169.254/latest/meta-data/placement/availability-zone')
 
 if _BOTO3_AVAILABLE:
     AWS_S3_CLIENT = boto3.client('s3')
@@ -119,7 +120,7 @@ def aws_copy_file_to_s3(src, bucket, dest, logger):
     
 def aws_check_for_ec2_termination():
     if AWS_ON_EC2_INSTANCE:
-        term = read_url('http://169.254.169.254/latest/meta-data/spot/termination-time')
+        term = web_read_url('http://169.254.169.254/latest/meta-data/spot/termination-time')
         if term is not None and term.find('Not Found') == -1:
             return term
     return False
