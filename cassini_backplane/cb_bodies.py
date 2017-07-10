@@ -544,13 +544,20 @@ def bodies_create_model(obs, body_name, inventory,
     restr_u_max = u_max + 1 - 1./(2*restr_oversample_u)
     restr_v_min = v_min + 1./(2*restr_oversample_v)
     restr_v_max = v_max + 1 - 1./(2*restr_oversample_v)
-    restr_o_meshgrid = oops.Meshgrid.for_fov(obs.fov,
-                                             origin=(restr_u_min, restr_v_min),
-                                             limit =(restr_u_max, restr_v_max),
-                                             oversample=(restr_oversample_u,
-                                                         restr_oversample_v),
-                                             swap  =True)
-    restr_o_bp = oops.Backplane(obs, meshgrid=restr_o_meshgrid)
+    if not hasattr(obs, 'restr_oversample_bp_dict'):
+        obs.restr_oversample_bp_dict = {}
+    restr_key = (restr_u_min, restr_v_min, restr_u_max, restr_v_max)
+    if restr_key in obs.restr_oversample_bp_dict:
+        restr_o_bp = obs.restr_oversample_bp_dict[restr_key]
+    else:
+        restr_o_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                                 origin=(restr_u_min, restr_v_min),
+                                                 limit =(restr_u_max, restr_v_max),
+                                                 oversample=(restr_oversample_u,
+                                                             restr_oversample_v),
+                                                 swap  =True)
+        restr_o_bp = oops.Backplane(obs, meshgrid=restr_o_meshgrid)
+        obs.restr_oversample_bp_dict[restr_key] = restr_o_bp
     restr_o_incidence_mvals = restr_o_bp.incidence_angle(body_name).mvals
     restr_incidence_mvals = filter_downsample(restr_o_incidence_mvals,
                                               restr_oversample_v,
@@ -729,12 +736,18 @@ def bodies_create_model(obs, body_name, inventory,
     if cartographic_data:
         # Create a Meshgrid that only covers the extent of the body WITHIN
         # THIS IMAGE
-        restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
-                                               origin=(u_min+.5, v_min+.5),
-                                               limit =(u_max+.5, v_max+.5),
-                                               swap  =True)
-        restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
-
+        if not hasattr(obs, 'restr_bp_dict'):
+            obs.restr_bp_dict = {}
+        restr_key = (u_min, v_min, u_max, v_max)
+        if restr_key in obs.restr_bp_dict:
+            restr_bp = obs.restr_bp_dict[restr_key]
+        else:
+            restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                                   origin=(u_min+.5, v_min+.5),
+                                                   limit =(u_max+.5, v_max+.5),
+                                                   swap  =True)
+            restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
+            obs.restr_bp_dict[restr_key] = restr_bp
         for cart_body in sorted(cartographic_data.keys()):
             if cart_body == body_name:
                 logger.info('Cartographic data provided for %s - USING',

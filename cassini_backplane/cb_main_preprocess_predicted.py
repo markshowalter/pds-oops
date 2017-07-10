@@ -109,7 +109,7 @@ def process_predicted_one_image(image_path):
 # 
 #===============================================================================
 
-iss.initialize(ck='predicted')
+iss.initialize(ck='predicted', planets=(6,))
 
 if arguments.profile:
     # Only do image offset profiling if we're going to do the actual work in 

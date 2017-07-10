@@ -143,6 +143,8 @@ def add_image_to_mosaic(mosaic_root, reset_mosaic, image_path):
 # 
 #===============================================================================
 
+iss.initialize(planets=(6,))
+
 if arguments.profile:
     # Only do image offset profiling if we're going to do the actual work in 
     # this process

@@ -9,9 +9,14 @@ import argparse
 import os.path
 import sys
 
+import oops.inst.cassini.iss as iss
+import oops
+
 from cb_config import *
 from cb_gui_body_mosaic import *
 from cb_util_file import *
+
+iss.initialize(planets=(6,))
 
 results_dir = os.path.join(CB_RESULTS_ROOT, 'reproj')
 

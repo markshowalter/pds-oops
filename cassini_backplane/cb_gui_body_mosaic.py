@@ -159,7 +159,6 @@ def display_body_mosaic_metadata(metadata, title=None, canvas_size=None):
     if canvas_size is None:
         canvas_size = (1024, 512)
 
-    print canvas_size
     imgdisp = ImageDisp([metadata['img']], canvas_size=canvas_size,
                         title=title, allow_enlarge=True,
                         flip_y=True, one_zoom=False, auto_update=True)

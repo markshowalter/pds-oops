@@ -85,20 +85,25 @@ def file_safe_remove(filename):
         os.remove(filename)
     except:
         pass
-    
-def _validate_image_name(name):
-    valid = ((len(name) == 13 or len(name) == 14) and
-             name[0] in 'NW' and name[11] == '_')
+
+def _valid_image_name(name):
+    valid = (((len(name) == 13 or len(name) == 14) and name[11] == '_') or
+             len(name) == 11) and name[0] in 'NW'
     if valid:
         try:
             _ = int(name[1:11])
-            _ = int(name[12:])
+            if len(name) > 11:
+                _ = int(name[12:])
         except ValueError:
             valid = False
+    return valid
+
+def _validate_image_name(name):
+    valid = _valid_image_name(name)
     if not valid:
         raise argparse.ArgumentTypeError(
              name+
-             ' is not a valid image name - format must be [NW]dddddddddd_d{d}')
+             ' is not a valid image name - format must be [NW]dddddddddd[_d{d}]')
     return name
 
 def file_add_selection_arguments(parser):
@@ -227,7 +232,7 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                     line = line.strip()
                     if len(line) == 0:
                         continue
-                    if len(line) != 13 and len(line) != 14:
+                    if not _valid_image_name(line):
                         print 'BAD FILENAME', line
                         sys.exit(-1)
                     restrict_image_list.append(line)
@@ -374,7 +379,9 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:img_name.find(suffix)] not in restrict_list:
+                if (restrict_list and 
+                    img_name[:img_name.find(suffix)] not in restrict_list and
+                    img_name[:11] not in restrict_list):
                     continue
                 img_path = file_clean_join(img_dir, img_name)
                 if not os.path.isfile(img_path):
@@ -956,7 +963,6 @@ def file_read_reproj_body(img_path, body_name, lat_res, lon_res,
                                                root=root, 
                                                make_dirs=False)
 
-    print reproj_path
     return file_read_reproj_body_path(reproj_path)
 
 def file_write_reproj_body_path(reproj_path, metadata):    

@@ -512,6 +512,8 @@ def exit_processing():
 # 
 #===============================================================================
 
+iss.initialize(planets=(6,))
+
 if arguments.profile and arguments.max_subprocesses == 0:
     # Only do image offset profiling if we're going to do the actual work in 
     # this process

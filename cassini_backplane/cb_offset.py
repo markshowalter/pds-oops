@@ -1018,6 +1018,7 @@ def master_find_offset(obs,
                    
                        botsim_offset=None,
                        force_bootstrap_candidate=False,
+                       add_bootstrap_info=True,
                    
                        bootstrapped=False):
     """Primary entry point for offset finding.
@@ -1054,6 +1055,8 @@ def master_find_offset(obs,
         force_bootstrap_candidate  True to force this image to be a bootstrap
                                  candidate even if we really could find a
                                  viable offset.
+        add_bootstrap_info       True to add bootstrap reproj masks to each
+                                 moon.
                                  
         bootstrapped             True if this offset pass is the result of
                                  bootstrapping.
@@ -1215,7 +1218,14 @@ def master_find_offset(obs,
         
     if offset_config is None:
         offset_config = OFFSET_DEFAULT_CONFIG
-        
+    if stars_config is None:
+        stars_config = STARS_DEFAULT_CONFIG
+    if rings_config is None:
+        rings_config = RINGS_DEFAULT_CONFIG
+    if bodies_config is None:
+        bodies_config = BODIES_DEFAULT_CONFIG
+    if titan_config is None:
+        titan_config = TITAN_DEFAULT_CONFIG
     if bootstrap_config is None:
         bootstrap_config = BOOTSTRAP_DEFAULT_CONFIG
         
@@ -1511,12 +1521,14 @@ def master_find_offset(obs,
             metadata['bootstrap_candidate'] = True
             logger.info('Single body without cartographic data - '+
                         'bootstrap candidate and returning')
-            # Go through and update all the body metadata
-            for body_name in bodies_metadata:
-                if body_name in bootstrap_config['body_list']: 
-                    bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                              None, 
-                                              bodies_config=bodies_config)
+            if add_bootstrap_info:
+                # Go through and update all the body metadata
+                for body_name in bodies_metadata:
+                    if body_name in bootstrap_config['body_list']: 
+                        bodies_add_bootstrap_info(obs, 
+                                                  bodies_metadata[body_name],
+                                                  None, 
+                                                  bodies_config=bodies_config)
             metadata['end_time'] = time.time()
             return metadata
 
@@ -1525,6 +1537,7 @@ def master_find_offset(obs,
                     # CREATE RING MODEL #
                     #####################
     
+    rings_metadata = None
     if allow_rings:
         rings_model, rings_metadata, rings_overlay_text = rings_create_model(
                                          obs, extend_fov=extend_fov,
@@ -1552,12 +1565,13 @@ def master_find_offset(obs,
     if force_bootstrap_candidate:
         metadata['bootstrap_candidate'] = True
         logger.info('Forcing bootstrap candidate and returning')
-        # Go through and update all the body metadata
-        for body_name in bodies_metadata:
-            if body_name in bootstrap_config['body_list']: 
-                bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                          None, 
-                                          bodies_config=bodies_config)
+        if add_bootstrap_info:
+            # Go through and update all the body metadata
+            for body_name in bodies_metadata:
+                if body_name in bootstrap_config['body_list']: 
+                    bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                              None, 
+                                              bodies_config=bodies_config)
         metadata['end_time'] = time.time()
         return metadata
         
@@ -1723,11 +1737,12 @@ def master_find_offset(obs,
         obs.fov = orig_fov
         set_obs_center_bp(obs, force=True)
 
-    # Go through and update all the body metadata
-    for body_name in bodies_metadata:
-        if body_name in bootstrap_config['body_list']: 
-            bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
-                                      offset, bodies_config=bodies_config)
+    if add_bootstrap_info:
+        # Go through and update all the body metadata
+        for body_name in bodies_metadata:
+            if body_name in bootstrap_config['body_list']: 
+                bodies_add_bootstrap_info(obs, bodies_metadata[body_name],
+                                          offset, bodies_config=bodies_config)
 
 
                 ######################

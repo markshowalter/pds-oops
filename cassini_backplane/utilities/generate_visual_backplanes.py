@@ -11,9 +11,13 @@ import matplotlib.pyplot as plt
 
 import oops
 
+import oops.inst.cassini.iss as iss
+import oops
+
 from cb_config import *
 from cb_util_file import *
 
+iss.initialize(planets=(6,))
 
 command_list = sys.argv[1:]
 
