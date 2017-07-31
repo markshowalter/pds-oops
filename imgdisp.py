@@ -6,8 +6,7 @@
 ###############################################################################
 
 import Tkinter as tk
-import ImageTk
-from PIL import Image
+from PIL import Image, ImageTk
 import numpy as np
 import scipy.ndimage.interpolation as ndinterp
 
@@ -830,7 +829,7 @@ class ImageDisp(tk.Frame):
         update3 = self._update_zoom()
         if update1 or update2 or update3:
             self._update_pil_images()
-    
+
     def _command_auto_update_checkbox(self):
         """Internal - callback for auto update checkbox."""
         if not self.var_auto_update.get():
@@ -899,7 +898,16 @@ class ImageDisp(tk.Frame):
              (self.var_xzoom.get() == self.last_xzoom and
               self.var_yzoom.get() == self.last_yzoom))):
             return False
-        
+
+        xzoom, yzoom = self._get_zoom_factors()
+
+        for i, img in enumerate(self.imgdata_list):
+            greyscale_img = self.greyscale_list[i]
+            num_pix = (greyscale_img.shape[0]*greyscale_img.shape[1]/
+                       xzoom/yzoom)
+#             if num_pix > 5760000:
+#                 return False
+
         if self.one_zoom:
             self.last_zoom = self.var_zoom.get()
         else:
@@ -945,7 +953,7 @@ class ImageDisp(tk.Frame):
             return
         self.label_xy.config(text='Mouse coord: %.2f, %.2f' %
                              (x-self.origin[0], y-self.origin[1]))
-        val = self.imgdata_list[img_num][y,x]
+        val = self.imgdata_list[img_num][int(y),int(x)]
         if val > 10000:
             self.label_val.config(text='Mouse val: %e' % val)
         else:

@@ -8,6 +8,7 @@ import numpy as np
 DPR = 180/np.pi
 RPD = np.pi/180
 AS_TO_DEG = 1/3600.
+AS_TO_RAD = AS_TO_DEG * RPD
 MAS_TO_DEG = AS_TO_DEG / 1000.
 MAS_TO_RAD = MAS_TO_DEG * RPD
 YEAR_TO_SEC = 1/365.25/86400.
@@ -159,15 +160,15 @@ SCLASS_TO_SURFACE_TEMP = {
     'K7': 4410,
     'K8': 4247, # Interp
     'K9': 4083, # Interp
-    'M0': 3920,
-    'M1': 3680,
-    'M2': 3500,
-    'M3': 3360,
-    'M4': 3230,
-    'M5': 3120,
-    'M6': 2168, # Interp
-    'M7': 1217, # Interp
-    'M8': 266
+    'M0': 3800, # M class from https://arxiv.org/abs/0903.3371
+    'M1': 3600,
+    'M2': 3400,
+    'M3': 3250,
+    'M4': 3100,
+    'M5': 2800,
+    'M6': 2600,
+    'M7': 2500,
+    'M8': 2300,
 }
 
 

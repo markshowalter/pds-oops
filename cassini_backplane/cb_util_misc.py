@@ -10,6 +10,10 @@ import cb_logging
 import logging
 
 import numpy as np
+import subprocess
+import urllib2
+
+from cb_util_file import *
 
 import oops
 
@@ -75,3 +79,9 @@ def simple_filter_name_metadata(metadata, consolidate_pol=False):
     return _simple_filter_name_helper(metadata['filter1'], metadata['filter2'],
                                       consolidate_pol=consolidate_pol)
 
+def current_git_version():
+    try:
+        return subprocess.check_output(['git', 'describe', '--long', '--dirty', 
+                                    '--abbrev=40', '--tags']).strip()
+    except:
+        return 'GIT DESCRIBE FAILED'

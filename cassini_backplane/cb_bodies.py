@@ -6,8 +6,6 @@
 # Exported routines:
 #    bodies_create_model
 #
-#    bodies_interpolate_missing_stripes
-#
 #    bodies_generate_latitudes
 #    bodies_generate_longitudes
 #    bodies_latitude_longitude_to_pixels
@@ -39,9 +37,17 @@ from cb_config import *
 from cb_util_image import *
 from cb_util_oops import *
 
+_TKINTER_AVAILABLE = True
+try:
+    import matplotlib.pyplot as plt
+    import Tkinter as tk
+    from imgdisp import ImageDisp
+except ImportError:
+    _TKINTER_AVAILABLE = False
 
 _LOGGING_NAME = 'cb.' + __name__
 
+DEBUG_CARTOGRAPHIC = False
 
 # Sometimes the bounding box returned by "inventory" is not quite big enough
 BODIES_POSITION_SLOP_FRAC = 0.05
@@ -78,10 +84,18 @@ def _bodies_create_cartographic(bp, body_data):
     latlon_type = body_data['latlon_type']
     lon_direction = body_data['lon_direction']
 
+    if DEBUG_CARTOGRAPHIC:
+        plt.imshow(data)
+        plt.title('Mosaic data')
+        plt.show()
+        
     bp_latitude = bp.latitude(body_name, lat_type=latlon_type)
     body_mask_inv = ma.getmaskarray(bp_latitude.mvals)
     ok_body_mask = np.logical_not(body_mask_inv)
 
+    if not np.any(ok_body_mask):
+        return None, 0.
+    
     bp_latitude = bp_latitude.mvals.astype('float')
 
     bp_longitude = bp.longitude(body_name, direction=lon_direction,
@@ -146,6 +160,12 @@ def _bodies_create_cartographic(bp, body_data):
     logger.debug('Best resolution ratio %.5f, worst %.5f, mean %.5f, '+
                  'median %.5f', best_ratio, worst_ratio,
                  np.mean(res_ratio), np.median(res_ratio))
+    
+    if DEBUG_CARTOGRAPHIC:
+        plt.figure()
+        plt.imshow(model)
+        plt.title('Cartographic model')
+        plt.show()
     
     return model, blur_amt
 
@@ -298,7 +318,7 @@ def bodies_create_model(obs, body_name, inventory,
                         always_create_model=False,
                         label_avoid_mask=None,
                         bodies_config=None,
-                        mask_only=False):
+                        no_model=False):
     """Create a model for a body.
     
     Inputs:
@@ -321,8 +341,8 @@ def bodies_create_model(obs, body_name, inventory,
                                not be placed (i.e. labels from another
                                model are already there). None if no mask.
         bodies_config          Configuration parameters.
-        mask_only              Only compute the latlon mask and don't spent time
-                               actually trying to make a model.
+        no_model               Create a metadata structure but don't make an
+                               actual model.
                                  
     Returns:
         model, metadata, text
@@ -343,9 +363,6 @@ def bodies_create_model(obs, body_name, inventory,
                                shifted to the maximum extent specified by
                                extend_fov. This is based purely on geometry, 
                                not looking at whether other objects occult it.
-        'too_bumpy'            True if the image is high enough resolution that
-                               surface features distort the circularity of the
-                               moon.
         'occulted_by'          A list of body names or 'RINGS' that occult some
                                or all of this body. This is set in the main
                                offset loop, not in this procedure. None if
@@ -359,21 +376,21 @@ def bodies_create_model(obs, body_name, inventory,
         'sub_observer_lat'     The sub-observer latitude.
         'phase_angle'          The phase angle at the body's center.
         'body_blur'            The amount of blur required to properly 
-                               correlate low-resolution cartographic data.
+                               correlate low-resolution cartographic data or
+                               to not look bumpy when doing a ellipsoidal model.
+        'confidence'           The confidence in how well this model will
+                               do in correlation.
 
         'start_time'           The time (s) when bodies_create_model was called.
         'end_time'             The time (s) when bodies_create_model returned.
 
             These are used for bootstrapping:
             
-        'latlon_mask'          A mask showing which lat/lon are visible in the
-                               image.
-        'mask_lat_resolution'  The latitude resolution in latlon_mask.
-        'mask_lon_resolution'  The longitude resolution in latlon_mask.
-        'mask_latlon_type'     The type of lat/lon ('centric', 'graphic', or
-                               'squashed') in latlon_mask.
-        'mask_lon_direction'   The direction of longitude ('east' or 'west')
-                               in latlon_mask.
+        'reproj'               The reprojection data structure at the 
+                               resolution specified in the config. Filled in
+                               after the offset pass is finished. None if
+                               not appropriate for bootstrapping or
+                               it hasn't been processed by the main loop yet.
     """
     start_time = time.time()
     
@@ -397,27 +414,23 @@ def bodies_create_model(obs, body_name, inventory,
     metadata['curvature_ok'] = None
     metadata['limb_ok'] = None
     metadata['entirely_visible'] = None
-    metadata['too_bumpy'] = None
     metadata['occulted_by'] = None
     metadata['in_saturn_shadow'] = None
     metadata['body_blur'] = None
-    metadata['latlon_mask'] = None
-    metadata['mask_lat_resolution'] = None
-    metadata['mask_lon_resolution'] = None
-    metadata['mask_latlon_type'] = None
-    metadata['mask_lon_direction'] = None
+    metadata['reproj'] = None
     metadata['has_bad_pixels'] = None
-    metadata['start_time'] = start_time 
+    metadata['start_time'] = start_time
+    metadata['confidence'] = None 
 
     logger.info('*** Modeling %s ***', body_name)
 
     metadata['sub_solar_lon'] = obs.ext_bp.sub_solar_longitude(
                            body_name,
-                           direction=bodies_config['mask_lon_direction']).vals
+                           direction=bodies_config['reproj_lon_direction']).vals
     metadata['sub_solar_lat'] = obs.ext_bp.sub_solar_latitude(body_name).vals
     metadata['sub_observer_lon'] = obs.ext_bp.sub_observer_longitude(
                            body_name,
-                           direction=bodies_config['mask_lon_direction']).vals
+                           direction=bodies_config['reproj_lon_direction']).vals
     metadata['sub_observer_lat'] = obs.ext_bp.sub_observer_latitude(body_name).vals
     metadata['phase_angle'] = obs.ext_bp.center_phase_angle(body_name).vals
 
@@ -453,7 +466,6 @@ def bodies_create_model(obs, body_name, inventory,
             'Bounding box (area %.3f pixels) is too small to bother with',
             bb_area)
         if not always_create_model and not mask_only:
-            metadata['latlon_mask'] = None
             metadata['end_time'] = time.time()
             return None, metadata, None
         
@@ -474,17 +486,6 @@ def bodies_create_model(obs, body_name, inventory,
         # the extended FOV
         entirely_visible = True
     metadata['entirely_visible'] = entirely_visible
-
-    if body_name in bodies_config['surface_bumpiness']:
-        center_resolution = (obs.ext_bp.center_resolution(body_name).
-                             vals.astype('float32'))
-        if (center_resolution < 
-            bodies_config['surface_bumpiness'][body_name]):
-            metadata['too_bumpy'] = True
-            logger.info('Resolution %.2f is too high - limb will look bumpy',
-                        center_resolution)
-        else:
-            metadata['too_bumpy'] = False
 
     # For curvature later
     u_center = int((u_min+u_max)/2)
@@ -526,42 +527,46 @@ def bodies_create_model(obs, body_name, inventory,
     else:
         logger.info('Not all of body guaranteed to be visible')
 
-    # Create a Meshgrid that only covers the extent of the body
-    restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
-                                           origin=(u_min+.5, v_min+.5),
-                                           limit =(u_max+.5, v_max+.5),
-                                           swap  =True)
-    restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
-
-    if bb_area >= bodies_config['min_latlon_mask_area']:
-        # Compute the lat/lon mask for bootstrapping
-        
-        latlon_mask = bodies_reproject(obs, body_name, 
-            lat_resolution=bodies_config['mask_lat_resolution'], 
-            lon_resolution=bodies_config['mask_lon_resolution'],
-            zoom_amt=1,
-            latlon_type=bodies_config['mask_latlon_type'],
-            lon_direction=bodies_config['mask_lon_direction'],
-            max_incidence=None,
-            max_emission=None,
-            max_resolution=None,
-            mask_only=True, override_backplane=restr_bp,
-            subimage_edges=(u_min,u_max,v_min,v_max))
-    
-        metadata['latlon_mask'] = latlon_mask
-        metadata['mask_lat_resolution'] = bodies_config['mask_lat_resolution']
-        metadata['mask_lon_resolution'] = bodies_config['mask_lon_resolution']
-        metadata['mask_latlon_type'] = bodies_config['mask_latlon_type']
-        metadata['mask_lon_direction'] = bodies_config['mask_lon_direction']
-
-    if mask_only:
-        metadata['end_time'] = time.time()
+    if no_model:
         return None, metadata, None
+    
+    # Make a new Backplane that only covers the body, but oversample
+    # it so we can do anti-aliasing
+    restr_oversample_u = max(int(np.floor(
+              bodies_config['oversample_edge_limit'] /                                      
+              np.ceil(inventory['u_pixel_size']))), 1)
+    restr_oversample_v = max(int(np.floor(
+              bodies_config['oversample_edge_limit'] /                                      
+              np.ceil(inventory['v_pixel_size']))), 1)
+    logger.debug('Oversampling by %d,%d', restr_oversample_u,
+                 restr_oversample_v)
+    restr_u_min = u_min + 1./(2*restr_oversample_u)
+    restr_u_max = u_max + 1 - 1./(2*restr_oversample_u)
+    restr_v_min = v_min + 1./(2*restr_oversample_v)
+    restr_v_max = v_max + 1 - 1./(2*restr_oversample_v)
+    if not hasattr(obs, 'restr_oversample_bp_dict'):
+        obs.restr_oversample_bp_dict = {}
+    restr_key = (restr_u_min, restr_v_min, restr_u_max, restr_v_max)
+    if restr_key in obs.restr_oversample_bp_dict:
+        restr_o_bp = obs.restr_oversample_bp_dict[restr_key]
+    else:
+        restr_o_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                                 origin=(restr_u_min, restr_v_min),
+                                                 limit =(restr_u_max, restr_v_max),
+                                                 oversample=(restr_oversample_u,
+                                                             restr_oversample_v),
+                                                 swap  =True)
+        restr_o_bp = oops.Backplane(obs, meshgrid=restr_o_meshgrid)
+        obs.restr_oversample_bp_dict[restr_key] = restr_o_bp
+    restr_o_incidence_mvals = restr_o_bp.incidence_angle(body_name).mvals
+    restr_incidence_mvals = filter_downsample(restr_o_incidence_mvals,
+                                              restr_oversample_v,
+                                              restr_oversample_u)
+    restr_incidence = polymath.Scalar(restr_incidence_mvals)
 
     # Analyze the limb
     
-    incidence = restr_bp.incidence_angle(body_name)
-    restr_body_mask_inv = ma.getmaskarray(incidence.mvals)
+    restr_body_mask_inv = ma.getmaskarray(restr_incidence_mvals)
     restr_body_mask = np.logical_not(restr_body_mask_inv)
 
     # If the inv mask is true, but any of its neighbors are false, then
@@ -576,15 +581,16 @@ def bodies_create_model(obs, body_name, inventory,
     limb_mask_total = np.logical_or(limb_mask_total, limb_mask_4)
     limb_mask = np.logical_and(limb_mask, limb_mask_total)
 
-    masked_incidence = incidence.mask_where(np.logical_not(limb_mask))
+    masked_restr_incidence = restr_incidence.mask_where(
+                                            np.logical_not(limb_mask))
     
     if not np.any(limb_mask):
         limb_incidence_min = 1e38
         limb_incidence_max = 1e38
         logger.info('No limb')
     else:
-        limb_incidence_min = np.min(masked_incidence.mvals)
-        limb_incidence_max = np.max(masked_incidence.mvals)
+        limb_incidence_min = np.min(masked_restr_incidence.mvals)
+        limb_incidence_max = np.max(masked_restr_incidence.mvals)
         logger.info('Limb incidence angle min %.2f max %.2f',
                      limb_incidence_min*oops.DPR, limb_incidence_max*oops.DPR)
 
@@ -601,26 +607,37 @@ def bodies_create_model(obs, body_name, inventory,
         r_edge = obs.data.shape[1]-1-extend_fov[0]
         t_edge = extend_fov[1]
         b_edge = obs.data.shape[0]-1-extend_fov[1]
-        inc_r_edge = masked_incidence.vals.shape[1]-1
-        inc_b_edge = masked_incidence.vals.shape[0]-1
+        inc_r_edge = masked_restr_incidence.vals.shape[1]-1
+        inc_b_edge = masked_restr_incidence.vals.shape[0]-1
         for l_moon, r_moon, lr_str in ((u_center-width_threshold,
-                                       u_center+width/2, 'L'),
+                                        u_center+width/2, 'L'),
                                       (u_center-width/2,
                                        u_center+width_threshold, 'R')):
             for t_moon, b_moon, tb_str in ((v_center-height_threshold,
                                             v_center+height/2, 'T'),
                                            (v_center-height/2,
                                             v_center+height_threshold, 'B')):
+                logger.debug('LMOON %d LEDGE %d / RMOON %d REDGE %d / '+
+                             'TMOON %d TEDGE %d / BMOON %d BEDGE %d',
+                             l_moon, l_edge, r_moon, r_edge,
+                             t_moon, t_edge, b_moon, b_edge)
                 if (l_moon >= l_edge and r_moon <= r_edge and 
                     t_moon >= t_edge and b_moon <= b_edge):
-                    l_moon_clip = np.clip(l_moon-u_min, 0, inc_r_edge)
-                    r_moon_clip = np.clip(r_moon-u_min, 0, inc_r_edge)
-                    t_moon_clip = np.clip(t_moon-v_min, 0, inc_b_edge)
-                    b_moon_clip = np.clip(b_moon-v_min, 0, inc_b_edge)
-                    sub_inc = masked_incidence[t_moon_clip:b_moon_clip+1,
-                                               l_moon_clip:r_moon_clip+1].mvals
-                    sub_inc_min = np.min(sub_inc)
-                    if (sub_inc_min < limb_threshold):
+                    l_moon_clip = int(np.clip(l_moon-u_min, 0, inc_r_edge))
+                    r_moon_clip = int(np.clip(r_moon-u_min, 0, inc_r_edge))
+                    t_moon_clip = int(np.clip(t_moon-v_min, 0, inc_b_edge))
+                    b_moon_clip = int(np.clip(b_moon-v_min, 0, inc_b_edge))
+                    sub_inc = masked_restr_incidence[
+                                         t_moon_clip:b_moon_clip+1,
+                                         l_moon_clip:r_moon_clip+1].mvals
+                    ok_masked_incidence = sub_inc[np.where(sub_inc < 
+                                                           limb_threshold)]
+                    logger.debug('%s %s %d %d', tb_str, lr_str,
+                                 ok_masked_incidence.compressed().shape[0],
+                                 sub_inc.compressed().shape[0])
+                    inc_frac = (float(ok_masked_incidence.compressed().shape[0]) /
+                                float(sub_inc.compressed().flatten().shape[0]))
+                    if inc_frac >= limb_frac:
                         logger.debug('Curvature+limb quadrant %s%s OK', 
                                      tb_str, lr_str)
                         curvature_ok = True
@@ -635,7 +652,8 @@ def bodies_create_model(obs, body_name, inventory,
                                 dtype=np.float32)
             full_inc[:,:] = ma.masked
             full_inc[v_min+extend_fov[1]:v_max+extend_fov[1]+1,
-                     u_min+extend_fov[0]:u_max+extend_fov[0]+1] = masked_incidence.mvals
+                     u_min+extend_fov[0]:u_max+extend_fov[0]+1
+                    ] = masked_restr_incidence.mvals
             full_inc[:extend_fov[1]*2,:] = ma.masked
             full_inc[:,:extend_fov[0]*2] = ma.masked
             full_inc[-extend_fov[1]*2:,:] = ma.masked
@@ -665,11 +683,11 @@ def bodies_create_model(obs, body_name, inventory,
                 logger.info('Limb ignored because cartographic data available')
                 metadata['limb_ok'] = True
             else:
-                ok_masked_incidence = masked_incidence.mvals[np.where(
-                                          masked_incidence.mvals < 
+                ok_masked_incidence = masked_restr_incidence.mvals[np.where(
+                                          masked_restr_incidence.mvals < 
                                           limb_threshold)]
                 inc_frac = (float(ok_masked_incidence.compressed().shape[0]) /
-                            float(masked_incidence.mvals.compressed().
+                            float(masked_restr_incidence.mvals.compressed().
                                   flatten().shape[0]))
                 if inc_frac >= limb_frac:
                     metadata['limb_ok'] = True
@@ -687,42 +705,85 @@ def bodies_create_model(obs, body_name, inventory,
                 
     # Make the actual model
 
-    restr_model = None    
+    restr_model = None
     if (np.max(restr_body_mask) == 0 or 
-        np.min(incidence[restr_body_mask].vals) >= oops.HALFPI):
+        np.min(restr_incidence[restr_body_mask].vals) >= oops.HALFPI):
         logger.debug('Looking only at back side - leaving model empty')
         # Make a slight glow even on the back side
         restr_model = np.zeros(restr_body_mask.shape)
         restr_model[restr_body_mask] = 0.01
     else:
-        logger.debug('Making actual model')
+        logger.debug('Making Lambert model')
     
         if bodies_config['use_lambert']:
-            restr_model = restr_bp.lambert_law(body_name).mvals
-            restr_model = restr_model.filled(0.).astype('float')
+            restr_o_lambert = restr_o_bp.lambert_law(body_name).mvals
+            restr_model = filter_downsample(restr_o_lambert,
+                                            restr_oversample_v,
+                                            restr_oversample_u)
+            restr_model = restr_model.filled(0.).astype('float')                
+            if body_name == 'TITAN':
+                # Special case for Titan because of the atmospheric glow at
+                # high phase angles. The model won't be used for correlation,
+                # only for making the pretty offset PNG.
+                restr_model = restr_model+filt.maximum_filter(limb_mask, 3)
             # Make a slight glow even past the terminator
             restr_model = restr_model+0.01
             restr_model[restr_body_mask_inv] = 0.
         else:
             restr_model = restr_body_mask.astype('float')
-    
-        blur_amt = None
-        if cartographic_data:
-            for cart_body in sorted(cartographic_data.keys()):
-                if cart_body == body_name:
-                    logger.info('Cartographic data provided for %s - USING',
-                                cart_body)
-                    cart_body_data = cartographic_data[body_name]
-                    cart_model, blur_amt = _bodies_create_cartographic(
-                                                   restr_bp, cart_body_data)
-                    restr_model *= cart_model
-                    metadata['too_bumpy'] = False
-                else:
-                    logger.info('Cartographic data provided for %s',
-                                cart_body)
-
-        metadata['body_blur'] = blur_amt
         
+    used_cartographic = False        
+    if cartographic_data:
+        # Create a Meshgrid that only covers the extent of the body WITHIN
+        # THIS IMAGE
+        if not hasattr(obs, 'restr_bp_dict'):
+            obs.restr_bp_dict = {}
+        restr_key = (u_min, v_min, u_max, v_max)
+        if restr_key in obs.restr_bp_dict:
+            restr_bp = obs.restr_bp_dict[restr_key]
+        else:
+            restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                                   origin=(u_min+.5, v_min+.5),
+                                                   limit =(u_max+.5, v_max+.5),
+                                                   swap  =True)
+            restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
+            obs.restr_bp_dict[restr_key] = restr_bp
+        for cart_body in sorted(cartographic_data.keys()):
+            if cart_body == body_name:
+                logger.info('Cartographic data provided for %s - USING',
+                            cart_body)
+                cart_body_data = cartographic_data[body_name]
+                cart_model, blur_amt = _bodies_create_cartographic(
+                                               restr_bp, cart_body_data)
+                if cart_model is not None:
+                    restr_model *= cart_model
+                    metadata['body_blur'] = blur_amt
+                    logger.info('Body blur amount %.5f', blur_amt)
+                    used_cartographic = True
+                else:
+                    logger.info('Cartographic model failed')
+            else:
+                logger.info('Cartographic data provided for %s',
+                            cart_body)
+
+    if not used_cartographic:    
+        if body_name in bodies_config['surface_bumpiness']:
+            center_resolution = (obs.ext_bp.center_resolution(body_name).
+                                 vals.astype('float32'))
+            if (center_resolution < 
+                bodies_config['surface_bumpiness'][body_name]):
+                metadata['body_blur'] = (bodies_config[
+                                             'surface_bumpiness'][body_name] /
+                                       center_resolution)
+                logger.info('Resolution %.2f is too high - limb will look '+
+                            'bumpy - need to blur by %.5f',
+                            center_resolution,
+                            metadata['body_blur'])
+            else:
+                logger.info('Resolution %.2f is good enough for a sharp edge',
+                            center_resolution)
+    
+    
     # Take the full-resolution object and put it back in the right place in a
     # full-size image
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
@@ -735,36 +796,147 @@ def bodies_create_model(obs, body_name, inventory,
     model_text = _bodies_make_label(obs, body_name, model, label_avoid_mask,
                                     extend_fov, bodies_config)
     
+    metadata['confidence'] = 1.
     metadata['end_time'] = time.time()
     return model, metadata, model_text
 
+
+def bodies_add_bootstrap_info(obs, metadata, offset, bodies_config=None):
+    """Add bootstrap data to existing body metadata.
+    
+    If the offset is None, then this might be a bootstrap candidate, in
+    which case we need to produce a reprojection based on what we know
+    MUST be in the image (the edges of the image minus the maximum pointing
+    offset).
+    
+    If the offset is not None, then this might be a boostrap seed, in
+    which case we need to produce a reprojection based on what we know
+    ACTUALLY IS in the image based on that offset.
+     
+    
+    Inputs:
+        obs                    The Observation.
+        metadata               The existing metadata for the body.
+        offset                 The navigated offset of the body, or None if
+                               no offset is available.
+        bodies_config          Configuration parameters.
+                                 
+    Returns:
+        Nothing, but mutates the metadata by replacing the 'reproj' field with
+        reprojected data.
+    """
+    start_time = time.time()
+    
+    logger = logging.getLogger(_LOGGING_NAME+'.bodies_add_bootstrap_info')
+
+    if bodies_config is None:
+        bodies_config = BODIES_DEFAULT_CONFIG
+        
+    body_name = metadata['body_name']
+
+    inventory = metadata['inventory']
+    bb_area = inventory['u_pixel_size'] * inventory['v_pixel_size']
+
+    if metadata['occulted_by'] is not None:
+        logger.debug('Skipping bootstrap info for candidate %s because it is'+
+                     'occulted by another object', body_name)
+        return
+        
+    if offset is None:
+        if bb_area < bodies_config['min_reproj_candidate_area']:
+            logger.debug('Skipping bootstrap info for candidate %s because BB '+
+                         'is too small',
+                         body_name)
+            return
+        img_u_min, img_v_min = MAX_POINTING_ERROR[(obs.data.shape, 
+                                                   obs.detector)]
+        img_u_max = obs.data.shape[1]-img_u_min-1
+        img_v_max = obs.data.shape[0]-img_v_min-1
+    else:
+        if bb_area < bodies_config['min_reproj_seed_area']:
+            logger.debug('Skipping bootstrap info for seed %s because BB '+
+                         'is too small',
+                         body_name)
+            return
+        img_u_min = 0
+        img_u_max = obs.data.shape[1]-1
+        img_v_min = 0
+        img_v_max = obs.data.shape[0]-1
+         
+    logger.info('Adding bootstrap info for %s', body_name)
+
+    u_min = int(inventory['u_min_unclipped'])
+    u_max = int(inventory['u_max_unclipped'])
+    v_min = int(inventory['v_min_unclipped'])
+    v_max = int(inventory['v_max_unclipped'])
+
+    u_min -= int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
+    u_max += int((u_max-u_min) * BODIES_POSITION_SLOP_FRAC)
+    v_min -= int((v_max-v_min) * BODIES_POSITION_SLOP_FRAC)
+    v_max += int((v_max-v_min) * BODIES_POSITION_SLOP_FRAC)
+    
+    u_min = np.clip(u_min, img_u_min, img_u_max)
+    u_max = np.clip(u_max, img_u_min, img_u_max)
+    v_min = np.clip(v_min, img_v_min, img_v_max)
+    v_max = np.clip(v_max, img_v_min, img_v_max)
+    
+    # Things break if the moon is only a single pixel wide or tall
+    # This really shouldn't be an issue here, but just in case...
+    if u_min == u_max and u_min == img_u_max:
+        u_min -= 1
+    if u_min == u_max and u_min == img_u_min:
+        u_max += 1
+    if v_min == v_max and v_min == img_v_max:
+        v_min -= 1
+    if v_min == v_max and v_min == img_v_min:
+        v_max += 1
+        
+    logger.debug('Image size %d %d subrect U %d to %d V %d to %d',
+                 obs.data.shape[1], obs.data.shape[0],
+                 u_min, u_max, v_min, v_max)
+
+    # Create a Meshgrid that only covers the extent of the body WITHIN
+    # THIS IMAGE
+    restr_meshgrid = oops.Meshgrid.for_fov(obs.fov,
+                                           origin=(u_min+.5, v_min+.5),
+                                           limit =(u_max+.5, v_max+.5),
+                                           swap  =True)
+    restr_bp = oops.Backplane(obs, meshgrid=restr_meshgrid)
+    reproj = bodies_reproject(obs, body_name, 
+        lat_resolution=bodies_config['reproj_lat_resolution'], 
+        lon_resolution=bodies_config['reproj_lon_resolution'],
+        zoom_amt=1,
+        latlon_type=bodies_config['reproj_latlon_type'],
+        lon_direction=bodies_config['reproj_lon_direction'],
+        max_incidence=None,
+        max_emission=None,
+        max_resolution=None,
+        offset=offset,
+        override_backplane=restr_bp,
+        subimage_edges=(u_min,u_max,v_min,v_max))
+#     reproj['img'][reproj['img'] > 0.5] = 0.5
+#     plt.imshow(reproj['img'])
+#     plt.figure()
+#     plt.imshow(reproj['emission'])
+#     plt.figure()
+#     plt.imshow(reproj['full_mask'])
+#     plt.show()
+    del reproj['body_name']
+    del reproj['path']
+    del reproj['offset_path']
+    del reproj['offset']
+    del reproj['img']
+    del reproj['resolution']
+    del reproj['time']
+
+    metadata['reproj'] = reproj
+    
 
 #==============================================================================
 # 
 # BODY REPROJECTION UTILITIES
 #
 #==============================================================================
-
-def bodies_interpolate_missing_stripes(data):
-    """Interpolate missing horizontal data in an image.
-    
-    This routine handles an image that has the right side of some lines missing
-    due to data transmission limitations. A pixel is interpolated if it is
-    missing (zero) and the pixels immediately above and below are present
-    (not zero)."""
-    zero_mask = (data == 0.)
-    data_up = np.zeros(data.shape)
-    data_up[:-1,:] = data[1:,:]
-    data_down = np.zeros(data.shape)
-    data_down[1:,:] = data[:-1,:]
-    up_mask = (data_up != 0.)
-    down_mask = (data_down != 0.)
-    good_mask = np.logical_and(zero_mask, up_mask)
-    good_mask = np.logical_and(good_mask, down_mask)
-    data_mean = (data_up+data_down)/2.
-    ret_data = data.copy()
-    ret_data[good_mask] = data_mean[good_mask]
-    return ret_data
 
 def bodies_generate_latitudes(latitude_start=_BODIES_MIN_LATITUDE,
                               latitude_end=_BODIES_MAX_LATITUDE,
@@ -954,7 +1126,7 @@ def bodies_reproject(
         obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
     
     # Get all the info for each pixel
-    if override_backplane:
+    if override_backplane is not None:
         bp = override_backplane
     else:
         bp = oops.Backplane(obs)
@@ -987,6 +1159,10 @@ def bodies_reproject(
         u_min, u_max, v_min, v_max = subimage_edges
         subimg = data[v_min:v_max+1,u_min:u_max+1]
     else:
+        u_min = 0
+        v_min = 0
+        u_max = data.shape[1]-1
+        v_max = data.shape[0]-1
         subimg = data
 
     if not mask_only:
@@ -1022,11 +1198,13 @@ def bodies_reproject(
     if not mask_only:
         # Divide the data by the Lambert model and multiply by the cosine of
         # the emission angle to account for projected illumination and viewing
-        lambert[ok_body_mask_inv] = 1e38
-        adj_data = data / lambert * np.cos(bp_emission)
+        lambert[ok_body_mask_inv] = 0.
+        adj_data = np.zeros(subimg.shape)
+        adj_data[lambert != 0.] = (subimg[lambert != 0.] /
+                                   lambert[lambert != 0.] *
+                                   np.cos(bp_emission[lambert != 0.]))
         adj_data = adj_data.astype('float32')
         adj_data[ok_body_mask_inv] = 0.
-        lambert[ok_body_mask_inv] = 0.
         bp_emission[ok_body_mask_inv] = 1e38
         resolution[ok_body_mask_inv] = 1e38
 
@@ -1122,13 +1300,13 @@ def bodies_reproject(
     u_pixels = u.vals
     v_pixels = v.vals
     
-    goodumask = np.logical_and(u_pixels >= 0, u_pixels <= data.shape[1]-1)
-    goodvmask = np.logical_and(v_pixels >= 0, v_pixels <= data.shape[0]-1)
+    goodumask = np.logical_and(u_pixels >= u_min, u_pixels <= u_max)
+    goodvmask = np.logical_and(v_pixels >= v_min, v_pixels <= v_max)
     goodmask = np.logical_and(goodumask, goodvmask)
     goodmask = np.logical_and(goodmask, ~pixmask)
     
-    good_u = u_pixels[goodmask]
-    good_v = v_pixels[goodmask]
+    good_u = u_pixels[goodmask] - u_min
+    good_v = v_pixels[goodmask] - v_min
     good_lat = lat_bins[goodmask]
     good_lon = lon_bins[goodmask]
     
