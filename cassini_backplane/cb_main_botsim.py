@@ -111,7 +111,9 @@ def collect_cmd_line(image_path, botsim_offset):
     ret += ['--main-console-level', 'none']
     ret += ['--image-logfile-level', arguments.image_logfile_level]
     ret += ['--image-console-level', 'none']
-    ret += ['--botsim-offset', '%d,%d'%botsim_offset]
+    # Stupid comma required for negative numbers 
+    ret += ['--botsim-offset', ',%d,%d'%botsim_offset]
+    ret += ['--force-offset']
     if arguments.profile:
         ret += ['--profile']
     ret += ['--image-full-path', image_path]
@@ -172,11 +174,21 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
         main_logger.info('Skipping %s - no WAC offset file', image_path_wac)
         return False
 
-    if 'error' in offset_metadata_wac:
-        main_logger.info('Skipping %s - offset file indicates error', 
+    if 'status' not in offset_metadata_wac:
+        main_logger.error('Skipping %s - offset file missing status indicator',
+                          image_path_wac)
+        return False
+    
+    if offset_metadata_wac['status'] != 'ok':
+        main_logger.info('Skipping %s - offset file indicates error or skipped', 
                          image_path_wac)
         return False
-        
+    
+    if 'offset' not in offset_metadata_wac:
+        main_logger.error('Skipping %s - WAC image not error but has no offset!',
+                          image_path_wac)
+        return False
+    
     wac_offset = offset_metadata_wac['offset']
     
     if wac_offset is None:
@@ -209,7 +221,7 @@ def process_botsim_one_image(image_path_nac, image_path_wac, redo_offset):
                               wac_offset[0], wac_offset[1])
             if (abs(nac_offset[0]-botsim_offset[0]) > 10 or
                 abs(nac_offset[1]-botsim_offset[1]) > 10):
-                main_logger.warn('%s - WARNING - Offsets differ by too much',
+                main_logger.warn('%s - Offsets differ by too much',
                                  image_path_nac)
             return False
             

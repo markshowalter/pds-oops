@@ -9,20 +9,20 @@ import numpy as np
 import os.path
 import struct
 
-OBJ_TYPE_CLEAN = 0
-OBJ_TYPE_NEAR_OVEREXPOSED = 1
-OBJ_TYPE_STREAK = 2
-OBJ_TYPE_HPM = 3
-OBJ_TYPE_EXT_HPM = 4
-OBJ_TYPE_POOR_PM = 5
-OBJ_TYPE_SUBST_ASTROMETRY = 6
-OBJ_TYPE_SUPPL = 7
-OBJ_TYPE_HPM_NOT_MATCHED = 8
-OBJ_TYPE_HPM_DISCREPANT = 9
+UCAC4_OBJ_TYPE_CLEAN = 0
+UCAC4_OBJ_TYPE_NEAR_OVEREXPOSED = 1
+UCAC4_OBJ_TYPE_STREAK = 2
+UCAC4_OBJ_TYPE_HPM = 3
+UCAC4_OBJ_TYPE_EXT_HPM = 4
+UCAC4_OBJ_TYPE_POOR_PM = 5
+UCAC4_OBJ_TYPE_SUBST_ASTROMETRY = 6
+UCAC4_OBJ_TYPE_SUPPL = 7
+UCAC4_OBJ_TYPE_HPM_NOT_MATCHED = 8
+UCAC4_OBJ_TYPE_HPM_DISCREPANT = 9
 
-OBJ_TYPE_STRINGS = ['CLEAN', 'NEAR_OVEREXPOSED', 'STREAK', 'HPM', 'EXT_HPM',
-                    'POOR_PM', 'SUBST_ASTROMETRY', 'SUPPL', 'HPM_NOT_MATCHED',
-                    'HPM_DISCREPANT']
+UCAC4_OBJ_TYPE_STRINGS = ['CLEAN', 'NEAR_OVEREXPOSED', 'STREAK', 'HPM', 
+                          'EXT_HPM', 'POOR_PM', 'SUBST_ASTROMETRY', 'SUPPL', 
+                          'HPM_NOT_MATCHED', 'HPM_DISCREPANT']
 
 #CATMATCH_TYCHO = 0
 #CATMATCH_AC2000 = 1
@@ -34,23 +34,24 @@ OBJ_TYPE_STRINGS = ['CLEAN', 'NEAR_OVEREXPOSED', 'STREAK', 'HPM', 'EXT_HPM',
 #CATMATCH_NPM_LICK = 7
 #CATMATCH_SPM_YSJ1 = 8
 
-DOUBLE_STAR_FLAG_SINGLE = 0
-DOUBLE_STAR_FLAG_COMP1 = 1
-DOUBLE_STAR_FLAG_COMP2 = 2
-DOUBLE_STAR_FLAG_BLENDED = 3
+UCAC4_DOUBLE_STAR_FLAG_SINGLE = 0
+UCAC4_DOUBLE_STAR_FLAG_COMP1 = 1
+UCAC4_DOUBLE_STAR_FLAG_COMP2 = 2
+UCAC4_DOUBLE_STAR_FLAG_BLENDED = 3
 
-DOUBLE_STAR_FLAG_STRINGS = ['SINGLE', 'COMP1', 'COMP2', 'BLENDED']
+UCAC4_DOUBLE_STAR_FLAG_STRINGS = ['SINGLE', 'COMP1', 'COMP2', 'BLENDED']
 
-DOUBLE_STAR_TYPE_NONE = 0
-DOUBLE_STAR_TYPE_1PEAK = 1
-DOUBLE_STAR_TYPE_2PEAK = 2
-DOUBLE_STAR_TYPE_SECONDARY_PEAK = 3
-DOUBLE_STAR_TYPE_1PEAK_FIT = 4
-DOUBLE_STAR_TYPE_2PEAK_FIT = 5
-DOUBLE_STAR_TYPE_SECONDARY_PEAK_FIT = 6
+UCAC4_DOUBLE_STAR_TYPE_NONE = 0
+UCAC4_DOUBLE_STAR_TYPE_1PEAK = 1
+UCAC4_DOUBLE_STAR_TYPE_2PEAK = 2
+UCAC4_DOUBLE_STAR_TYPE_SECONDARY_PEAK = 3
+UCAC4_DOUBLE_STAR_TYPE_1PEAK_FIT = 4
+UCAC4_DOUBLE_STAR_TYPE_2PEAK_FIT = 5
+UCAC4_DOUBLE_STAR_TYPE_SECONDARY_PEAK_FIT = 6
 
-DOUBLE_STAR_TYPE_STRINGS = ['NONE', '1PEAK', '2PEAK', 'SECONDARY_PEAK',
-                            '1PEAK_FIT', '2PEAK_FIT', 'SECONDARY_PEAK_FIT']
+UCAC4_DOUBLE_STAR_TYPE_STRINGS = ['NONE', '1PEAK', '2PEAK', 'SECONDARY_PEAK',
+                                  '1PEAK_FIT', '2PEAK_FIT', 
+                                  'SECONDARY_PEAK_FIT']
 
 class UCAC4Star(Star):
     """A holder for star attributes.
@@ -97,7 +98,13 @@ class UCAC4Star(Star):
     def __str__(self):
         ret = Star.__str__(self)
 
-        ret += 'OBJTYPE ' + OBJ_TYPE_STRINGS[self.obj_type] + ' | '
+        ret += 'OBJTYPE '
+        if self.obj_type is None:
+            ret += 'None'
+        else:
+            ret += UCAC4_OBJ_TYPE_STRINGS[self.obj_type]
+        ret += ' | '
+        
         if self.vmag_model is None:
             ret += 'APER VMAG None'
         else:
@@ -108,20 +115,33 @@ class UCAC4Star(Star):
             ret += 'TEMP None'
         else:
             ret += 'TEMP %5d' % (self.temperature)
-        ret += ' | SCLASS %2s' % (self.spectral_class)
+        ret += ' | SCLASS %2s' % (str(self.spectral_class))
         ret += '\n'
 
         ret += 'DBL STAR FLAG='
-        ret += DOUBLE_STAR_FLAG_STRINGS[self.double_star_flag]
+        if self.double_star_flag is None:
+            ret += 'None'
+        else:
+            ret += UCAC4_DOUBLE_STAR_FLAG_STRINGS[self.double_star_flag]
+            
         ret += ' TYPE='
-        ret += DOUBLE_STAR_TYPE_STRINGS[self.double_star_type]
+        if self.double_star_type is None:
+            ret += 'None'
+        else:
+            ret += UCAC4_DOUBLE_STAR_TYPE_STRINGS[self.double_star_type]
+            
         ret += ' | GALAXY '
-        if self.galaxy_match:
+        if self.galaxy_match is None:
+            ret += 'NONE'
+        elif self.galaxy_match:
             ret += 'Yes'
         else:
             ret += 'No'
+            
         ret += ' | EXT SOURCE '
-        if self.extended_source:
+        if self.extended_source is None:
+            ret += 'NONE'
+        elif self.extended_source:
             ret += 'Yes'
         else:
             ret += 'No'
@@ -252,7 +272,7 @@ class UCAC4StarCatalog(StarCatalog):
         else:
             self.dirname = dir
         self.debug_level = 0
-        
+    
     def _find_stars(self, ra_min, ra_max, dec_min, dec_max, **kwargs):
         """Yield the results for all zones in the DEC range.
         
@@ -288,7 +308,7 @@ class UCAC4StarCatalog(StarCatalog):
                                                       dec_min, dec_max,
                                                       **kwargs):
                     yield star
-    
+
     def _find_stars_one_file(self, znum, fp, ra_min, ra_max, dec_min, dec_max,
                              **kwargs):
         """Yield the results for a single zone."""
@@ -424,9 +444,9 @@ class UCAC4StarCatalog(StarCatalog):
 #     (see discussion of flags 8,9 in redcution section 2e above)
             star.obj_type = parsed[5]
             if (require_clean and
-                (star.obj_type == OBJ_TYPE_STREAK or
-                 star.obj_type == OBJ_TYPE_HPM_NOT_MATCHED or
-                 star.obj_type == OBJ_TYPE_HPM_DISCREPANT)):
+                (star.obj_type == UCAC4_OBJ_TYPE_STREAK or
+                 star.obj_type == UCAC4_OBJ_TYPE_HPM_NOT_MATCHED or
+                 star.obj_type == UCAC4_OBJ_TYPE_HPM_DISCREPANT)):
                 # Use with extreme caution
                 if self.debug_level:
                     print 'ID', parsed[42], 'SKIPPED NOT CLEAN', star.obj_type

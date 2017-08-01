@@ -145,6 +145,24 @@ def set_obs_ext_data(obs, extend_fov, force=False):
 # COMPUTATIONAL ASSISTANCE
 #
 #===============================================================================
+
+def ra_rad_to_hms(ra):
+    ra_deg = ra*oops.DPR/15 # In hours
+    hh = int(ra_deg)
+    mm = int((ra_deg-hh)*60)
+    ss = (ra_deg-hh-mm/60.)*3600
+    return '%02dh%02dm%05.3fs' % (hh,mm,ss)
+
+def dec_rad_to_deg(dec):
+    dec_deg = dec*oops.DPR # In degrees
+    neg = '+'
+    if dec_deg < 0.:
+        neg = '-'
+        dec_deg = -dec_deg
+    dd = int(dec_deg)
+    mm = int((dec_deg-dd)*60)
+    ss = (dec_deg-dd-mm/60.)*3600
+    return '%s%03dd%02dm%05.3fs' % (neg,dd,mm,ss)
         
 def compute_ra_dec_limits(obs, extend_fov=(0,0)):
     """Find the RA and DEC limits of an observation.
@@ -181,9 +199,13 @@ def compute_ra_dec_limits(obs, extend_fov=(0,0)):
         dec_min = dec[np.where(dec>np.pi)].min()
         dec_max = dec[np.where(dec<np.pi)].max()
 
-    logger.debug('RAMIN %6.4f RAMAX %6.4f DECMIN %7.4f DECMAX %7.4f',
-                 ra_min, ra_max, dec_min, dec_max)
-    
+    logger.debug('RAMIN %6.4f (%s) RAMAX %6.4f (%s) DECMIN %7.4f (%s) DECMAX %7.4f (%s)',
+                 ra_min, ra_rad_to_hms(ra_min),
+                 ra_max, ra_rad_to_hms(ra_max),
+                 dec_min, dec_rad_to_deg(dec_min),
+                 dec_max, dec_rad_to_deg(dec_max))
+
+
     return ra_min, ra_max, dec_min, dec_max
 
 def compute_sun_saturn_distance(obs):
