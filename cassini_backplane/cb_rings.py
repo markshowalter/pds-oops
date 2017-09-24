@@ -6,8 +6,14 @@
 # Exported routines:
 #    rings_create_model
 #    rings_create_model_from_image
-#    rings_sufficient_curvature
+#    rings_curvature_amount
 #    rings_fiducial_features
+#
+#    rings_offset_radial_projection
+#
+#    rings_generate_longitudes
+#    rings_generate_radii
+#    rings_longitude_radius_to_pixels
 #
 #    rings_fring_inertial_to_corotating
 #    rings_fring_corotating_to_inertial
@@ -15,9 +21,17 @@
 #    rings_fring_longitude_radius
 #    rings_fring_pixels
 #
-#    rings_longitude_radius_to_pixels
-#    rings_generate_longitudes
-#    rings_generate_radii
+#    rings_bring_edge_inertial_to_corotating
+#    rings_bring_edge_corotating_to_inertial
+#    rings_bring_edge_radius_at_longitude
+#    rings_bring_edge_longitude_radius
+#    rings_bring_edge_pixels
+#
+#    rings_ring_inertial_to_corotating
+#    rings_ring_corotating_to_inertial
+#    rings_ring_radius_at_longitude
+#    rings_ring_longitude_radius
+#    rings_ring_pixels
 #
 #    rings_reproject
 #    rings_mosaic_init
@@ -36,6 +50,14 @@ import scipy.ndimage.interpolation as ndinterp
 import scipy.interpolate as sciinterp
 from PIL import Image, ImageDraw, ImageFont
 
+_TKINTER_AVAILABLE = True
+try:
+    import matplotlib.pyplot as plt
+    import Tkinter as tk
+    import imgdisp
+except ImportError:
+    _TKINTER_AVAILABLE = False
+
 import polymath
 import oops
 import cspice
@@ -48,9 +70,11 @@ from cb_util_oops import *
 _LOGGING_NAME = 'cb.' + __name__
 
 
+RINGS_MIN_RADIUS_D = oops.SATURN_D_RING[0]
 RINGS_MIN_RADIUS = oops.SATURN_MAIN_RINGS[0]
 RINGS_MAX_RADIUS = oops.SATURN_MAIN_RINGS[1]
 RINGS_MAX_RADIUS_F = oops.SATURN_F_RING_LIMIT
+RINGS_F_RING_CORE = oops.SATURN_F_RING_CORE
 
 _RINGS_DEFAULT_REPRO_LONGITUDE_RESOLUTION = 0.02 * oops.RPD
 _RINGS_DEFAULT_REPRO_RADIUS_RESOLUTION = 5. # KM
@@ -708,101 +732,39 @@ _RINGS_UVIS_OCCULTATION = 'UVIS_HSP_2008_231_BETCEN_I_TAU_01KM'
 
 ### Curvature ###
 
-def rings_sufficient_curvature(obs, extend_fov=(0,0), rings_config=None):
-    """Determine if the rings in an image have sufficient curvature."""
+def rings_curvature_amount(obs, extend_fov=(0,0), rings_config=None):
+    """Determine the amount of curvature the rings have."""
     
-    logger = logging.getLogger(_LOGGING_NAME+'.rings_sufficient_curvature')
+    logger = logging.getLogger(_LOGGING_NAME+'.rings_curvature_amount')
 
     if rings_config is None:
         rings_config = RINGS_DEFAULT_CONFIG
 
     set_obs_ext_bp(obs, extend_fov)
-        
+
     radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
     if np.all(radii.mask):
-        logger.debug('No main rings in image - returning bad curvature')
-        return False
+        logger.debug('No main rings in image')
+        return None
 
-    min_radius = np.min(radii)
-    max_radius = np.max(radii)
-
-    longitudes = obs.ext_bp.ring_longitude('saturn:ring').mvals.astype('float') 
-    min_longitude = np.min(longitudes)
-    max_longitude = np.max(longitudes)
-
-    logger.debug('Radii %.2f to %.2f Longitudes %.2f to %.2f',
-                 min_radius, max_radius, 
-                 min_longitude*oops.DPR, max_longitude*oops.DPR)
+    bp_gradient = obs.ext_bp.ring_gradient_angle('saturn:ring')
+    # We only care about the main rings because those are the only rings we
+    # have fiducial features for
+    bp_gradient = bp_gradient.mask_where(radii < RINGS_MIN_RADIUS)
+    bp_gradient = bp_gradient.mask_where(radii > RINGS_MAX_RADIUS)
+#     imgdisp.ImageDisp([bp_gradient.vals], canvas_size=(512,512))
+#     tk.mainloop()
+    gradient = bp_gradient.mvals.compressed().flatten()
+    diff1 = np.max(gradient % oops.TWOPI) - np.min(gradient % oops.TWOPI)
+    diff2 = (np.max((gradient+oops.PI) % oops.TWOPI) -
+             np.min((gradient+oops.PI) % oops.TWOPI))
+    diff = min(diff1, diff2)
+#     std1 = np.std(gradient % oops.TWOPI)
+#     std2 = np.std((gradient+oops.PI) % oops.TWOPI)
+#     std = min(std1, std2)
     
-    if max_radius < RINGS_MIN_RADIUS or min_radius > RINGS_MAX_RADIUS:
-        logger.debug('No main rings in image - returning bad curvature')
-        return False
-
-    min_radius = max(min_radius, RINGS_MIN_RADIUS)
-    max_radius = min(max_radius, RINGS_MAX_RADIUS)
-    
-    # Find the approximate radius with the greatest span of longitudes
-    
-    best_len = 0
-    best_radius = None
-    best_longitudes = None
-
-    radius_step = (max_radius-min_radius) / 10.
-    longitude_step = (max_longitude-min_longitude) / 100.
-    for radius in rings_generate_radii(min_radius, max_radius, 
-                                       radius_resolution=radius_step):
-        trial_longitudes = rings_generate_longitudes(
-                                         min_longitude, max_longitude,
-                                         longitude_resolution=longitude_step)
-        trial_radius = np.empty(trial_longitudes.shape)
-        trial_radius[:] = radius
-        (new_longitudes, new_radius,
-         u_pixels, v_pixels) = _rings_restrict_longitude_radius_to_obs(
-                                         obs, trial_longitudes, trial_radius,
-                                         extend_fov=extend_fov)
-        if len(new_longitudes) > best_len:
-            best_radius = radius
-            best_longitudes = new_longitudes
-            best_len = len(new_longitudes)
-    
-    if best_len == 0:
-        logger.debug('No valid longitudes - returning bad curvature')
-        return False    
-    
-    logger.debug('Optimal radius %.2f longitude range %.2f to %.2f',
-                 best_radius, best_longitudes[0]*oops.DPR,
-                 best_longitudes[-1]*oops.DPR)
-    
-    # Now for this optimal radius, find the pixel values of the minimum
-    # and maximum available longitudes as well as a point halfway between.
-    # Then see how far it is from the line between the extrema points
-    # to the point of closest approach for the halfway point.
-    
-    line_radius = np.empty(3)
-    line_radius[:] = best_radius
-    line_longitude = np.empty(3)
-    line_longitude[0] = best_longitudes[0]
-    line_longitude[2] = best_longitudes[-1]
-    line_longitude[1] = (line_longitude[0]+line_longitude[2])/2
-    
-    u_pixels, v_pixels = rings_longitude_radius_to_pixels(
-                                      obs, line_longitude, line_radius)
-    
-    logger.debug('Linear pixels %.2f,%.2f / %.2f,%.2f / %.2f,%.2f',
-                 u_pixels[0], v_pixels[0], u_pixels[1], v_pixels[1],
-                 u_pixels[2], v_pixels[2])
-    
-    mid_pt_u = (u_pixels[0]+u_pixels[2])/2
-    mid_pt_v = (v_pixels[0]+v_pixels[2])/2
-    
-    dist = np.sqrt((mid_pt_u-u_pixels[1])**2+(mid_pt_v-v_pixels[1])**2)
-    
-    if dist < rings_config['curvature_threshold']:
-        logger.debug('Distance %.2f is too close for curvature', dist)
-        return False
-    
-    logger.debug('Distance %.2f is far enough for curvature', dist)
-    return True
+    logger.debug('Rings curvature is %.5f', diff)
+    return diff
 
 
 ### Fiducial Features ###
@@ -841,11 +803,11 @@ def _fiducial_is_ok(obs, feature, min_radius, max_radius, rms_gain, blur,
         # It's not in the extended FOV, but is in the original image
         out_of_frame = True
     min_res, max_res = _find_resolutions_by_a(obs, extend_fov, a)
-    if max_res is None:
+    if min_res is None:
         return None, None, None, None # Something went wrong; we couldn't find a resolution
-    if rms*rms_gain/blur > max_res:
+    if rms*rms_gain/blur > min_res:
         # Additional blurring needed
-        return (rms*rms_gain/blur)/max_res, out_of_frame, min_res, max_res
+        return (rms*rms_gain/blur)/min_res, out_of_frame, min_res, max_res
     return 1., out_of_frame, min_res, max_res # OK as is
     
 def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
@@ -920,15 +882,17 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
     
     blur = None
     blur_list = []
+    blur_list_in_frame = []
     
     # We do two phases - the first one is to determine the amount of blur, if
     # any. If there is no blur needed, we exit the loop early. Otherwise, 
     # during the second phase we apply the blur.
     for allow_blur in [False,True]:
-        logger.debug('Allow blur %s', str(allow_blur))
+        logger.debug('Allow blur %s, blur %s', str(allow_blur), str(blur))
         
         feature_list = []
         best_blur = None
+        force_blur = 0.
         num_features = 0
         num_features_in_frame = 0
         for fiducial_feature in restricted_feature_list:
@@ -938,7 +902,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             pretty_name = feature_name
             if pretty_name is None:
                 pretty_name = 'UNNAMED'
-            
+            must_include_inner = False
+            must_include_outer = False
+            if pretty_name == 'Huygens' and entry_type == 'GAP':
+                must_include_inner = True
+                must_include_outer = True
+                
             inner_out_of_frame = False
             outer_out_of_frame = False
             ret_inner = None
@@ -955,6 +924,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if ret_inner is None or abs(ret_inner-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase.
+                    if must_include_inner and ret_inner is not None:
+                        force_blur = max(force_blur, ret_inner)
+                        logger.debug('Forcing blur %.5f because of inner %s %s',
+                                     force_blur, pretty_name, entry_type)
                     inner = None
             if outer is not None:
                 (ret_outer, outer_out_of_frame, min_res_a_outer,
@@ -966,6 +939,10 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if ret_outer is None or abs(ret_outer-1.) > 0.000001:
                     # If more blurring is required, then it's not a good 
                     # candidate during this phase
+                    if must_include_outer and ret_outer is not None:
+                        force_blur = max(force_blur, ret_outer)
+                        logger.debug('Forcing blur %.5f because of outer %s %s',
+                                     force_blur, pretty_name, entry_type)
                     outer = None
 
             if inner is not None or outer is not None:
@@ -1005,7 +982,7 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                              'feature too narrow (%.2f pixels)',
                              pretty_name, entry_type, outer[0][1],
                              feature_width)
-                    # However, in the special case of the Huygen Gap,
+                    # However, in the special case of the Huygens Gap,
                     # we can go ahead and keep the inner edge because that's
                     # the B ring outer edge and it's really visible.
                     if pretty_name == 'Huygens' and entry_type == 'GAP':
@@ -1071,8 +1048,12 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             # Everything is going well...we can at least use this to determine
             # the blur amount
             if ret_inner is not None and ret_inner != 1.:
+                if not inner_out_of_frame:
+                    blur_list_in_frame.append(ret_inner)
                 blur_list.append(ret_inner)
             if ret_outer is not None and ret_outer != 1.:
+                if not outer_out_of_frame:
+                    blur_list_in_frame.append(ret_outer)
                 blur_list.append(ret_outer)
 
             # And maybe we can even use it as a real feature right now
@@ -1097,10 +1078,15 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
                 if not outer_out_of_frame:
                     num_features_in_frame += 1
 
-        if num_features_in_frame >= min_features:
+        if num_features_in_frame >= min_features and force_blur == 0.:
             logger.debug('Found enough (%d vs. %d) features in frame',
                          num_features_in_frame, min_features)
             break
+
+        if num_features_in_frame >= min_features:
+            logger.debug('Found enough (%d vs. %d) features in frame but '+
+                         'repeating due to forced blur',
+                         num_features_in_frame, min_features)
 
         logger.debug('%d features, %d in frame', num_features,
                      num_features_in_frame)
@@ -1109,18 +1095,23 @@ def rings_fiducial_features(obs, extend_fov=(0,0), rings_config=None):
             break
 
         blur_list.sort()
+        blur_list_in_frame.sort()
         
         # We allow this process to continue even if there are too few
         # features because the main offset loop will attempt to use
         # an insufficient number of features at a lower confidence.
         
-        blur = blur_list[min(min_features-num_features_in_frame-1,
-                             len(blur_list)-1)]
-
-    if blur is not None:
-        blur = blur/rms_gain
+        if (len(blur_list_in_frame) > 0 and
+            len(blur_list_in_frame) >= min_features-num_features_in_frame):
+            # First try to use only features that are in the frame
+            blur = blur_list_in_frame[max(min_features-num_features_in_frame-1,0)]
+        else:
+            # Just use everything we got, because we don't know which ones will
+            # eventually be in the frame.
+            blur = blur_list[-1]
+        blur = max(blur, force_blur)
             
-    logger.debug('Returning %d fiducial features, %d in frame, blur %s',
+    logger.info('%d fiducial features, %d in frame, blur %s',
                  num_features, num_features_in_frame, str(blur))
 
     return num_features_in_frame, feature_list, blur
@@ -1244,7 +1235,8 @@ def _shade_antialias(radii, a, shade_above, resolutions, max=1.):
     shade[shade > 1.] = 0.
     shade *= max
     
-    shade[radii.mask] = 0.
+    if radii.mask.shape != ():
+        shade[radii.mask] = 0.
     
     return shade
     
@@ -1390,6 +1382,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
     model = np.zeros((obs.data.shape[0]+extend_fov[1]*2,
                       obs.data.shape[1]+extend_fov[0]*2),
                      dtype=np.float32)
+    # Uncomment to handle black-filled gaps XXX
+    # model += 0.1
     model_text = np.zeros(model.shape, dtype=np.bool)
     text_im = Image.frombuffer('L', (model_text.shape[1], 
                                      model_text.shape[0]), 
@@ -1458,6 +1452,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
             outer_radii_bp = None
             text_name_list = []
             intersect_list = []
+#             Uncomment this to allow gaps to be black-filled XXX
+#             if inner is not None and outer is not None:
             if (inner is not None and outer is not None and
                 entry_type == 'RINGLET'):
                 # If we have a full ringlet, find both edges even if one
@@ -1540,6 +1536,28 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                 named_full_gap = False
                 if (inner_radii is not None and outer_radii is not None and
                     entry_type == 'GAP'):
+# Uncomment this to allow black-filled gaps
+#                     # XXXvvv
+#                     # We have both edges for a gap - just make it solid
+#                     logger.debug('Adding %s %s a=%.2f to %.2f',
+#                                  pretty_name, entry_type, inner_a, outer_a)
+#                     # We add/subtract 1/2 the resolution because the radius location
+#                     # is the middle of the pixel and shade_antialias below will take
+#                     # care of the fractional part.
+#                     inner_above = inner_radii-resolutions/2 >= inner_a
+#                     outer_below = outer_radii+resolutions/2 <= outer_a
+#                     intersect = (np.logical_and(inner_above, outer_below).
+#                                  filled(False))
+#                     intersect[in_front_mask] = False
+#                     model[intersect] = 0.
+#                     shade1 = _shade_antialias(inner_radii, inner_a, True,
+#                                               resolutions)
+#                     model += shade1
+#                     shade2 = _shade_antialias(outer_radii, outer_a, False,
+#                                               resolutions)
+#                     model += shade2
+#                     # XXX^^^
+                    # We have both edges for a gap - name the whole gap
                     if (feature_name and 
                         feature_name.upper().startswith('HUYGENS')):
                         # We need to fake this one out - it's really the B Ring
@@ -1573,6 +1591,8 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                                                                        outer_a))
                         named_full_gap = True
                     # Fall through to...
+# Uncomment to allow black-filled gaps XXX
+#                 elif inner_radii is not None:
                 if inner_radii is not None:
                     # Isolated inner ringlet edge or isolated/full gap edge
                     shade_above = entry_type == 'RINGLET'
@@ -1594,6 +1614,10 @@ def _compute_model_ephemeris(obs, feature_list, label_avoid_mask,
                             if (feature_name and 
                                 feature_name.upper().startswith('KEELER-A RING')):
                                 text_name_list.append('Keeler OEG')
+                            elif (feature_name and
+                                  feature_name.upper().startswith('HUYGENS') and
+                                  entry_type == 'GAP'):
+                                text_name_list.append('B Ring Outer Edge')
                             else:
                                 feature_name_sfx = ('IER' if entry_type == 'RINGLET' 
                                                           else 'IEG')
@@ -1751,10 +1775,12 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                                     extended FOV.
             'fiducial_blur'         The amount the RMS residual of the features
                                     had to be reduced in order to get enough.
-                                    1 means nothing was reduced. Otherwise
-                                    a number < 1.
+                                    None means nothing was reduced. Otherwise
+                                    a number > 1.
             'fiducial_features_ok'  True if the number of fidcual features
                                     is greater than the threshold.
+            'confidence'            The confidence in how well this model will
+                                    do in correlation.
             'start_time'            The time (s) when rings_create_model
                                     was called.
             'end_time'              The time (s) when rings_create_model
@@ -1779,8 +1805,9 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     metadata['occluded_by'] = []
     metadata['num_good_fiducial_features'] = 0
     metadata['fiducial_features'] = []
-    metadata['fiducial_features_ok'] = None
     metadata['fiducial_blur'] = None
+    metadata['fiducial_features_ok'] = None
+    metadata['confidence'] = None
     metadata['start_time'] = start_time
     
     set_obs_ext_bp(obs, extend_fov)
@@ -1811,24 +1838,42 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
         logger.info('Main rings present but not visible - aborting')
         metadata['end_time'] = time.time()
         return None, metadata, None
-        
-    if not rings_sufficient_curvature(obs, extend_fov=extend_fov, 
-                                      rings_config=rings_config):
+
+    min_curv_lc, min_curv_lc_conf = rings_config['min_curvature_low_confidence']    
+    min_curv_hc, min_curv_hc_conf = rings_config['min_curvature_high_confidence']    
+    curvature_amt = rings_curvature_amount(obs, extend_fov=extend_fov, 
+                                           rings_config=rings_config) 
+    if curvature_amt < min_curv_lc:
         metadata['curvature_ok'] = False     
         logger.info('Too little curvature')
         if not always_create_model:
             metadata['end_time'] = time.time()
             return None, metadata, None
+        confidence = min_curv_lc_conf
     else:
         logger.info('Curvature OK')
-        metadata['curvature_ok'] = True     
-       
+        metadata['curvature_ok'] = True
+        confidence = ((curvature_amt-min_curv_lc) * 
+                      (float(min_curv_hc_conf)-min_curv_lc_conf)/
+                      (float(min_curv_hc-min_curv_lc)) + min_curv_lc_conf)
+        confidence = np.clip(confidence, 0., 1.)
+    
     emission = obs.ext_bp.emission_angle('saturn:ring').mvals.astype('float')
     min_emission = np.min(np.abs(emission[good_mask]*oops.DPR-90))
-    if min_emission < rings_config['emission_threshold']:
+    if min_emission < rings_config['emission_use_threshold']:
+        logger.info('Minimum emission angle %.2f from 90 too close to ring '+
+                    'plane - not using', min_emission)
+        metadata['emission_ok'] = False
+        metadata['num_good_fiducial_features'] = 0
+        metadata['fiducial_features'] = []
+        metadata['fiducial_blur'] = None
+        metadata['fiducial_features_ok'] = False
+        metadata['end_time'] = time.time()
+        return None, metadata, None
+    elif min_emission < rings_config['emission_fiducial_threshold']:
         logger.info('Minimum emission angle %.2f from 90 too close to ring '+
                     'plane - using plain model', min_emission)
-        metadata['emission_ok'] = False
+        metadata['emission_ok'] = 'plain'
         metadata['num_good_fiducial_features'] = 0
         metadata['fiducial_features'] = []
         metadata['fiducial_blur'] = None
@@ -1836,15 +1881,21 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
     else:
         logger.debug('Minimum emission angle %.2f from 90 OK', min_emission)
         metadata['emission_ok'] = True
-    
+
+        required_features = rings_config['fiducial_feature_threshold']
+        if curvature_amt >= rings_config['curvature_to_reduce_features']:
+            required_features = rings_config['curvature_reduced_features']
+            logger.debug('Allowing reduced number of fiducial features due to '+
+                         'high curvature')
+        logger.debug('Requiring %d features', required_features)
+            
         num_features, fiducial_features, fiducial_blur = rings_fiducial_features(
                                              obs, extend_fov, rings_config)
         metadata['num_good_fiducial_features'] = num_features
         metadata['fiducial_features'] = fiducial_features
         metadata['fiducial_blur'] = fiducial_blur
         
-        fiducial_features_ok = (num_features >=
-                                rings_config['fiducial_feature_threshold'])
+        fiducial_features_ok = num_features >= required_features
         metadata['fiducial_features_ok'] = fiducial_features_ok
         
         if not fiducial_features_ok:
@@ -1911,7 +1962,7 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
                 in_front_mask[intersect] = True
                 metadata['occluded_by'].append(body_metadata['body_name'])
 
-    if not metadata['emission_ok']:
+    if metadata['emission_ok'] == 'plain':
         # Plain model
         radii = obs.ext_bp.ring_radius('saturn:ring').mvals.astype('float')
         model = 1.-radii/RINGS_MAX_RADIUS
@@ -1960,7 +2011,9 @@ def rings_create_model(obs, extend_fov=(0,0), always_create_model=False,
             logger.info('Rings are entirely shadowed - returning null model')
             metadata['end_time'] = time.time()
             return None, metadata, None
-    
+
+    logger.info('Final confidence %.2f', confidence)
+    metadata['confidence'] = confidence    
     metadata['end_time'] = time.time()
     return model, metadata, model_text
 
@@ -2157,12 +2210,15 @@ def _rings_restrict_longitude_radius_to_obs(obs, longitude, radius,
     
 def rings_longitude_radius_to_pixels(obs, longitude, radius, corotating=None):
     """Convert longitude,radius pairs to U,V."""
-    assert corotating in (None, 'F')
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
     longitude = np.asarray(longitude)
     radius = np.asarray(radius)
     
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         longitude = rings_fring_corotating_to_inertial(longitude, obs.midtime)
+    elif corotating == 'BRING-OUTER-EDGE':
+        longitude = rings_bring_edge_corotating_to_inertial(longitude, 
+                                                            obs.midtime)
     
     if len(longitude) == 0:
         return np.array([]), np.array([])
@@ -2224,7 +2280,7 @@ def rings_fring_longitude_radius(obs, longitude_step=0.01*oops.RPD):
     
     return longitudes, radius
 
-def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
+def rings_fring_pixels(obs, offset=None, longitude_step=0.002*oops.RPD):
     """Return a set of U,V pairs for the F ring in an image."""
     longitude, radius = rings_fring_longitude_radius(
                                      obs,
@@ -2237,6 +2293,120 @@ def rings_fring_pixels(obs, offset=None, longitude_step=0.01*oops.RPD):
     
     return u_pixels, v_pixels
 
+##
+# B ring routines - XXX These need to be updated to use full mode information
+##
+
+BRING_EDGE_ROTATING_ET = None
+BRING_EDGE_MEAN_MOTION = 758.768 * oops.RPD # rad/day
+BRING_EDGE_A = 117570.
+BRING_EDGE_E = 0.
+BRING_EDGE_W0 = 0. * oops.RPD # deg
+BRING_EDGE_DW = 0. * oops.RPD # deg/day                
+
+def _compute_bring_edge_longitude_shift(et):
+    global BRING_EDGE_ROTATING_ET
+    if BRING_EDGE_ROTATING_ET is None:
+        BRING_EDGE_ROTATING_ET = cspice.utc2et("2009-08-11")
+ 
+    return - (BRING_EDGE_MEAN_MOTION * 
+              ((et - BRING_EDGE_ROTATING_ET) / 86400.)) % oops.TWOPI
+
+def rings_bring_edge_inertial_to_corotating(longitude, et):
+    """Convert inertial longitude to corotating."""
+    return (longitude + _compute_bring_edge_longitude_shift(et)) % oops.TWOPI
+
+def rings_bring_edge_corotating_to_inertial(co_long, et):
+    """Convert corotating longitude (deg) to inertial."""
+    return (co_long - _compute_bring_edge_longitude_shift(et)) % oops.TWOPI
+
+def rings_bring_edge_radius_at_longitude(obs, longitude):
+    """Return the radius (km) of the F ring core at a given inertial longitude
+    (deg)."""
+    curly_w = BRING_EDGE_W0 + BRING_EDGE_DW*obs.midtime/86400.
+
+    radius = (BRING_EDGE_A * (1-BRING_EDGE_E**2) /
+              (1 + BRING_EDGE_E * np.cos(longitude-curly_w)))
+
+    return radius
+    
+def rings_bring_edge_longitude_radius(obs, longitude_step=0.01*oops.RPD):
+    """Return  a set of longitude,radius pairs for the F ring core."""
+    num_longitudes = int(oops.TWOPI / longitude_step)
+    longitudes = np.arange(num_longitudes) * longitude_step
+    radius = rings_bring_edge_radius_at_longitude(obs, longitudes)
+    
+    return longitudes, radius
+
+def rings_bring_edge_pixels(obs, offset=None, longitude_step=0.002*oops.RPD):
+    """Return a set of U,V pairs for the F ring in an image."""
+    longitude, radius = rings_bring_edge_longitude_radius(
+                                     obs,
+                                     longitude_step=longitude_step)
+    
+    (longitude, radius,
+     u_pixels, v_pixels) = _rings_restrict_longitude_radius_to_obs(
+                                     obs, longitude, radius,
+                                     offset=offset)
+    
+    return u_pixels, v_pixels
+
+##
+# Generalized ring routines
+##
+
+def _compute_ring_longitude_shift(corotating, et):
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
+
+    if corotating == 'FRING-CORE':
+        return _compute_fring_longitude_shift(et)
+    if corotating == 'BRING-OUTER-EDGE':
+        return _compute_bring_edge_longitude_shift(et)
+
+_RINGS_COROT_DISPATCH = {
+    'FRING-CORE': {
+        'inertial_to_corotating': rings_fring_inertial_to_corotating,
+        'corotating_to_inertial': rings_fring_corotating_to_inertial,
+        'radius_at_longitude': rings_fring_radius_at_longitude,
+        'longitude_radius': rings_fring_longitude_radius,
+        'pixels': rings_fring_pixels
+    },
+    'BRING-OUTER-EDGE': {
+        'inertial_to_corotating': rings_bring_edge_inertial_to_corotating,
+        'corotating_to_inertial': rings_bring_edge_corotating_to_inertial,
+        'radius_at_longitude': rings_bring_edge_radius_at_longitude,
+        'longitude_radius': rings_bring_edge_longitude_radius,
+        'pixels': rings_bring_edge_pixels
+    }
+}
+
+def rings_ring_inertial_to_corotating(corotating, longitude, et):
+    """Convert inertial longitude to corotating."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'inertial_to_corotating'](longitude, et)
+
+def rings_ring_corotating_to_inertial(corotating, co_long, et):
+    """Convert corotating longitude (deg) to inertial."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'corotating_to_inertial'](co_long, et)
+
+def rings_ring_radius_at_longitude(corotating, obs, longitude):
+    """Return the radius (km) at a given inertial longitude
+    (deg)."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'radius_at_longitude'](obs, longitude)
+    
+def rings_ring_longitude_radius(corotating, obs, 
+                                longitude_step=0.01*oops.RPD):
+    """Return  a set of longitude,radius pairs for the ring."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'longitude_radius'](obs, longitude_step)
+
+def rings_ring_pixels(corotating, obs, offset=None, 
+                      longitude_step=0.002*oops.RPD):
+    """Return a set of U,V pairs for the ring in an image."""
+    return _RINGS_COROT_DISPATCH[corotating][
+                                     'pixels'](obs, offset, longitude_step)
 
 #==============================================================================
 # 
@@ -2332,7 +2502,7 @@ def rings_reproject(
     """
     logger = logging.getLogger(_LOGGING_NAME+'.rings_reproject')
     
-    assert corotating in (None, 'F')
+    assert corotating in (None, 'FRING-CORE', 'BRING-OUTER-EDGE')
 
     if data is None:
         data = obs.data
@@ -2397,9 +2567,12 @@ def rings_reproject(
         data[saturn_shadow] = 0
 
     # Deal with co-rotating longitudes
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         bp_longitude = rings_fring_inertial_to_corotating(bp_longitude, 
                                                           obs.midtime)
+    elif corotating == 'BRING-OUTER-EDGE':
+        bp_longitude = rings_bring_edge_inertial_to_corotating(bp_longitude, 
+                                                               obs.midtime)
     
     # The number of pixels in the final reprojection in the radial direction
     radius_pixels = int(np.ceil((radius_outer-radius_inner+
@@ -2445,11 +2618,22 @@ def rings_reproject(
     # Radius bin numbers
     rad_bins = np.repeat(np.arange(radius_pixels), longitude_pixels)
     # Actual radius for each bin (km)
-    if corotating == 'F':
+    if corotating == 'FRING-CORE':
         rad_bins_offset = rings_fring_radius_at_longitude(obs,
                               rings_fring_corotating_to_inertial(long_bins_act,
                                                                  obs.midtime))        
-        rad_bins_act = (rad_bins * radius_resolution + radius_inner +
+        rad_bins_act = (rad_bins * radius_resolution + 
+                        radius_inner-FRING_A +
+                        rad_bins_offset)
+        logger.debug('Radius offset range %.2f %.2f',
+                     np.min(rad_bins_offset),
+                     np.max(rad_bins_offset))
+    elif corotating == 'BRING-OUTER-EDGE':
+        rad_bins_offset = rings_bring_edge_radius_at_longitude(obs,
+                      rings_bring_edge_corotating_to_inertial(long_bins_act,
+                                                              obs.midtime))        
+        rad_bins_act = (rad_bins * radius_resolution + 
+                        radius_inner-BRING_EDGE_A +
                         rad_bins_offset)
         logger.debug('Radius offset range %.2f %.2f',
                      np.min(rad_bins_offset),
@@ -2457,7 +2641,7 @@ def rings_reproject(
     else:
         rad_bins_act = rad_bins * radius_resolution + radius_inner
 
-    logger.info('Radius range %.2f %.2f', np.min(bp_radius), 
+    logger.info('Image radius range %.2f %.2f', np.min(bp_radius), 
                  np.max(bp_radius))
     logger.debug('Radius bin range %.2f %.2f', np.min(rad_bins_act), 
                  np.max(rad_bins_act))

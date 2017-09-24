@@ -12,6 +12,7 @@ import logging
 
 import os
 import numpy as np
+import numpy.ma as ma
 import polymath
 
 _TKINTER_AVAILABLE = True
@@ -25,8 +26,8 @@ except ImportError:
 import cspice
 import oops
 
-from cb_bodies import *
 from cb_config import *
+from cb_util_image import *
 from cb_util_oops import *
 
 def _callback_mousemove(x, y, metadata):
@@ -41,18 +42,31 @@ def _callback_mousemove(x, y, metadata):
         return
         
     if 'ring_longitude' in metadata:
-        (metadata['label_ring_longitude'].config(text=
-                               ('%7.3f'%metadata['ring_longitude'][y,x])))
-        (metadata['label_ring_radius'].config(text=
-                               ('%12.3f'%metadata['ring_radius'][y,x])))
-        (metadata['label_ring_resolution'].config(text=
-                               ('%7.3f'%metadata['ring_resolution'][y,x])))
-        (metadata['label_ring_emission'].config(text=
-                               ('%7.3f'%metadata['ring_emission'][y,x])))
-        (metadata['label_ring_incidence'].config(text=
-                               ('%7.3f'%metadata['ring_incidence'][y,x])))
-        (metadata['label_ring_phase'].config(text=
-                               ('%7.3f'%metadata['ring_phase'][y,x])))
+        metadata['label_ring_longitude'].config(text='N/A')
+        metadata['label_ring_radius'].config(text='N/A')
+        metadata['label_ring_resolution'].config(text='N/A')
+        metadata['label_ring_emission'].config(text='N/A')
+        metadata['label_ring_incidence'].config(text='N/A')
+        metadata['label_ring_phase'].config(text='N/A')
+
+        val = metadata['ring_longitude'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_longitude'].config(text=('%7.3f'%val))
+        val = metadata['ring_radius'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_radius'].config(text=('%12.3f'%val))
+        val = metadata['ring_resolution'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_resolution'].config(text=('%7.3f'%val))
+        val = metadata['ring_emission'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_emission'].config(text=('%7.3f'%val))
+        val = metadata['ring_incidence'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_incidence'].config(text=('%7.3f'%val))
+        val = metadata['ring_phase'][y,x]
+        if val is not ma.masked:
+            metadata['label_ring_phase'].config(text=('%7.3f'%val))
 
     if 'label_body_name_longitude' in metadata:
         metadata['label_body_name_longitude'].config(text=
@@ -64,13 +78,15 @@ def _callback_mousemove(x, y, metadata):
         metadata['label_body_name_phase'].config(text=('Body Phase:'))
         metadata['label_body_name_emission'].config(text=('Body Emission:'))
         metadata['label_body_name_incidence'].config(text=('Body Incidence:'))
+        metadata['label_body_name_blur'].config(text=('Body Blur:'))
     
-        metadata['label_body_longitude'].config(text=('  N/A  '))
-        metadata['label_body_latitude'].config(text=('  N/A  '))
-        metadata['label_body_resolution'].config(text=('  N/A  '))
-        metadata['label_body_phase'].config(text=('  N/A  '))
-        metadata['label_body_emission'].config(text=('  N/A  '))
-        metadata['label_body_incidence'].config(text=('  N/A  '))
+        metadata['label_body_longitude'].config(text=('N/A'))
+        metadata['label_body_latitude'].config(text=('N/A'))
+        metadata['label_body_resolution'].config(text=('N/A'))
+        metadata['label_body_phase'].config(text=('N/A'))
+        metadata['label_body_emission'].config(text=('N/A'))
+        metadata['label_body_incidence'].config(text=('N/A'))
+        metadata['label_body_blur'].config(text=('N/A'))
 
         large_body_dict = metadata['bodies']
         for body_name in sorted(large_body_dict.keys()):
@@ -110,6 +126,13 @@ def _callback_mousemove(x, y, metadata):
                                          (body_name[:5]+' Incidence:'))
                 metadata['label_body_incidence'].config(text=
                                          ('%7.3f'%val.vals))
+                val = metadata[body_name+'_blur']
+                blur_str = 'None'
+                if val is not None:
+                    blur_str = ('%.2f' % val)
+                metadata['label_body_name_blur'].config(text=
+                                         (body_name[:5]+' Blur:'))
+                metadata['label_body_blur'].config(text=blur_str)
         
 def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                         latlon_type='centric', lon_direction='east',
@@ -136,7 +159,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     stars_metadata = metadata['stars_metadata']
     
     if interpolate_missing_stripes:
-        ext_data = bodies_interpolate_missing_stripes(ext_data)
+        ext_data = image_interpolate_missing_stripes(ext_data)
         
     ext_u = (ext_data.shape[1]-obs.data.shape[1])/2
     ext_v = (ext_data.shape[0]-obs.data.shape[0])/2
@@ -185,14 +208,15 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         # Start with the closest body and work into the distance
         for body_name, inv in large_bodies_by_range:
             body = large_body_dict[body_name]
+            body_metadata = metadata['bodies_metadata'][body_name]
             u_min = body['u_min_unclipped']-1
             u_max = body['u_max_unclipped']+1
             v_min = body['v_min_unclipped']-1
             v_max = body['v_max_unclipped']+1
-            u_min = np.clip(u_min, -ext_u, obs.data.shape[1]+ext_u-1)
-            u_max = np.clip(u_max, -ext_u, obs.data.shape[1]+ext_u-1)
-            v_min = np.clip(v_min, -ext_v, obs.data.shape[0]+ext_v-1)
-            v_max = np.clip(v_max, -ext_v, obs.data.shape[0]+ext_v-1)
+            u_min = int(np.clip(u_min, -ext_u, obs.data.shape[1]+ext_u-1))
+            u_max = int(np.clip(u_max, -ext_u, obs.data.shape[1]+ext_u-1))
+            v_min = int(np.clip(v_min, -ext_v, obs.data.shape[0]+ext_v-1))
+            v_max = int(np.clip(v_max, -ext_v, obs.data.shape[0]+ext_v-1))
             # Things break if the moon is only a single pixel wide or tall
             if u_min == u_max and u_min == obs.data.shape[1]+ext_u-1:
                 u_min -= 1
@@ -270,7 +294,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
             if mask is None:
                 mask = ~orig_model_mask
             else:
-                mask = ~orig_model_mask | mask 
+                mask = ~orig_model_mask | mask
+            metadata[body_name+'_blur'] = body_metadata['body_blur']
 
     path1, fn1 = os.path.split(obs.full_path)
     path2, fn2 = os.path.split(path1)
@@ -297,8 +322,8 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     gridrow = 0
     gridcolumn = 0
 
-    label_width = 17
-    val_width = 17
+    label_width = 18
+    val_width = 20
 
     addon_control_frame = imgdisp.addon_control_frame
 
@@ -392,9 +417,7 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    contents_str = ''
-    for s in metadata['model_contents']:
-        contents_str += s[0].upper()
+    contents_str = ''.join([s[0:2].capitalize() for s in metadata['model_contents']])
         
     label = ttk.Label(addon_control_frame, text='Model Contents:', 
                      anchor='w', width=label_width)
@@ -402,6 +425,73 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
     label = ttk.Label(addon_control_frame, text=contents_str,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+    gridrow += 1
+
+    corr_psf_details = None
+    sigma_x = None
+    sigma_y = None
+    xcorr = None
+    sigma_x_err = None
+    sigma_y_err = None
+    xcorr_err = None
+    sigma_x_str = 'N/A'
+    sigma_y_str = 'N/A'
+    xcorr_str = 'N/A'
+    if 'corr_psf_details' in metadata:
+        corr_psf_details = metadata['corr_psf_details']
+    if corr_psf_details is not None:
+        sigma_x = corr_psf_details['sigma_x']
+        sigma_y = corr_psf_details['sigma_y']
+        xcorr = corr_psf_details['xcorr']
+        sigma_x_err = corr_psf_details['sigma_x_err']
+        sigma_y_err = corr_psf_details['sigma_y_err']
+        xcorr_err = corr_psf_details['xcorr_err']
+        sigma_x_str = 'None'
+        sigma_y_str = 'None'
+        xcorr_str = 'None'
+        if sigma_x is not None:
+            sigma_x_str = '%.2f +- ' % sigma_x
+            if sigma_x_err is None:
+                sigma_x_str += 'N/A'
+            else:
+                sigma_x_str += '%.2f' % sigma_x_err    
+        if sigma_y is not None:
+            sigma_y_str = '%.2f +- ' % sigma_y
+            if sigma_y_err is None:
+                sigma_y_str += 'N/A'
+            else:
+                sigma_y_str += '%.2f' % sigma_y_err    
+        if xcorr is not None:
+            xcorr_str = '%.2f +- ' % xcorr
+            if xcorr_err is None:
+                xcorr_str += 'N/A'
+            else:
+                xcorr_str += '%.2f' % xcorr_err    
+
+    label = ttk.Label(addon_control_frame, text='Sigma X:', 
+                      anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    
+    label = ttk.Label(addon_control_frame, text=sigma_x_str, 
+                      anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
+
+    label = ttk.Label(addon_control_frame, text='Sigma Y:', 
+                      anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
+    
+    label = ttk.Label(addon_control_frame, text=sigma_y_str, 
+                      anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
+
+    label = ttk.Label(addon_control_frame, text='XY Corr:', 
+                      anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    
+    label = ttk.Label(addon_control_frame, text=xcorr_str, 
+                      anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+
     gridrow += 1
 
     label = ttk.Label(addon_control_frame, text='Star Offset:', 
@@ -464,22 +554,19 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
-    rings_metadata = metadata['rings_metadata']
-    
-    shadow_bodies = 'N/A'
-    
-    if rings_metadata and 'shadow_bodies' in rings_metadata:
-        shadow_bodies = ''
-        for body_name in rings_metadata['shadow_bodies']:
-            shadow_bodies += body_name.upper()[:2] + ' '
-
-    label = ttk.Label(addon_control_frame, text='Ring Shadowed By:', 
-                     anchor='w', width=label_width)
+    model_blur_str = 'None'
+    if metadata['model_blur_amount'] is not None:
+        model_blur_str = ('%.3f' % metadata['model_blur_amount'])
+    label = ttk.Label(addon_control_frame, text='Model blur:', 
+                      anchor='w', width=label_width)
     label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
-    label = ttk.Label(addon_control_frame, text=shadow_bodies,
-                     anchor='e', width=val_width)
+    label = ttk.Label(addon_control_frame, 
+                      text=model_blur_str,
+                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
 
+    rings_metadata = metadata['rings_metadata']
+    
     gridrow += 1
 
     sep = ttk.Separator(addon_control_frame)
@@ -519,31 +606,43 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
                      anchor='e', width=val_width)
     label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
 
+    shadow_bodies = 'N/A'
+    
+    if rings_metadata and 'shadow_bodies' in rings_metadata:
+        shadow_bodies = ''
+        for body_name in rings_metadata['shadow_bodies']:
+            shadow_bodies += body_name.upper()[:2] + ' '
+
+    label = ttk.Label(addon_control_frame, text='Ring Shadowed By:', 
+                     anchor='w', width=label_width)
+    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label = ttk.Label(addon_control_frame, text=shadow_bodies,
+                     anchor='e', width=val_width)
+    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+
+    gridrow += 1
+
     curvature_ok = 'N/A'
-            
     if rings_metadata and 'curvature_ok' in rings_metadata:
         curvature_ok = str(rings_metadata['curvature_ok'])
         
     label = ttk.Label(addon_control_frame, text='Ring Curvature OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+7, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
     label = ttk.Label(addon_control_frame, text=curvature_ok,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+8, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
         
-    gridrow += 1
-
     emission_ok = 'N/A'
-            
     if rings_metadata and 'emission_ok' in rings_metadata:
-        curvature_ok = str(rings_metadata['emission_ok'])
+        emission_ok = str(rings_metadata['emission_ok'])
         
     label = ttk.Label(addon_control_frame, text='Ring Emission OK:', 
                      anchor='w', width=label_width)
-    label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+4, sticky='w')
     label = ttk.Label(addon_control_frame, text=emission_ok,
                      anchor='e', width=val_width)
-    label.grid(row=gridrow, column=gridcolumn+2, sticky='w')
+    label.grid(row=gridrow, column=gridcolumn+5, sticky='w')
         
     gridrow += 1
 
@@ -668,6 +767,16 @@ def display_offset_data(obs, metadata, show_rings=True, show_bodies=True,
         metadata['label_body_incidence'] = label_incidence
 
         gridrow += 1
+
+        label = ttk.Label(addon_control_frame, text='Body Blur:', 
+                          anchor='w', width=label_width)
+        label.grid(row=gridrow, column=gridcolumn+1, sticky='w')
+        metadata['label_body_name_blur'] = label
+        label_incidence = ttk.Label(addon_control_frame, text='', 
+                                   anchor='e', width=val_width)
+        label_incidence.grid(row=gridrow, column=gridcolumn+2, sticky='w')
+        metadata['label_body_blur'] = label_incidence
+
 
     callback_mousemove_func = (lambda x, y, metadata=metadata:
                                _callback_mousemove(x, y, metadata))

@@ -4,440 +4,481 @@ Created on Sep 19, 2011
 @author: rfrench
 '''
 
-from optparse import OptionParser
+import argparse
+import math
 import os
 import os.path
 import sys
 import numpy as np
-import cspice
-from imgdisp import ImageDisp, FloatEntry, draw_line
-from Tkinter import *
-from PIL import Image
+import scipy.optimize as sciopt
 import oops.inst.cassini.iss as iss
+import gravity
+from cb_config import *
 from cb_offset import *
-from cb_rings import *
-import cProfile, pstats, StringIO
-import cb_correlate
 from cb_util_file import *
-from cb_util_image import *
 
-INTERACTIVE = False
+import matplotlib.pyplot as plt
 
-LONGITUDE_RESOLUTION = 0.005
-RADIUS_RESOLUTION = 5
+#DEST_ROOT = os.path.join(CB_RESULTS_ROOT, 'sao')
+DEST_ROOT = '/home/rfrench/Dropbox-SETI/Shared/Shared-John-Daicopoulos/170425-redo'
+# DEST_ROOT = '/tmp'
 
-class OffData(object):
-    """Offset and Reprojection data."""
-    def __init__(self):
-        self.obsid = None
-        self.image_name = None
-        self.image_path = None
-        self.obs = None
+LONGITUDE_RESOLUTION = 0.002
+RADIUS_RESOLUTION = 2.5
+RADIUS_INNER = 117570. - 100 - 1000
+RADIUS_OUTER = 117570. + 100 + 100
 
-        self.offset_path = None
-        self.the_offset = None
-        self.manual_offset = None
-        self.off_metadata = None
+command_list = sys.argv[1:]
 
-class OffDispData(object):
-    def __init__(self):
-        self.obs = None
-        self.toplevel = None
-        self.imdisp_offset = None
-        self.entry_x_offset = None
-        self.entry_y_offset = None
-        self.off_longitudes = None
-        self.off_radii = None
-        self.off_emission = None
-        self.off_incidence = None
-        self.off_phase = None
-        self.label_off_inertial_longitude = None
-        self.label_off_radius = None
-        self.label_off_resolution = None
-        self.label_off_emission = None
-        self.label_off_incidence = None
-        self.label_off_phase = None
-        self.last_xy = None
+if len(command_list) == 0:
+    command_line_str = 'N1627295812_1'
+
+    command_list = command_line_str.split()
+
+parser = argparse.ArgumentParser(description='SAO P124 Backplane Generator')
+
+parser.add_argument(
+    '--analyze-b-ring-edge', action='store_true',
+    help='Analyze the B ring edge')
+
+file_add_selection_arguments(parser)
+
+arguments = parser.parse_args(command_list)
 
 #####################################################################################
 #
-# FIND THE POINTING OFFSET
+# FIND THE LOCATION OF MIMAS WHEN ANALYZING THE B RING
+#
+#####################################################################################
+
+TWOPI = 2*np.pi
+
+# A nicer version of arctan2
+def pos_arctan2(y, x):
+    return np.arctan2(y, x) % TWOPI 
+
+# Take the geometric osculating elements and create frequencies
+# Returns n, kappa, nu, eta2, chi2, alpha1, alpha2, alphasq
+# From Renner & Sicardy (2006)  EQ 14-21
+
+def orb_geom_to_freq(gm, j2j4rp, a, e, inc):
+    j2 = j2j4rp[0]/a**2.
+    j4 = j2j4rp[1]/a**4.
+    
+    n = np.sqrt(gm / a**3.) * (1. + 3./4.*j2 - 15./16.*j4 -
+                                     9./32.*j2**2. + 45./64.*j2*j4 +
+                                     27./128.*j2**3. +
+                                     3.*j2*e**2. - 12.*j2*inc**2.)
+    
+    kappa = np.sqrt(gm / a**3.) * (1. - 3./4.*j2 + 45./16.*j4 -
+                                         9./32.*j2**2. + 135./64.*j2*j4 -
+                                         27./128.*j2**3. - 9.*j2*inc**2.)
+
+    nu = np.sqrt(gm / a**3.) * (1. + 9./4.*j2 - 75./16.*j4 -
+                                      81./32.*j2**2. + 675./64.*j2*j4 +
+                                      729./128.*j2**3. +
+                                      6.*j2*e**2. - 51./4.*j2*inc**2.)
+    
+    eta2 = gm / a**3. * (1. - 2.*j2 + 75./8.*j4)
+    
+    chi2 = gm / a**3. * (1. + 15./2.*j2 - 175./8.*j4)
+    
+    alpha1 = 1./3. * (2.*nu + kappa)
+    alpha2 = 2.*nu - kappa
+    alphasq = alpha1 * alpha2
+    
+    return (n, kappa, nu, eta2, chi2, alpha1, alpha2, alphasq)
+
+# Take the frequencies and convert them to cylindrical coordinates
+# Returns a, e, inc, long_peri, long_node, lam, rc, Lc, zc, rdotc, Ldotc, zdotc
+# From Renner & Sicardy (2006) EQ 36-41
+
+def orb_freq_to_geom(r, L, z, rdot, Ldot, zdot, rc, Lc, zc, rdotc, Ldotc, 
+                     zdotc, n, kappa, nu, eta2, chi2, alpha1, alpha2, alphasq):
+    kappa2 = kappa**2.
+    n2 = n**2.
+    
+    # EQ 42-47
+    a = (r-rc) / (1.-(Ldot-Ldotc-n)/(2.*n))
+    
+    e = np.sqrt(((Ldot-Ldotc-n)/(2.*n))**2. + ((rdot-rdotc)/(a*kappa))**2.)
+    
+    inc = np.sqrt(((z-zc)/a)**2. + ((zdot-zdotc)/(a*nu))**2.)
+    
+    lam = L - Lc - 2.*n/kappa*(rdot-rdotc)/(a*kappa)
+    
+    long_peri = (lam - pos_arctan2(rdot-rdotc, a*kappa*(1.-(r-rc)/a))) % TWOPI    
+    
+    long_node = (lam - pos_arctan2(nu*(z-zc), zdot-zdotc)) % TWOPI
+    
+    # EQ 36-41
+    rc = (a * e**2. * (3./2.*eta2/kappa2 - 1. - 
+                       eta2/2./kappa2*np.cos(2.*(lam-long_peri))) +
+          a * inc**2. * (3./4.*chi2/kappa2 - 1. + 
+                         chi2/4./alphasq*np.cos(2.*(lam-long_node))))
+    
+    Lc = (e**2.*(3./4. + eta2/2./kappa2)*n/kappa*np.sin(2.*(lam-long_peri)) - 
+          inc**2.*chi2/4./alphasq*n/nu*np.sin(2.*(lam-long_node)))
+    
+    zc = a*inc*e*(chi2/2./kappa/alpha1*np.sin(2*lam-long_peri-long_node) - 
+                  3./2.*chi2/kappa/alpha2*np.sin(long_peri-long_node))
+    
+    rdotc = (a*e**2.*eta2/kappa*np.sin(2.*(lam-long_peri)) - 
+             a*inc**2*chi2/2./alphasq*nu*np.sin(2.*(lam-long_node)))
+    
+    Ldotc = (e**2.*n*(7./2. - 3.*eta2/kappa2 - kappa2/2./n2 + 
+                      (3./2. + eta2/kappa2)*np.cos(2.*(lam-long_peri))) +
+             inc**2.*n*(2. - kappa2/2./n2 - 3./2.*chi2/kappa2 - 
+                        chi2/2./alphasq*np.cos(2.*(lam-long_node))))
+    
+    zdotc = a*inc*e*(chi2*(kappa+nu)/2./kappa/
+                        alpha1*np.cos(2*lam-long_peri-long_node) + 
+             3./2.*chi2*(kappa-nu)/kappa/alpha2*np.cos(long_peri-long_node))
+    
+    # EQ 30-35
+#    r = a*(1. - e*np.cos(lam-long_peri)) + rc
+#    
+#    L = lam + 2*e*n/kappa*np.sin(lam-long_peri) + Lc
+#    
+#    z = a*inc*np.sin(lam-long_node) + zc
+#    
+#    rdot = a*e*kappa*np.sin(lam-long_peri) + rdotc
+#    
+#    Ldot = n*(1. + 2.*e*np.cos(lam-long_peri)) + Ldotc
+#    
+#    zdot = a*inc*nu*np.cos(lam-long_node) + zdotc
+    
+    return (a, e, inc, long_peri, long_node, lam, 
+            rc, Lc, zc, rdotc, Ldotc, zdotc)
+
+# Given the state vector x,y,z,vx,vy,vz retrieve the geometric elements
+# Returns: a, e, inc, long_peri, long_node, mean_anomaly
+# From Renner and Sicardy (2006) EQ 22-47
+
+def orb_xyz_to_geom(gm, j2j4rp, x, y, z, vx, vy, vz, tol=1e-6, quiet=False):
+    x = np.asarray(x)
+    y = np.asarray(y)
+    z = np.asarray(z)
+    vx = np.asarray(vx)
+    vy = np.asarray(vy)
+    vz = np.asarray(vz)
+
+    # EQ 22-25
+    r = np.sqrt(x**2. + y**2.)
+    L = pos_arctan2(y, x)
+    rdot = vx*np.cos(L) + vy*np.sin(L)
+    Ldot = (vy*np.cos(L)-vx*np.sin(L))/r
+    
+    # Initial conditions
+    a = r
+    e = 0.
+    inc = 0.
+    rc = 0.
+    Lc = 0.
+    zc = 0.
+    rdotc = 0.
+    Ldotc = 0.
+    zdotc = 0.
+    
+    old_diffmax = 1e38
+    old_diff = None
+    idx_to_use = np.where(x!=-1e38,True,False) # All True
+    announced = False
+    while True:
+        (n, kappa, nu, eta2, chi2, 
+         alpha1, alpha2, alphasq) = orb_geom_to_freq(gm, j2j4rp, a, e, inc)
+        ret = orb_freq_to_geom(r, L, z, rdot, Ldot, vz, rc, Lc, zc, rdotc, 
+                               Ldotc, zdotc, n, kappa, nu, eta2, chi2,
+                               alpha1, alpha2, alphasq)
+        old_a = a
+        (a, e, inc, long_peri, long_node, lam, 
+         rc, Lc, zc, rdotc, Ldotc, zdotc) = ret
+        diff = np.abs(a-old_a)
+        diffmax = np.max(diff[idx_to_use])
+        if diffmax < tol:
+            break
+        if diffmax > old_diffmax:
+            idx_to_use = np.where(diff > old_diff,False,True) & idx_to_use
+            if not idx_to_use.any(): break
+            if not announced:
+                if not quiet:
+                    print ('WARNING: orb_xyz_to_geom started diverging!  '+
+                           'Met tolerance %e') % diffmax
+                announced = True
+            if not quiet:
+                diff_of_diff = diff - old_diff
+                bad_idx = diff_of_diff.argmax()
+                print 'Bad index', bad_idx
+                print 'X', x[bad_idx]
+                print 'Y', y[bad_idx]
+                print 'Z', z[bad_idx]
+                print 'VX', vx[bad_idx]
+                print 'VY', vy[bad_idx]
+                print 'VZ', vz[bad_idx]
+        old_diffmax = diffmax
+        old_diff = diff
+        
+    mean_anomaly = (lam-long_peri) % TWOPI
+
+    return (a, e, inc, long_peri, long_node, mean_anomaly)
+
+def keplers_equation_resid(p, M, e):
+    return np.sqrt((M - (p[0]-e*np.sin(p[0])))**2)
+
+# Mean anomaly M = n(t-tau)
+# Find E, the eccentric anomaly, the angle from the center of the ellipse and the pericenter to a
+# circumscribed circle at the place where the orbit is projected vertically.
+def find_E(M, e):
+    result = sciopt.fmin(keplers_equation_resid, (0.,), args=(M, e), disp=False, xtol=1e-20, ftol=1e-20)
+    return result[0]
+
+# Find r, the radial distance from the focus, and f, the true anomaly, the angle from the focus and the
+# pericenter to the orbit.
+def rf_from_E(a, e, E):
+    f = np.arccos((np.cos(E)-e)/(1-e*np.cos(E)))
+    if E > np.pi:
+        f = 2*np.pi - f
+    return a*(1-e*np.cos(E)), f   
+
+def saturn_to_mimas(et):
+    '''
+    Return Saturn->Mimas vector
+    '''
+    SATURN_ID     = cspice.bodn2c("SATURN")
+    MIMAS_ID      = cspice.bodn2c("MIMAS")
+    
+    # Reference time
+    REFERENCE_DATE = "1 JANUARY 2007"       # This is the date Doug used. It is only
+                                            # used to define the instantaneous pole.
+    REFERENCE_ET = cspice.utc2et(REFERENCE_DATE)
+    
+    # Coordinate frame:
+    #   Z-axis is Saturn's pole;
+    #   X-axis is the ring plane ascending node on J2000
+    j2000_to_iau_saturn = cspice.pxform("J2000", "IAU_SATURN", REFERENCE_ET)
+    
+    saturn_z_axis_in_j2000 = cspice.mtxv(j2000_to_iau_saturn, (0,0,1))
+    saturn_x_axis_in_j2000 = cspice.ucrss((0,0,1), saturn_z_axis_in_j2000)
+    
+    J2000_TO_SATURN = cspice.twovec(saturn_z_axis_in_j2000, 3,
+                                    saturn_x_axis_in_j2000, 1)
+    
+    SATURN_TO_J2000 = J2000_TO_SATURN.transpose()
+    
+    (mimas_j2000, lt) = cspice.spkez(MIMAS_ID, et, "J2000", "LT+S", SATURN_ID)
+    mimas_sat = np.dot(J2000_TO_SATURN, mimas_j2000[0:3])
+    mimas_vel = np.dot(J2000_TO_SATURN, mimas_j2000[3:])
+    mimas_sat = np.append(mimas_sat, mimas_vel)
+    dist = np.sqrt(mimas_sat[0]**2.+mimas_sat[1]**2.+mimas_sat[2]**2.)
+    longitude = math.atan2(mimas_sat[1], mimas_sat[0]) * 180./np.pi
+    if longitude < 0:
+        longitude += 360
+    return (dist, longitude, mimas_sat)
+
+def analayze_b_ring_edge(image_name, obs, off_radii, off_longitudes, 
+                         off_resolution, off_emission, off_incidence,
+                         off_phase,
+                         offset):
+    b_ring_edge = obs.bp.border_atop(off_radii.key, 117570.12).vals.astype('bool')
+    off_sha = obs.bp.ring_longitude('saturn:ring', reference='sha') * oops.DPR
+    if not np.any(b_ring_edge):
+        min_long = -1000.
+        max_long = -1000.
+        min_res = -1000.
+        max_res = -1000.
+        min_em = -1000.
+        max_em = -1000.
+        min_phase = -1000.
+        max_phase = -1000.
+        min_sha = -1000.
+        max_sha = -1000.
+    else:
+        longitudes = off_longitudes[b_ring_edge].vals.astype('float32')
+        min_long = np.min(longitudes)
+        max_long = np.max(longitudes)
+        resolution = off_resolution[b_ring_edge].vals.astype('float32')
+        min_res = np.min(resolution)
+        max_res = np.max(resolution)
+        emission = off_emission[b_ring_edge].vals.astype('float32')
+        min_em = np.min(emission)
+        max_em = np.max(emission)
+        phase = off_phase[b_ring_edge].vals.astype('float32')
+        min_phase = np.min(phase)
+        max_phase = np.max(phase)
+        sha = off_sha[b_ring_edge].vals.astype('float32')
+        min_sha = np.min(sha)
+        max_sha = np.max(sha)
+        
+    mimas_dist, mimas_long = saturn_to_mimas(obs.midtime)[:2]
+    print 'MIMAS DIST', mimas_dist
+    print 'LONG %.2f %.2f MIMAS %.2f SHA %.2f %.2f' % (
+                   min_long, max_long, mimas_long, min_sha, max_sha)
+    
+    avg_long = (min_long+max_long)/2
+    
+    bring_mean_motion = gravity.SATURN.n(117570.12) * 180/np.pi
+    mimas_mean_motion = gravity.SATURN.n(185539) * 180/np.pi
+    
+    delta_lon = avg_long - mimas_long
+    if delta_lon < 0: delta_lon += 360
+    
+    delta_t = -delta_lon / (bring_mean_motion-mimas_mean_motion)
+    
+    conj_et = obs.midtime + delta_t
+    print 'PREV CONJUNCTION', cspice.et2utc(conj_et, 'C', 2)
+    
+    conj_mimas_dist, conj_mimas_long, conj_mimas_state = saturn_to_mimas(conj_et)
+    print 'CONJUNCTION STATE VECTOR:'
+    print conj_mimas_state
+
+    orb_el = orb_xyz_to_geom(gravity.SATURN.gm, 
+                             gravity.SATURN.jn[0:2],
+                             conj_mimas_state[0], conj_mimas_state[1], conj_mimas_state[2],
+                             conj_mimas_state[3], conj_mimas_state[4], conj_mimas_state[5])
+
+    print 'CONJ MIMAS DIST FROM STATE:', conj_mimas_dist
+    
+    print 'DERIVED MIMAS A', orb_el[0], 'e', orb_el[1], 'i', orb_el[2]*180/np.pi
+    
+    long_peri, long_node, mean_anomaly = orb_el[3:]
+    long_peri *= 180/np.pi
+    long_node *= 180/np.pi
+    mean_anomaly *= 180/np.pi
+    
+    print 'MIMAS LPERI', long_peri, 'LNODE', long_node, 'MEAN ANOM', mean_anomaly
+    
+    E = find_E(mean_anomaly*np.pi/180, orb_el[1])
+    r, f = rf_from_E(orb_el[0], orb_el[1], E)
+    f *= 180/np.pi
+    arg_peri = (long_peri - long_node) %360
+    print 'CONJ MIMAS RAD DIST', r, 'TRUE ANOMALY', f, 'ARG PERI', arg_peri
+    
+    print 'Z DIST', orb_el[0]*np.sin((arg_peri+f)*np.pi/180)*np.sin(orb_el[2])
+    
+    data_file_csv = os.path.join(DEST_ROOT, image_name+'.csv')
+    data_file_fp = open(data_file_csv, 'w')
+    print >> data_file_fp, '%s,%s,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%s,%.5f,%.5f,%d' % (
+            image_name, cspice.et2utc(obs.midtime, 'C', 2),
+            obs.midtime,
+            min_long, max_long, 
+            off_incidence,
+            min_em, max_em,
+            min_phase, max_phase,
+            min_res, max_res,
+            min_sha, max_sha,
+            mimas_long,
+            cspice.et2utc(conj_et, 'C', 2),
+            f, (arg_peri+f)%360,
+            offset is not None)
+    data_file_fp.close()
+
+
+#####################################################################################
+#
+# FIND THE POINTING OFFSET, IF NECESSARY; GENERATE BACKPLANES
 #
 #####################################################################################
     
-#
-# The primary entrance for finding pointing offset
-#
-
-def offset_one_image(offdata, **kwargs):
-    # Recompute the automatic offset
-    obs = read_iss_file(offdata.image_path)
-    offdata.obs = obs
-    offdata.off_metadata = {}
-    offset_u = None
-    offset_v = None
-    if 'offset_u' in kwargs:
-        offset_u = kwargs['offset_u']
-        offset_v = kwargs['offset_v']
-    if offset_u is None:
+def offset_one_image(image_path):
+    print 'Processing', image_path
+    obs = file_read_iss_file(image_path)
+    offset = None
+    metadata = file_read_offset_metadata(image_path, 
+                                         bootstrap_pref='prefer', 
+                                         overlay=False)
+    if metadata is not None:
+        offset = metadata['offset']
+    else:
         try:
-            rings_config = RINGS_DEFAULT_CONFIG.copy()
-            rings_config['fiducial_feature_threshold'] = 0
-
-            offdata.off_metadata = master_find_offset(obs,
-                                                     create_overlay=True,
-                                                     rings_config=rings_config)                                                                             
-            offset = offdata.off_metadata['offset'] 
-            if offset is not None:
-                offset_u, offset_v = offset
+            metadata = master_find_offset(obs,
+                                          create_overlay=True)
+            offset = metadata['offset'] 
         except:
             print 'COULD NOT FIND VALID OFFSET - PROBABLY SPICE ERROR'
             print 'EXCEPTION:'
             print sys.exc_info()
-#            raise
-    
-    if offset_u is None:
-        offdata.the_offset = None
-    else:
-        offdata.the_offset = (offset_u, offset_v)
-    if offset_u is None:
+            metadata = None
+            offset = None
+        
+    if offset is None:
         print 'COULD NOT FIND VALID OFFSET - PROBABLY BAD IMAGE'
     
-    if offset_u is not None:
-        print 'FOUND %6.2f, %6.2f' % (offdata.the_offset[0], offdata.the_offset[1])
-        if 'used_objects_type' in offdata.off_metadata:
-            print 'Model type:', offdata.off_metadata['used_objects_type'],
-            print '  Model overrides stars:', offdata.off_metadata['model_overrides_stars']
-
-
-
-#####################################################################################
-#
-# DISPLAY ONE IMAGE ALLOWING MANUAL CHANGING OF THE OFFSET
-#
-#####################################################################################
-
-# The callback for mouse move events on the offset image
-def callback_offset(x, y, offdata, offdispdata):
-    if offdispdata.off_longitudes is not None:
-        offdispdata.label_off_inertial_longitude.config(text=('%7.3f'%offdispdata.off_longitudes[y,x]))
-    if offdispdata.off_radii is not None:
-        offdispdata.label_off_radius.config(text=('%7.3f'%offdispdata.off_radii[y,x]))
-    if offdispdata.off_resolution is not None:
-        offdispdata.label_off_resolution.config(text=('%7.3f'%offdispdata.off_resolution[y,x]))
-    if offdispdata.off_emission is not None:
-        offdispdata.label_off_emission.config(text=('%7.3f'%offdispdata.off_emission[y,x]))
-    if offdispdata.off_incidence is not None:
-        offdispdata.label_off_incidence.config(text=('%7.3f'%offdispdata.off_incidence[y,x]))
-    if offdispdata.off_phase is not None:
-        offdispdata.label_off_phase.config(text=('%7.3f'%offdispdata.off_phase[y,x]))
-
-# "Manual from auto" button pressed 
-def command_man_from_auto(offdata, offdispdata):
-    offdata.manual_offset = offdata.the_offset
-    offdispdata.entry_x_offset.delete(0, END)
-    offdispdata.entry_y_offset.delete(0, END)
-    if offdata.manual_offset is not None:
-        offdispdata.entry_x_offset.insert(0, '%6.2f'%offdata.the_offset[0])
-        offdispdata.entry_y_offset.insert(0, '%6.2f'%offdata.the_offset[1])
-    draw_offset_overlay(offdata, offdispdata)
+    image_name = file_clean_name(image_path)
     
-def command_man_from_cassini(offdata, offdispdata):
-    offdata.manual_offset = (0.,0.)
-    offdispdata.entry_x_offset.delete(0, END)
-    offdispdata.entry_y_offset.delete(0, END)
-    if offdata.manual_offset is not None:
-        offdispdata.entry_x_offset.insert(0, '%6.2f'%offdata.manual_offset[0])
-        offdispdata.entry_y_offset.insert(0, '%6.2f'%offdata.manual_offset[1])
-    draw_offset_overlay(offdata, offdispdata)
+    results = image_name + ' - ' + offset_result_str(metadata)
+    print results
 
-# Draw the offset curves
-def draw_offset_overlay(offrepdata, offrepdispdata):
-    # Blue - 0,0 offset
-    # Yellow - auto offset
-    # Green - manual offset
-    try:
-        offset_overlay = offrepdata.off_metadata['overlay'].copy()
-        if offset_overlay.shape[:2] != offrepdata.obs.data.shape:
-            # Correct for the expanded size of ext_data
-            diff_y = (offset_overlay.shape[0]-offrepdata.obs.data.shape[0])/2
-            diff_x = (offset_overlay.shape[1]-offrepdata.obs.data.shape[1])/2
-            offset_overlay = offset_overlay[diff_y:diff_y+offrepdata.obs.data.shape[0],
-                                            diff_x:diff_x+offrepdata.obs.data.shape[1],:]
-    except:
-        offset_overlay = np.zeros((offrepdata.obs.data.shape + (3,)))
-    if offrepdata.manual_offset is not None:
-        if offrepdata.the_offset is None:
-            x_diff = int(-offrepdata.manual_offset[0]) 
-            y_diff = int(-offrepdata.manual_offset[1])
-        else: 
-            x_diff = int(offrepdata.the_offset[0] - offrepdata.manual_offset[0])
-            y_diff = int(offrepdata.the_offset[1] - offrepdata.manual_offset[1])
-        offset_overlay = shift_image(offset_overlay, x_diff, y_diff)
-    
-    offrepdispdata.imdisp_offset.set_overlay(0, offset_overlay)
-    offrepdispdata.imdisp_offset.pack(side=LEFT)
-
-# <Enter> key pressed in a manual offset text entry box
-def command_enter_offset(event, offdata, offdispdata):
-    if offdispdata.entry_x_offset.get() == "" or offdispdata.entry_y_offset.get() == "":
-        offdata.manual_offset = None
-    else:
-        offdata.manual_offset = (float(offdispdata.entry_x_offset.get()),
-                                    float(offdispdata.entry_y_offset.get()))
-    draw_offset_overlay(offdata, offdispdata)
-
-# "Recalculate offset" button pressed
-def command_recalc_offset(offdata, offdispdata):
-    offset_one_image(offdata, False, False, True, save_results=False)
-    offdata.manual_offset = None
-    offdispdata.entry_x_offset.delete(0, END)
-    offdispdata.entry_y_offset.delete(0, END)
-    if offdata.the_offset is None:
-        auto_x_text = 'Auto X Offset: None' 
-        auto_y_text = 'Auto Y Offset: None' 
-    else:
-        auto_x_text = 'Auto X Offset: %6.2f'%offdata.the_offset[0]
-        auto_y_text = 'Auto Y Offset: %6.2f'%offdata.the_offset[1]
-        
-    offdispdata.auto_x_label.config(text=auto_x_text)
-    offdispdata.auto_y_label.config(text=auto_y_text)
-
-def callback_b1press(x, y, offdispdata):
-    if offdispdata.off_longitudes is not None and offdispdata.off_radii is not None:
-        longitude = offdispdata.off_longitudes[y,x]
-        radius = offdispdata.off_radii[y,x]
-        ring_x = np.cos(longitude * oops.RPD) * radius
-        ring_y = np.sin(longitude * oops.RPD) * radius
-        print 'X %4d Y %d LONG %7.3f RADIUS %7.3f RX %.1f RY %.1f'%(x,y,longitude,radius,ring_x,ring_y)
-        if offdispdata.last_xy is not None:
-            print 'DIST', np.sqrt((ring_x-offdispdata.last_xy[0])**2+
-                                  (ring_y-offdispdata.last_xy[1])**2)
-            print 'ANGLE', np.arctan2(ring_y-offdispdata.last_xy[1],
-                                      ring_x-offdispdata.last_xy[0])
-        offdispdata.last_xy = (ring_x, ring_y)
-        
-
-# Setup the offset window with no data
-def setup_offset_window(offdata, offdispdata, reproject, radius_inner=135000.,
-                        radius_outer=138000.,**kwargs):
-    if not reproject:
-        if offdata.the_offset is not None:
-            offdata.obs.fov = oops.fov.OffsetFOV(offdata.obs.fov, uv_offset=offdata.the_offset)
-        set_obs_bp(offdata.obs)
-        
-        offdispdata.off_radii = offdata.obs.bp.ring_radius('saturn:ring').vals.astype('float')
-        offdispdata.off_longitudes = offdata.obs.bp.ring_longitude('saturn:ring').vals.astype('float') * oops.DPR
-        offdispdata.off_resolution = offdata.obs.bp.ring_radial_resolution('saturn:ring').vals.astype('float')
-        offdispdata.off_incidence = offdata.obs.bp.incidence_angle('saturn:ring').vals.astype('float') * oops.DPR
-        offdispdata.off_emission = offdata.obs.bp.emission_angle('saturn:ring').vals.astype('float') * oops.DPR
-        offdispdata.off_phase = offdata.obs.bp.phase_angle('saturn:ring').vals.astype('float') * oops.DPR
-
-        last_x = None
-        last_y = None
-        for pt_num in ['1', '2', '3', '4']:
-            if 'x'+pt_num in kwargs:
-                x = kwargs['x'+pt_num]
-                y = kwargs['y'+pt_num]
-                longitude = offdispdata.off_longitudes[y,x]
-                radius = offdispdata.off_radii[y,x]
-                ring_x = np.cos(longitude * oops.RPD) * radius
-                ring_y = np.sin(longitude * oops.RPD) * radius
-                print 'X%s %4d Y%s %d LONG %7.3f RADIUS %7.3f RX %.1f RY %.1f'%(pt_num, x, pt_num, y,longitude,radius,ring_x,ring_y),
-                if last_x is not None:
-                    print 'DIST %.1f' % (np.sqrt((ring_x-last_x)**2+(ring_y-last_y)**2))
-                    last_x = None
-                    last_y = None
-                else:
-                    print
-                    last_x = ring_x
-                    last_y = ring_y
-    else:
-#    ret['long_mask'] = good_long_mask
-#    ret['img'] = repro_mosaic
-#    ret['mean_resolution'] = repro_mean_res
-#    ret['mean_phase'] = repro_mean_phase
-#    ret['mean_emission'] = repro_mean_emission
-#    ret['mean_incidence'] = repro_mean_incidence
-#    ret['time'] = obs.midtime
-
-        if offdata.the_offset is None:
-            return
-        
-        ret = rings_reproject(offdata.obs, offset_u=offdata.the_offset[0], offset_v=offdata.the_offset[1],
-                      longitude_resolution=LONGITUDE_RESOLUTION,
-                      radius_resolution=RADIUS_RESOLUTION,
-                      radius_inner=radius_inner,
-                      radius_outer=radius_outer)
-        offdata.obs.data = ret['img']
-        radii = rings_generate_radii(radius_inner,radius_outer,radius_resolution=RADIUS_RESOLUTION)
-        offdispdata.off_radii = np.zeros(offdata.obs.data.shape)
-        offdispdata.off_radii[:,:] = radii[:,np.newaxis]
-        longitudes = rings_generate_longitudes(longitude_resolution=LONGITUDE_RESOLUTION)
-        offdispdata.off_longitudes = np.zeros(offdata.obs.data.shape)
-        offdispdata.off_longitudes[:,:] = longitudes[ret['long_mask']]
-        offdispdata.off_resolution = ret['resolution']
-        offdispdata.off_incidence = ret['incidence']
-        offdispdata.off_emission = ret['emission']
-        offdispdata.off_phase = ret['phase']
-        
-    if reproject:
-        filename = 'j:/Temp/'+offdata.image_name+'-repro'
-    else:
-        filename = 'j:/Temp/'+offdata.image_name
-    np.savez(filename, 
-             data=offdata.obs.data,
-             radii=offdispdata.off_radii,
-             longitudes=offdispdata.off_longitudes,
-             resolution=offdispdata.off_resolution,
-             incidence=offdispdata.off_incidence,
-             emission=offdispdata.off_emission,
-             phase=offdispdata.off_phase)
-
-    if not INTERACTIVE:
-        return
-    
-    if reproject:
-        offset_overlay = None
-    else:
-        offset_overlay = offdata.off_metadata['overlay'].copy()
-
-    # The original image and overlaid ring curves
-    offdispdata.imdisp_offset = ImageDisp([offdata.obs.data], [offset_overlay],
-                                          title=offdata.obsid + ' / ' + offdata.image_name,
-                                          canvas_size=(512,512),
-                                          allow_enlarge=True, auto_update=True)
-
-    callback_b1press_command = lambda x, y, offdispdata=offdispdata: callback_b1press(x, y, offdispdata)
-    offdispdata.imdisp_offset.bind_b1press(0, callback_b1press_command)
-
-    ###############################################
-    # The control/data pane of the original image #
-    ###############################################
-    
-    img_addon_control_frame = offdispdata.imdisp_offset.addon_control_frame
-    
-    gridrow = 0
-    gridcolumn = 0
-
-    if offdata.the_offset is None:
-        auto_x_text = 'Auto X Offset: None' 
-        auto_y_text = 'Auto Y Offset: None' 
-    else:
-        auto_x_text = 'Auto X Offset: %6.2f'%offdata.the_offset[0]
-        auto_y_text = 'Auto Y Offset: %6.2f'%offdata.the_offset[1]
-        
-    offdispdata.auto_x_label = Label(img_addon_control_frame, text=auto_x_text)
-    offdispdata.auto_x_label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-    offdispdata.auto_y_label = Label(img_addon_control_frame, text=auto_y_text)
-    offdispdata.auto_y_label.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    # X offset and Y offset entry boxes
-    # We should really use variables for the Entry boxes, but for some reason they don't work
-    label = Label(img_addon_control_frame, text='X Offset')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    
-    offdispdata.entry_x_offset = FloatEntry(img_addon_control_frame)
-    offdispdata.entry_x_offset.delete(0, END)
-    if offdata.manual_offset is not None:
-        offdispdata.entry_x_offset.insert(0, '%6.2f'%offdata.manual_offset[0])
-    offdispdata.entry_x_offset.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-    
-    label = Label(img_addon_control_frame, text='Y Offset')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    
-    offdispdata.entry_y_offset = FloatEntry(img_addon_control_frame)
-    offdispdata.entry_y_offset.delete(0, END)
-    if offdata.manual_offset is not None:
-        offdispdata.entry_y_offset.insert(0, '%6.2f'%offdata.manual_offset[1])
-    offdispdata.entry_y_offset.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-    
-    enter_offset_command = (lambda x, offdata=offdata, offdispdata=offdispdata:
-                            command_enter_offset(x, offdata, offdispdata))    
-    offdispdata.entry_x_offset.bind('<Return>', enter_offset_command)
-    offdispdata.entry_y_offset.bind('<Return>', enter_offset_command)
-
-    # Set manual to automatic
-    button_man_from_auto_command = (lambda offdata=offdata, offdispdata=offdispdata:
-                                    command_man_from_auto(offdata, offdispdata))
-    button_man_from_auto = Button(img_addon_control_frame, text='Set Manual from Auto',
-                                  command=button_man_from_auto_command)
-    button_man_from_auto.grid(row=gridrow, column=gridcolumn+1)
-    gridrow += 1
-    
-    #Set manual to Cassini
-    button_man_from_cassini_command = (lambda offdata=offdata, offdispdata=offdispdata:
-                                    command_man_from_cassini(offdata, offdispdata))
-    button_man_cassini_auto = Button(img_addon_control_frame, text='Set Manual from Cassini',
-                                  command=button_man_from_cassini_command)
-    button_man_cassini_auto.grid(row=gridrow, column=gridcolumn+1)
-    gridrow += 1
-    
-    # Recalculate auto offset
-    button_recalc_offset_command = (lambda offdata=offdata, offdispdata=offdispdata:
-                                    command_recalc_offset(offdata, offdispdata))
-    button_recalc_offset = Button(img_addon_control_frame, text='Recalculate Offset',
-                                  command=button_recalc_offset_command)
-    button_recalc_offset.grid(row=gridrow, column=gridcolumn+1)
-    gridrow += 1
-    
-    # Display for longitude and radius
-    label = Label(img_addon_control_frame, text='Inertial Long:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_inertial_longitude = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_inertial_longitude.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Radius:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_radius = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_radius.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Incidence:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_incidence = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_incidence.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Radial Resolution:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_resolution = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_resolution.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Emission:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_emission = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_emission.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    label = Label(img_addon_control_frame, text='Phase:')
-    label.grid(row=gridrow, column=gridcolumn, sticky=W)
-    offdispdata.label_off_phase = Label(img_addon_control_frame, text='')
-    offdispdata.label_off_phase.grid(row=gridrow, column=gridcolumn+1, sticky=W)
-    gridrow += 1
-
-    callback_offset_command = lambda x, y, offdata=offdata, offdispdata=offdispdata: callback_offset(x, y, offdata, offdispdata)
-    offdispdata.imdisp_offset.bind_mousemove(0, callback_offset_command)
-
-    offdispdata.imdisp_offset.pack()
-
-    mainloop()
-
-# Display the original image
-def display_offset(offdata, offdispdata, reproject, **kwargs):
-    # The original image
-    
-    if offdata.obs is None:
-        offdata.obs = iss.from_file(offdata.image_path)
-
-    setup_offset_window(offdata, offdispdata, reproject, **kwargs)
-
+    for reproject in [False, True]:
+        if not reproject:
+            filename = os.path.join(DEST_ROOT, image_name)
+            if os.path.exists(filename+'.npz'):
+                return
+            if offset is not None:
+                orig_fov = obs.fov
+                obs.fov = oops.fov.OffsetFOV(obs.fov, uv_offset=offset)
+            set_obs_bp(obs)
+            
+            off_radii = obs.bp.ring_radius('saturn:ring')
+            off_longitudes = obs.bp.ring_longitude('saturn:ring') * oops.DPR
+            off_incidence = obs.bp.ring_incidence_angle('saturn:ring',
+                                                        pole='north')
+            off_incidence = np.mean(off_incidence.mvals) * oops.DPR
+            off_resolution = obs.bp.ring_radial_resolution('saturn:ring')
+            off_emission = obs.bp.ring_emission_angle('saturn:ring',
+                                                      pole='north') * oops.DPR
+            off_phase = obs.bp.phase_angle('saturn:ring') * oops.DPR
+            if arguments.analyze_b_ring_edge:
+                analayze_b_ring_edge(image_name, obs, off_radii, off_longitudes, 
+                                     off_resolution, off_emission, 
+                                     off_incidence, off_phase,
+                                     offset)
+                # This is just to save disk space
+                off_resolution = np.zeros((1,1))
+                off_emission = np.zeros((1,1))
+                off_phase = np.zeros((1,1))
+            else:
+                off_resolution = off_resolution.vals.astype('float32')
+                off_emission = off_emission.vals.astype('float32')
+                off_phase = off_phase.vals.astype('float32')
+            off_radii = off_radii.vals.astype('float32')
+            off_longitudes = off_longitudes.vals.astype('float32')
+            if offset is not None:
+                obs.fov = orig_fov
+                set_obs_bp(obs, force=True)
+        else:
+            filename = os.path.join(DEST_ROOT, image_name+'-repro')
+            ret = rings_reproject(obs, offset=offset,
+                          longitude_resolution=LONGITUDE_RESOLUTION*oops.RPD,
+                          radius_resolution=RADIUS_RESOLUTION,
+                          radius_range=(RADIUS_INNER,RADIUS_OUTER))
+            obs.data = ret['img']
+            radii = rings_generate_radii(RADIUS_INNER,RADIUS_OUTER,radius_resolution=RADIUS_RESOLUTION)
+            off_radii = np.zeros(obs.data.shape)
+            off_radii[:,:] = radii[:,np.newaxis]
+            longitudes = rings_generate_longitudes(longitude_resolution=LONGITUDE_RESOLUTION*oops.RPD)
+            decimate = max(obs.data.shape[1] // 1024, 1)
+            obs.data = obs.data[:,::decimate]
+            off_longitudes = np.zeros(obs.data.shape)
+            off_longitudes[:,:] = (longitudes[ret['long_mask']])[::decimate] * oops.DPR
+            off_resolution = ret['resolution'][:,:decimate]
+            off_incidence = ret['incidence'] * oops.DPR
+            off_emission = ret['emission'][:,::decimate] * oops.DPR
+            off_phase = ret['phase'][:,::decimate] * oops.DPR
+            # This is just to save disk space
+            off_resolution = np.zeros((1,1))
+            off_emission = np.zeros((1,1))
+            off_phase = np.zeros((1,1))
+            
+        midtime = cspice.et2utc(obs.midtime,'C',2)
+        np.savez(filename, 
+                 midtime=midtime,
+                 data=obs.data,
+                 radii=off_radii,
+                 longitudes=off_longitudes,
+                 resolution=off_resolution,
+                 incidence=off_incidence,
+                 emission=off_emission,
+                 phase=off_phase)
 
 #####################################################################################
 #
@@ -445,135 +486,5 @@ def display_offset(offdata, offdispdata, reproject, **kwargs):
 #
 #####################################################################################
 
-offdispdata = OffDispData()
-
-def process(image_path, reproject=False, **kwargs):
-    print image_path
-    
-    obsid = 'XXX'
-    
-    offdata = OffData()
-    offdata.obsid = obsid
-    _, offdata.image_name = os.path.split(image_path)
-    offdata.image_path = image_path
-    
-    if do_profile:
-        pr = cProfile.Profile()
-        pr.enable()
-
-    # Pointing offset
-    offset_one_image(offdata, **kwargs)
-    
-    # Display offset
-    display_offset(offdata, offdispdata, reproject=reproject, **kwargs)
-    
-    del offdata
-    offdata = None
-    
-    if do_profile:
-        pr.disable()
-        s = StringIO.StringIO()
-        sortby = 'cumulative'
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        ps.print_callers()
-        print s.getvalue()
-        assert False
-
-do_profile = False
-
-Tk().withdraw()
-
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621851000_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1626245310_1626407985/N1626326915_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627448306_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627451806_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1613001873_1613171522/N1613101588_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1613291015_1613598197/N1613405325_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1613598819_1613977956/N1613977923_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1614457968_1614561850/N1614551168_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1618067253_1618407253/N1618072263_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619427338_1619724488/N1619668649_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619945739_1620034486/N1619963567_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620380865_1620646547/N1620555021_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620914692_1621017875/N1621003584_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621841220_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621847296_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621652147_1621937939/N1621850497_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622043391_1622198245/N1622138672_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622549816_1622632159/N1622592755_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623667817_1623919770/N1623757093_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624883466_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627319215_1627453306/N1627409979_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/W1622272936_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622545936_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1617049939_1617119192/W1617111781_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1617049939_1617119192/N1617112673_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2053/data/1617049939_1617119192/W1617112673_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617661596_1617917758/N1617836777_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/N1617918238_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/N1617919199_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/W1617919199_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/N1618005008_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1617917998_1618066143/W1618005008_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619427338_1619724488/N1619669599_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619427338_1619724488/W1619669599_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619427338_1619724488/N1619670961_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619427338_1619724488/W1619670961_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619725413_1619833779/N1619789123_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1619725413_1619833779/N1619790275_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620380865_1620646547/N1620595706_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620646742_1620671507/N1620663122_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620671702_1620911619/N1620674432_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1620671702_1620911619/N1620678332_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2054/data/1621957143_1621968573/N1621959123_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622043391_1622198245/N1622141708_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622198904_1622272726/W1622224838_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622198904_1622272726/N1622233144_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622396010_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622396730_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622396910_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622397810_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622546735_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622272893_1622549559/N1622548535_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1622711732_1623166344/N1623166278_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623174432_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/W1623174432_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/W1623175932_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623175932_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623178145_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/W1623181896_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623166377_1623224391/N1623181896_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623224496_1623283102/W1623249847_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623224496_1623283102/N1623249847_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623224496_1623283102/W1623252547_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623224496_1623283102/N1623252547_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1623283200_1623345100/N1623338546_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624039158_1624239287/N1624153495_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624729156_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624654802_1624836470/N1624731250_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624894914_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/N1624903554_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2055/data/1624836945_1625069379/W1624905683_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1625995143_1626159520/N1625999575_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295298_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295382_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295466_1_CALIB.IMG')
-#process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295729_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295812_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295896_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627295980_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627296064_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627296148_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627296232_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2056/data/1627217931_1627301149/N1627296316_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629144588_1629174249/N1629145473_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629342794_1629355579/N1629351859_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629342794_1629355579/N1629353816_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629342794_1629355579/N1629354694_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629428390_1629453020/N1629449450_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1629538820_1629635391/N1629557510_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2057/data/1632306929_1632459671/N1632450428_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2060/data/1641588245_1641624294/N1641603464_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2060/data/1641624586_1641842861/N1641629842_1_CALIB.IMG')
-process(r't:\external\cassini\derived\COISS_2xxx\COISS_2060/data/1641624586_1641842861/N1641794334_1_CALIB.IMG')
+for image_path in file_yield_image_filenames_from_arguments(arguments):
+    offset_one_image(image_path)

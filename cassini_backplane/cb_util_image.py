@@ -9,6 +9,7 @@
 #    unpad_image
 #    compress_saturated_overlay
 #    uncompress_saturated_overlay
+#    image_interpolate_missing_stripes
 #    filter_local_maximum
 #    filter_sub_median
 ###############################################################################
@@ -39,6 +40,7 @@ def shift_image(image, offset_u, offset_v):
     if offset_u == 0 and offset_v == 0:
         return image
     
+    image = image.copy()
     image = np.roll(image, offset_u, 1)
     image = np.roll(image, offset_v, 0)
 
@@ -95,6 +97,28 @@ def uncompress_saturated_overlay(overlay):
     ret[1::2,:,2] = (overlay & 32) >> 5
     ret *= 255
     return ret
+
+def image_interpolate_missing_stripes(data):
+    """Interpolate missing horizontal data in an image.
+    
+    This routine handles an image that has the right side of some lines missing
+    due to data transmission limitations. A pixel is interpolated if it is
+    missing (zero) and the pixels immediately above and below are present
+    (not zero)."""
+    zero_mask = (data == 0.)
+    data_up = np.zeros(data.shape)
+    data_up[:-1,:] = data[1:,:]
+    data_down = np.zeros(data.shape)
+    data_down[1:,:] = data[:-1,:]
+    up_mask = (data_up != 0.)
+    down_mask = (data_down != 0.)
+    good_mask = np.logical_and(zero_mask, up_mask)
+    good_mask = np.logical_and(good_mask, down_mask)
+    data_mean = (data_up+data_down)/2.
+    ret_data = data.copy()
+    ret_data[good_mask] = data_mean[good_mask]
+    return ret_data
+
 
 
 #==============================================================================
@@ -189,6 +213,14 @@ def filter_sub_median(data, median_boxsize=11, gaussian_blur=0.):
 
     return data - sub
 
+def filter_downsample(arr, amt_y, amt_x):
+    assert arr.shape[0] % amt_y == 0
+    assert arr.shape[1] % amt_x == 0
+    ny = arr.shape[0] // amt_y
+    nx = arr.shape[1] // amt_x
+    ret = (np.swapaxes(arr.reshape(ny, amt_y, nx, amt_x), 1, 2).
+           reshape(ny, nx, amt_x*amt_y).mean(axis=2))
+    return ret
 
 #==============================================================================
 # 

@@ -5,6 +5,7 @@
 #
 # Exported routines:
 #    file_clean_join
+#    file_safe_remove
 #    file_add_selection_arguments
 #    file_log_arguments
 #    file_yield_image_filenames_from_arguments
@@ -12,6 +13,7 @@
 #    file_clean_name
 #    file_read_iss_file
 #    file_img_to_short_img_path
+#    file_results_path
 #    file_img_to_log_path
 #    file_img_to_offset_path
 #    file_offset_to_img_path
@@ -28,6 +30,8 @@
 #    file_write_predicted_metadata
 #    file_bootstrap_good_image_path
 #    file_bootstrap_candidate_image_path
+#    file_bootstrap_shadow_to_str
+#    file_bootstrap_status_image_path
 #    file_img_to_reproj_body_path
 #    file_read_reproj_body_path
 #    file_read_reproj_body
@@ -48,6 +52,7 @@ import numpy as np
 import msgpack
 import msgpack_numpy
 import os.path
+import sys
 import zlib
 from PIL import Image
 
@@ -73,18 +78,32 @@ def file_clean_join(*args):
     ret = os.path.join(*args)
     return ret.replace('\\', '/')
 
-def _validate_image_name(name):
-    valid = (len(name) == 13 and name[0] in 'NW' and name[11] == '_')
+def file_safe_remove(filename):
+    if filename is None:
+        return
+    try:
+        os.remove(filename)
+    except:
+        pass
+
+def _valid_image_name(name):
+    valid = (((len(name) == 13 or len(name) == 14) and name[11] == '_') or
+             len(name) == 11) and name[0] in 'NW'
     if valid:
         try:
             _ = int(name[1:11])
-            _ = int(name[12])
+            if len(name) > 11:
+                _ = int(name[12:])
         except ValueError:
             valid = False
+    return valid
+
+def _validate_image_name(name):
+    valid = _valid_image_name(name)
     if not valid:
         raise argparse.ArgumentTypeError(
              name+
-             ' is not a valid image name - format must be [NW]dddddddddd_d')
+             ' is not a valid image name - format must be [NW]dddddddddd[_d{d}]')
     return name
 
 def file_add_selection_arguments(parser):
@@ -120,6 +139,9 @@ def file_add_selection_arguments(parser):
         '--image-pds-csv', action='append',
         help='''A CSV file downloaded from PDS that contains filespecs of images
     to process''')
+    parser.add_argument(
+        '--image-filelist', action='append',
+        help='''A file that contains image names of images to process''')
     parser.add_argument(
         '--has-offset-file', action='store_true', default=False,
         help='Only process images that already have an offset file')
@@ -163,8 +185,13 @@ def file_log_arguments(arguments, log):
         for filename in arguments.volume:
             log('        %s', filename)
     if arguments.image_pds_csv:
-        log('*** Images restricted to those from PDS CSV %s',
-            arguments.image_pds_csv)
+        log('*** Images restricted to those from PDS CSV:')
+        for filename in arguments.image_pds_csv:
+            log('        %s', filename)
+    if arguments.image_filelist:
+        log('*** Images restricted to those from file:')
+        for filename in arguments.image_filelist:
+            log('        %s', filename)
 
 def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
     if arguments.image_full_path:
@@ -182,10 +209,11 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                 csvreader = csv.reader(csvfile)
                 header = csvreader.next()
                 for colnum in xrange(len(header)):
-                    if header[colnum] == 'Primary File Spec':
+                    if (header[colnum] == 'Primary File Spec' or
+                        header[colnum] == 'primaryfilespec'):
                         break
                 else:
-                    print 'Badly formatted CSV file %s'
+                    print 'Badly formatted CSV file', filename
                     sys.exit(-1)
                 if arguments.image_name is None:
                     arguments.image_name = []
@@ -196,6 +224,18 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
                                                                     '')
                     _, filespec = os.path.split(filespec)
                     restrict_image_list.append(filespec)
+
+    if arguments.image_filelist:
+        for filename in arguments.image_filelist:
+            with open(filename, 'r') as fp:
+                for line in fp:
+                    line = line.strip()
+                    if len(line) == 0:
+                        continue
+                    if not _valid_image_name(line):
+                        print 'BAD FILENAME', line
+                        sys.exit(-1)
+                    restrict_image_list.append(line)
     
     restrict_camera = 'NW'
     if arguments.nac_only:
@@ -210,8 +250,12 @@ def file_yield_image_filenames_from_arguments(arguments, use_index_files=False):
     volumes = arguments.volume
     
     if len(restrict_image_list):
-        first_image_number = min([int(x[1:11]) for x in restrict_image_list])
-        last_image_number = max([int(x[1:11]) for x in restrict_image_list])
+        first_image_number = max(first_image_number,
+                                 min([int(x[1:11]) 
+                                      for x in restrict_image_list]))
+        last_image_number = min(last_image_number,
+                                max([int(x[1:11]) 
+                                     for x in restrict_image_list]))
         
     if not use_index_files:
         for image_path in file_yield_image_filenames(
@@ -324,7 +368,7 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
             img_dir = file_clean_join(coiss_fulldir, range_dir)
             # Sort by number then letter so N/W are together
             for img_name in sorted(os.listdir(meta_dir),
-                                   key=lambda x: x[1:13]+x[0]):
+                                   key=lambda x: x[1:11]+x[0]):
                 if not img_name.endswith(search_suffix):
                     continue
                 img_name = img_name.replace(search_suffix, suffix)
@@ -335,7 +379,9 @@ def file_yield_image_filenames(img_start_num=0, img_end_num=9999999999,
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:13] not in restrict_list:
+                if (restrict_list and 
+                    img_name[:img_name.find(suffix)] not in restrict_list and
+                    img_name[:11] not in restrict_list):
                     continue
                 img_path = file_clean_join(img_dir, img_name)
                 if not os.path.isfile(img_path):
@@ -446,7 +492,7 @@ def file_yield_image_filenames_index(img_start_num=0, img_end_num=9999999999,
                     continue
                 if img_name[0] not in camera:
                     continue
-                if restrict_list and img_name[:13] not in restrict_list:
+                if restrict_list and img_name[:img_name.find(suffix)] not in restrict_list:
                     continue
                 img_path = file_clean_join(image_root, vol_name, 'data',
                                            range_dir, img_name)
@@ -490,8 +536,8 @@ def file_img_to_short_img_path(img_path):
 
 # RESULTS FILES
     
-def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
-                  include_image_filename=True):
+def file_results_path(img_path, file_type, root=CB_RESULTS_ROOT, 
+                      make_dirs=False, include_image_filename=True):
     """Results path is of the form:
     
     <ROOT>/<file_type>/COISS_2<nnn>/nnnnnnnnnn_nnnnnnnnnn/filename
@@ -540,7 +586,7 @@ def _results_path(img_path, file_type, root=CB_RESULTS_ROOT, make_dirs=False,
 
 def file_img_to_log_path(img_path, log_type, root=CB_RESULTS_ROOT, 
                          bootstrap=False, make_dirs=True):
-    fn = _results_path(img_path, 'logs', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'logs', root=root, make_dirs=make_dirs)
     fn += '-'+log_type
     if bootstrap:
         fn += '-BOOTSTRAP'
@@ -554,7 +600,7 @@ def file_img_to_log_path(img_path, log_type, root=CB_RESULTS_ROOT,
 
 def file_img_to_offset_path(img_path, root=CB_RESULTS_ROOT, 
                             bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'offsets', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'offsets', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OFFSET.dat'
@@ -576,7 +622,7 @@ def file_offset_to_img_path(offset_path):
 
 def file_img_to_overlay_path(img_path, root=CB_RESULTS_ROOT, 
                              bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'overlays', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'overlays', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '-OVERLAY.dat'
@@ -586,8 +632,6 @@ def _compress_bool(a):
     if a is None:
         return None
     flat = a.astype('bool').flatten()
-    assert (flat.shape[0] % 8) == 0
-
     res = zlib.compress(flat.data)
     return (a.shape, res)
 
@@ -643,30 +687,43 @@ def file_read_offset_metadata_path(offset_path, overlay=True):
                 new_list.append(new_star)
             metadata['stars_metadata']['full_star_list'] = new_list
 
-    # Uncompress all body latlon_masks
+    # Uncompress all body reprojection data
     if 'bodies_metadata' in metadata:
         bodies_metadata = metadata['bodies_metadata']
-        for key in bodies_metadata:
-            mask = bodies_metadata[key]['latlon_mask']
-            mask = _uncompress_bool(mask)
-            bodies_metadata[key]['latlon_mask'] = mask
-
+        for body_name in bodies_metadata:
+            if 'reproj' not in bodies_metadata[body_name]:
+                continue
+            reproj = bodies_metadata[body_name]['reproj']
+            if reproj is None:
+                continue
+            mask = _uncompress_bool(reproj['full_mask'])
+            reproj['full_mask'] = mask
+            for data_type in ['eff_resolution', 'phase', 
+                              'emission', 'incidence']:
+                data = reproj[data_type]
+                if data_type in ['phase', 'emission', 'incidence']:
+                    data = data.astype('float')*oops.RPD
+                new_data = np.zeros(mask.shape, dtype='float32')
+                new_data[mask] = data
+                reproj[data_type] = new_data
+                
     if overlay:
         bootstrap = offset_path.find('-BOOTSTRAP') != -1
         overlay_path = file_img_to_overlay_path(
                                  file_offset_to_img_path(offset_path),
                                  make_dirs=False, bootstrap=bootstrap)
-        overlay_fp = open(overlay_path, 'rb')
-        metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
-                                           object_hook=msgpack_numpy.decode)
-        overlay_fp.close()
-        # Uncompress all boolean text overlay arrays
-        for field in ['stars_overlay_text', 'bodies_overlay_text',
-                      'rings_overlay_text']:
-            if field in metadata_overlay:
-                metadata_overlay[field] = _uncompress_bool(
-                                                   metadata_overlay[field])
-        metadata.update(metadata_overlay)
+        if os.path.exists(overlay_path):
+            overlay_fp = open(overlay_path, 'rb')
+            metadata_overlay = msgpack.unpackb(overlay_fp.read(), 
+                                               object_hook=msgpack_numpy.decode)
+            overlay_fp.close()
+            # Uncompress all boolean text overlay arrays
+            for field in ['stars_overlay_text', 'bodies_overlay_text',
+                          'rings_overlay_text']:
+                if field in metadata_overlay:
+                    metadata_overlay[field] = _uncompress_bool(
+                                                       metadata_overlay[field])
+            metadata.update(metadata_overlay)
 
     return metadata
 
@@ -724,13 +781,23 @@ def file_write_offset_metadata_path(offset_path, metadata, overlay_path=None,
                 new_list.append(new_star)
             metadata['stars_metadata']['full_star_list'] = new_list
 
-    # Compress all body latlon_masks
+    # Compress all body reprojection data
     if 'bodies_metadata' in metadata:
         bodies_metadata = metadata['bodies_metadata']
-        for key in bodies_metadata:
-            mask = bodies_metadata[key]['latlon_mask']
-            mask = _compress_bool(mask)
-            bodies_metadata[key]['latlon_mask'] = mask
+        for body_name in bodies_metadata:
+            if 'reproj' not in bodies_metadata[body_name]:
+                continue
+            reproj = bodies_metadata[body_name]['reproj']
+            if reproj is None:
+                continue
+            mask = reproj['full_mask']
+            reproj['full_mask'] = _compress_bool(mask)
+            for data_type in ['eff_resolution', 'phase', 
+                              'emission', 'incidence']:
+                data = reproj[data_type]
+                if data_type in ['phase', 'emission', 'incidence']:
+                    data = (data*oops.DPR).astype('int8')
+                reproj[data_type] = data[mask]
             
     offset_fp = open(offset_path, 'wb')
     offset_fp.write(msgpack.packb(metadata, 
@@ -750,7 +817,7 @@ def file_write_offset_metadata_path(offset_path, metadata, overlay_path=None,
 
 def file_img_to_png_path(img_path, root=CB_RESULTS_ROOT, 
                          bootstrap=False, make_dirs=False):
-    fn = _results_path(img_path, 'png', root=root, make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'png', root=root, make_dirs=make_dirs)
     if bootstrap:
         fn += '-BOOTSTRAP'
     fn += '.png'
@@ -771,8 +838,9 @@ def file_write_png_path(png_path, image):
 ### PREDICTED KERNEL METADATA
 
 def file_img_to_predicted_path(img_path, make_dirs=False):
-    fn = _results_path(img_path, 'pred', make_dirs=make_dirs, 
-                       include_image_filename=False)
+    fn = file_results_path(img_path, 'pred', make_dirs=make_dirs, 
+                       include_image_filename=False,
+                       root=CB_SUPPORT_FILES_ROOT)
     fn = file_clean_join(fn, 'PREDICTED-METADATA.dat')
     return fn
 
@@ -823,7 +891,7 @@ def file_bootstrap_good_image_path(body_name, make_dirs=False):
         except OSError:
             pass
 
-    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-good.data')
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-good.dat')
 
 def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
     assert os.path.exists(CB_RESULTS_ROOT)
@@ -834,15 +902,42 @@ def file_bootstrap_candidate_image_path(body_name, make_dirs=False):
         except OSError:
             pass
 
-    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', body_name+'-candidate.data')
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', 
+                           body_name+'-candidate.dat')
+
+def file_bootstrap_shadow_to_str(lat_shadow_dir, lon_shadow_dir):    
+    ew = 'EAST'
+    if lon_shadow_dir:
+        ew = 'WEST'
+    ns = 'SOUTH'
+    if lat_shadow_dir:
+        ns = 'NORTH'
+        
+    return ns, ew
+
+def file_bootstrap_status_image_path(body_name, lat_shadow_dir, 
+                                     lon_shadow_dir, make_dirs=False):
+    assert os.path.exists(CB_RESULTS_ROOT)
+    root = file_clean_join(CB_RESULTS_ROOT, 'bootstrap')
+    if make_dirs and not os.path.exists(root):
+        try: # Necessary for multi-process race conditions
+            os.mkdir(root)
+        except OSError:
+            pass
+
+    ns, ew = file_bootstrap_shadow_to_str(lat_shadow_dir, lon_shadow_dir)
+    
+    return file_clean_join(CB_RESULTS_ROOT, 'bootstrap', 
+                           body_name+'-'+ns+'-'+ew+'-status.dat')
     
     
 ### REPROJECTED BODIES
 
 def file_img_to_reproj_body_path(img_path, body_name, lat_res, lon_res, 
                                  latlon_type, lon_dir,
+                                 root=CB_RESULTS_ROOT,
                                  make_dirs=False):
-    fn = _results_path(img_path, 'reproj', make_dirs=make_dirs)
+    fn = file_results_path(img_path, 'reproj', root=root, make_dirs=make_dirs)
     fn += '-%.3f_%.3f-%s-%s-REPROJBODY-%s.dat' % (
               lat_res*oops.DPR, lon_res*oops.DPR, latlon_type, lon_dir,
               body_name.upper())
@@ -860,31 +955,36 @@ def file_read_reproj_body_path(reproj_path):
     return metadata
 
 def file_read_reproj_body(img_path, body_name, lat_res, lon_res, 
-                          latlon_type, lon_dir):
+                          latlon_type, lon_dir, root=CB_RESULTS_ROOT):
     """Read reprojection metadata file for img_path."""
     reproj_path = file_img_to_reproj_body_path(img_path, body_name,
                                                lat_res, lon_res, 
-                                               latlon_type, lon_dir, 
+                                               latlon_type, lon_dir,
+                                               root=root, 
                                                make_dirs=False)
 
     return file_read_reproj_body_path(reproj_path)
 
-def file_write_reproj_body(img_path, metadata):
-    """Write reprojection metadata file for img_path."""
-    logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body')
+def file_write_reproj_body_path(reproj_path, metadata):    
+    """Write reprojection metadata file to reproj_path."""
+    logger = logging.getLogger(_LOGGING_NAME+'.file_write_reproj_body_path')
 
-    reproj_path = file_img_to_reproj_body_path(img_path, metadata['body_name'],
-                                               metadata['lat_resolution'],
-                                               metadata['lon_resolution'],
-                                               metadata['latlon_type'],
-                                               metadata['lon_direction'],
-                                               make_dirs=True)
     logger.debug('Writing body reprojection file %s', reproj_path)
     
     reproj_fp = open(reproj_path, 'wb')
     reproj_fp.write(msgpack.packb(metadata, 
                                   default=msgpack_numpy.encode))    
     reproj_fp.close()
+
+def file_write_reproj_body(img_path, metadata, root=CB_RESULTS_ROOT):
+    reproj_path = file_img_to_reproj_body_path(img_path, metadata['body_name'],
+                                               metadata['lat_resolution'],
+                                               metadata['lon_resolution'],
+                                               metadata['latlon_type'],
+                                               metadata['lon_direction'],
+                                               root=root,
+                                               make_dirs=True)
+    file_write_reproj_body_path(reproj_path, metadata)
 
 ### MOSAICS
     

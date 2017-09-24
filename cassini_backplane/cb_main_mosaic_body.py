@@ -105,6 +105,10 @@ def add_image_to_mosaic(mosaic_root, reset_mosaic, image_path):
     if repro_metadata is None:
         main_logger.error('No reprojection file for %s', image_path)
         return
+
+    if 'status' in repro_metadata and repro_metadata['status'] != 'ok':
+        main_logger.error('Reprojection file contains error %s', image_path)
+        return
     
     body_name = repro_metadata['body_name']
     
@@ -138,6 +142,8 @@ def add_image_to_mosaic(mosaic_root, reset_mosaic, image_path):
 #===============================================================================
 # 
 #===============================================================================
+
+iss.initialize(planets=(6,))
 
 if arguments.profile:
     # Only do image offset profiling if we're going to do the actual work in 
