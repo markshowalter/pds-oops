@@ -125,7 +125,7 @@ class NewHorizons(object):
 
     @staticmethod
     def spice_frames_kernel(asof=None):
-        """Return a dictionary containing the Cassini Frames Kernel information.
+        """Return a dictionary containing the New Horizons Frames Kernel information.
 
         Also furnishes the kernels for use by the SPICE tools.
 

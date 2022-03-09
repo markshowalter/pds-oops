@@ -548,7 +548,9 @@ def _load_data_and_times(filespec, label):
         suffix_item_type = ""
 
     record_bytes = label["RECORD_BYTES"]
-    header_bytes = record_bytes * (label["^QUBE"] - 1)
+    
+####    header_bytes = record_bytes * (label["^QUBE"] - 1)
+    header_bytes = record_bytes * (label["^QUBE"][0] - 1)	#JNS
 
     # Make sure we have byte-aligned values
     assert (core_samples * core_item_bytes) % suffix_item_bytes == 0
@@ -567,7 +569,7 @@ def _load_data_and_times(filespec, label):
                    suffix_items_in_line * suffix_item_bytes)
 
     # Locate the cube data in the file in units of core_item_bytes
-    offset = header_bytes / core_item_bytes
+    offset = header_bytes / core_item_bytes 
     size = line_stride * core_lines
 
     # Determine the dtype for the file core
