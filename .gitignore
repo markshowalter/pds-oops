@@ -9,3 +9,11 @@
 *.log
 *.xml
 *.npz
+swift
+rf-research
+fitter2
+cassini-backplane
+psfmodel
+oops/backplane-unittest-results*
+*.so
+
